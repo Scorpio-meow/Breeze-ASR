@@ -1,0 +1,53 @@
+name: 無障礙問題
+description: 介面無法用鍵盤、螢幕閱讀器或其他輔助科技操作，或難以閱讀
+labels: ["accessibility"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感謝回報。無障礙問題會優先處理，支援範圍與已知限制見 ACCESSIBILITY.md。
+  - type: textarea
+    id: barrier
+    attributes:
+      label: 遇到的障礙
+      description: 哪個畫面或功能、想完成什麼事、哪裡卡住。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 重現步驟
+      description: 可以附上螢幕錄影。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 預期與實際結果
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: 嚴重程度
+      options:
+        - 嚴重：完全無法完成主要工作（例如無法送出辨識或下載字幕）
+        - 高：很難完成，但有替代做法
+        - 中：造成困擾或體驗不一致
+        - 低：影響輕微
+    validations:
+      required: true
+  - type: input
+    id: assistive
+    attributes:
+      label: 使用的輔助科技與版本
+      placeholder: NVDA 2026.1、僅使用鍵盤、Windows 放大鏡 200%
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 作業系統與瀏覽器
+      placeholder: Windows 11、Edge 141
+    validations:
+      required: true

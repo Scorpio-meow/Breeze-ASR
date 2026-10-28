@@ -1,0 +1,40 @@
+name: breeze-asr
+
+services:
+  breeze-asr:
+    build:
+      context: .
+      args:
+        TORCH_GROUP: ${ASR_TORCH_GROUP:?請在 .env 設定 ASR_TORCH_GROUP（cpu、cu130 或 rocm72）}
+    image: ${ASR_IMAGE:?請在 .env 設定 ASR_IMAGE}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      ASR_HOST: 0.0.0.0
+      ASR_MODELS_FILE: /app/models.json
+      ASR_DATA_DIR: /data
+      HF_HOME: /data/huggingface
+      ASR_HARDWARE_PROFILE: /data/hardware-profile.json
+    ports:
+      - "${ASR_PUBLISH_ADDRESS:?請在 .env 設定 ASR_PUBLISH_ADDRESS}:${ASR_PUBLISH_PORT:?請在 .env 設定 ASR_PUBLISH_PORT}:${ASR_PORT:?請在 .env 設定 ASR_PORT}"
+    volumes:
+      - asr-data:/data
+      - ${ASR_MODELS_SOURCE:?請在 .env 設定 ASR_MODELS_SOURCE}:/app/models.json:ro
+    networks:
+      - asr-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ[\"ASR_PORT\"]}/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  asr-data:
+
+networks:
+  asr-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${ASR_DOCKER_SUBNET:?請在 .env 設定 ASR_DOCKER_SUBNET}

@@ -1,0 +1,10 @@
+services:
+  breeze-asr:
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    group_add:
+      - "${ASR_VIDEO_GID:?請在 .env 設定 ASR_VIDEO_GID（主機上 getent group video 的 GID）}"
+      - "${ASR_RENDER_GID:?請在 .env 設定 ASR_RENDER_GID（主機上 getent group render 的 GID）}"
+    security_opt:
+      - seccomp=unconfined

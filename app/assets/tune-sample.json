@@ -1,0 +1,21 @@
+{
+  "source": "https://huggingface.co/datasets/ky552/ML2021_ASR_ST",
+  "license": "MIT",
+  "split": "test",
+  "rows": [
+    1268,
+    1269,
+    1270,
+    1271,
+    1272,
+    1273,
+    1274,
+    1275,
+    1276,
+    1277,
+    1278,
+    1279
+  ],
+  "seconds": 29.11,
+  "reference": "那顯然這樣子的 attention 是有問題的你在做語音合成的時候你顯然沒有辦法合出好的結果所以 guiding attention 要做的事情就是強迫 attention 有一個固定的樣貌那如果你對這個問題本身就已經有理解知道說語音合成 tts 這樣的問題你的 attention 的分數attention 的位置都應該由左向右那不如就直接把這個限制放進你的 training 裡面"
+}

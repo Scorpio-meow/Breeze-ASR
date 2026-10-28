@@ -1,0 +1,9 @@
+services:
+  breeze-asr:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${ASR_CUDA_DEVICE_ID:?請在 .env 設定 ASR_CUDA_DEVICE_ID（nvidia-smi 的 GPU 編號）}"]
+              capabilities: [gpu]

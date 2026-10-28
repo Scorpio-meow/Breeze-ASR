@@ -1,0 +1,10 @@
+services:
+  breeze-asr:
+    networks:
+      - asr-net
+      - remote-asr
+
+networks:
+  remote-asr:
+    external: true
+    name: ${ASR_REMOTE_DOCKER_NETWORK:?請在 .env 設定 ASR_REMOTE_DOCKER_NETWORK}

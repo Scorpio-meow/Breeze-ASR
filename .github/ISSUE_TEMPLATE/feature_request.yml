@@ -1,0 +1,26 @@
+name: 功能建議
+description: 新功能或改進現有功能
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 想解決什麼問題
+      description: 說明目前的做法哪裡不方便，或哪個情境做不到。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建議的做法
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 考慮過的替代方案
+  - type: textarea
+    id: context
+    attributes:
+      label: 補充說明
+      description: 截圖、參考資料，或預期使用的硬體與音訊類型。

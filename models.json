@@ -1,0 +1,52 @@
+{
+  "default_model": "MediaTek-Research/Breeze-ASR-25",
+  "models": [
+    {
+      "id": "MediaTek-Research/Breeze-ASR-25",
+      "name": "Breeze ASR 25",
+      "tagline": "華語・中英夾雜",
+      "description": "強化台灣華語與中英混用（句內、句間切換）辨識，時間戳對齊佳，適合產生字幕。",
+      "local": {
+        "revision": "cffe7ccb404d025296a00758d0a33468bec3a9d0",
+        "language": null,
+        "task": "transcribe",
+        "sentence_segments": null
+      }
+    },
+    {
+      "id": "MediaTek-Research/Breeze-ASR-26",
+      "name": "Breeze ASR 26",
+      "tagline": "台語 → 華語漢字",
+      "description": "台語（台灣閩南語）語音辨識，以約一萬小時台語語音微調；輸出為華語漢字，不是台語正字。",
+      "local": {
+        "revision": "7b992682e7f5ceedd0a41ebec240f01ba469d19e",
+        "language": "zh",
+        "task": "transcribe",
+        "sentence_segments": {
+          "max_seconds": 10,
+          "min_seconds": 1
+        }
+      }
+    }
+  ],
+  "speakers": {
+    "segmentation": {
+      "repo": "csukuangfj/sherpa-onnx-pyannote-segmentation-3-0",
+      "revision": "9403a6902bb58e3d5ae8c7e77c3422de279db2e0",
+      "file": "model.onnx"
+    },
+    "embedding": {
+      "repo": "csukuangfj/speaker-embedding-models",
+      "revision": "0743f301363dec56491a490f6d6cbc9d67f9a3bf",
+      "file": "3dspeaker_speech_eres2net_base_200k_sv_zh-cn_16k-common.onnx"
+    },
+    "num_threads": 4,
+    "cluster_threshold": 0.5,
+    "merge_threshold": 0.66,
+    "min_speaker_factor": 0.7,
+    "match_threshold": 0.7,
+    "min_duration_on": 0.3,
+    "min_duration_off": 0.5,
+    "max_speakers": 8
+  }
+}

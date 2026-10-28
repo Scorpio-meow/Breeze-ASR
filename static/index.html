@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Breeze ASR</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <div class="app">
+    <header class="toolbar">
+      <span class="app-name">Breeze ASR</span>
+
+      <div class="tb-group">
+        <label class="tb-btn" id="open-btn" for="file-input">
+          <input type="file" id="file-input" accept="audio/*,video/*,.m4a,.mp3,.wav,.flac,.ogg,.opus,.webm,.mp4,.mov,.aac,.wma,.amr" class="control-hidden">
+          開啟…
+        </label>
+        <button type="button" class="tb-btn" id="record-btn" aria-pressed="false">
+          <span class="record-dot" aria-hidden="true"></span>
+          <span id="record-label">錄音</span>
+        </button>
+        <span class="rec-meter" id="rec-meter" hidden>
+          <span class="timecode-sm" id="record-timer">00:00</span>
+          <span class="level" aria-hidden="true"><span class="level-fill" id="level-fill"></span></span>
+        </span>
+      </div>
+
+      <span class="tb-sep" aria-hidden="true"></span>
+
+      <form id="transcribe-form" class="tb-group" novalidate>
+        <label class="tb-field">
+          <span>模型</span>
+          <select class="tb-select" id="model-select" name="model"></select>
+        </label>
+        <label class="tb-field" id="speakers-group" hidden>
+          <span>說話者</span>
+          <select class="tb-select" id="speakers-select" name="speakers">
+            <option value="off">不分辨</option>
+            <option value="auto">自動</option>
+          </select>
+        </label>
+        <button type="submit" class="tb-btn primary" id="submit-btn">辨識</button>
+        <button type="button" class="tb-btn" id="cancel-btn" hidden>取消</button>
+      </form>
+
+      <span class="tb-spacer"></span>
+
+      <div class="tb-group">
+        <button type="button" class="tb-btn" id="voices-btn" hidden>語者庫<span class="tb-count" id="voices-summary"></span></button>
+        <button type="button" class="tb-btn" id="hardware-btn" hidden>硬體</button>
+      </div>
+    </header>
+
+    <section class="timeline-panel" aria-label="時間軸">
+      <div class="transport">
+        <button type="button" class="tb-btn icon" id="player-toggle" aria-label="播放" aria-pressed="false" disabled>
+          <svg class="icon-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 3v10l8-5z" /></svg>
+          <svg class="icon-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 3h2.5v10H4.5zM9 3h2.5v10H9z" /></svg>
+        </button>
+        <span class="timecode" id="player-time">0:00:00.00</span>
+        <span class="timecode-total" id="player-total"></span>
+        <span class="transport-file">
+          <span class="file-name" id="selected-name">未載入音訊</span>
+          <span class="file-size" id="selected-size"></span>
+          <button type="button" class="link-btn" id="clear-audio" hidden>關閉</button>
+        </span>
+      </div>
+
+      <div class="tracks" id="tracks" role="slider" tabindex="-1" aria-label="播放位置" aria-disabled="true" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="未載入音訊">
+        <div class="track ruler-track">
+          <span class="track-head"></span>
+          <div class="track-body ruler" id="ruler"></div>
+        </div>
+        <div class="track wave-track">
+          <span class="track-head">音訊</span>
+          <div class="track-body">
+            <canvas id="waveform"></canvas>
+            <span class="wave-note" id="wave-note"></span>
+          </div>
+        </div>
+        <div class="lanes" id="timeline-lanes"></div>
+        <span class="playhead" id="playhead" hidden></span>
+      </div>
+    </section>
+
+    <div class="workspace">
+      <section class="grid-panel" aria-label="字幕">
+        <div class="panel-head">
+          <div class="head-tabs" role="radiogroup" aria-label="顯示方式">
+            <input type="radio" name="view" id="view-segments" value="segments" class="control-hidden" checked>
+            <label for="view-segments">字幕</label>
+            <input type="radio" name="view" id="view-full" value="full" class="control-hidden">
+            <label for="view-full">全文</label>
+          </div>
+          <span class="head-meta" id="segment-count"></span>
+          <span class="tb-spacer"></span>
+          <button type="button" class="link-btn" id="copy-btn" disabled><span id="copy-label">複製全文</span></button>
+        </div>
+        <div class="grid-scroll">
+          <table class="sub-grid" id="sub-grid">
+            <thead>
+              <tr>
+                <th scope="col" class="c-num">#</th>
+                <th scope="col" class="c-time">開始</th>
+                <th scope="col" class="c-time">結束</th>
+                <th scope="col" class="c-spk">說話者</th>
+                <th scope="col">文字</th>
+              </tr>
+            </thead>
+            <tbody id="segments"></tbody>
+          </table>
+          <p class="grid-empty" id="grid-empty">沒有字幕</p>
+          <div class="fulltext" id="fulltext" hidden></div>
+        </div>
+      </section>
+
+      <aside class="inspector">
+        <section class="panel" aria-labelledby="speakers-title">
+          <h2 class="panel-head" id="speakers-title">說話者</h2>
+          <div class="panel-body">
+            <p class="panel-empty" id="speakers-empty">—</p>
+            <p class="inline-notice" id="speakers-error" role="status" hidden></p>
+            <ul class="speaker-list" id="speaker-list"></ul>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="export-title">
+          <h2 class="panel-head" id="export-title">匯出</h2>
+          <div class="panel-body export-row">
+            <a class="tb-btn" id="dl-srt" download aria-disabled="true">SRT</a>
+            <a class="tb-btn" id="dl-vtt" download aria-disabled="true">VTT</a>
+            <a class="tb-btn" id="dl-txt" download aria-disabled="true">TXT</a>
+            <a class="tb-btn" id="dl-json" download aria-disabled="true">JSON</a>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="info-title">
+          <h2 class="panel-head" id="info-title">資訊</h2>
+          <div class="panel-body">
+            <dl class="props" id="result-meta"></dl>
+            <p class="panel-empty" id="meta-empty">—</p>
+          </div>
+        </section>
+      </aside>
+    </div>
+
+    <footer class="statusbar">
+      <span class="sb-item" id="status-line" role="status">就緒</span>
+      <span class="sb-item sb-muted" id="status-detail"></span>
+      <span class="sb-progress" id="eta-wrap" hidden><span class="sb-progress-fill" id="eta"></span></span>
+      <span class="sb-item" id="notice" hidden></span>
+      <span class="tb-spacer"></span>
+      <span class="sb-item sb-muted" id="model-status"></span>
+      <span class="sb-item sb-muted" id="runtime"></span>
+    </footer>
+  </div>
+
+  <dialog class="dialog" id="voices-dialog" aria-labelledby="voices-title">
+    <form method="dialog" class="dialog-head">
+      <h2 id="voices-title">語者庫</h2>
+      <span class="tb-spacer"></span>
+      <button class="link-btn" value="close">關閉</button>
+    </form>
+    <div class="dialog-body">
+      <p class="dialog-note">聲紋只存在這台伺服器。</p>
+      <ul class="voice-list" id="voice-list"></ul>
+      <p class="panel-empty" id="voices-empty">沒有記住的聲音</p>
+      <p class="dialog-note" id="voices-status" role="status"></p>
+    </div>
+  </dialog>
+
+  <dialog class="dialog wide" id="hardware-dialog" aria-labelledby="hardware-title">
+    <form method="dialog" class="dialog-head">
+      <h2 id="hardware-title">硬體</h2>
+      <span class="head-meta" id="hardware-summary"></span>
+      <span class="tb-spacer"></span>
+      <button class="link-btn" value="close">關閉</button>
+    </form>
+    <div class="dialog-body">
+      <dl class="props" id="hardware-facts"></dl>
+      <div id="hardware-tuning">
+        <h3 class="dialog-section">實測</h3>
+        <div class="table-wrap">
+          <table class="bench">
+            <thead>
+              <tr><th scope="col">裝置</th><th scope="col">結果</th><th scope="col" class="num" title="處理秒數 ÷ 音訊秒數，越小越快">速度</th><th scope="col" class="num">CER</th><th scope="col" class="num">記憶體</th></tr>
+            </thead>
+            <tbody id="bench-rows"></tbody>
+          </table>
+        </div>
+        <h3 class="dialog-section">選擇理由</h3>
+        <ul class="plain-list" id="hardware-reasons"></ul>
+        <h3 class="dialog-section">未測試</h3>
+        <ul class="plain-list" id="hardware-skipped"></ul>
+      </div>
+      <p class="dialog-note" id="hardware-manual" hidden>手動指定的設定檔，沒有實測紀錄。</p>
+      <div class="dialog-foot">
+        <span class="dialog-note" id="retune-hint">約 5–15 分鐘，依硬體而定，期間無法辨識</span>
+        <button type="button" class="tb-btn" id="retune-btn">重新調校</button>
+      </div>
+    </div>
+  </dialog>
+
+  <audio id="audio-preview" preload="auto" hidden></audio>
+  <div class="visually-hidden" aria-live="polite" id="announcer"></div>
+</body>
+</html>

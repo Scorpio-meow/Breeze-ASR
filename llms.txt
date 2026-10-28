@@ -1,0 +1,46 @@
+# Breeze ASR 網頁 APP
+> 在瀏覽器用 MediaTek Research 的 Breeze ASR 25／26 模型把語音轉成字幕的本機服務：FastAPI 後端加純 HTML／CSS／JavaScript 前端，支援 OpenVINO、PyTorch 或轉呼叫遠端服務，含分辨說話者與語者庫。非 MediaTek 官方專案。
+
+## Docs
+- [README.md]: 介紹、快速開始、功能、系統需求
+- [docs/deployment.md]: Windows 原生、Docker、共用主機、限制
+- [docs/configuration.md]: `.env`、`models.json`、硬體設定檔
+- [docs/how-it-works.md]: 架構、自動調校、句子分段、分辨說話者與語者庫
+- [docs/api.md]: API 各端點的參數與回應
+- [docs/benchmarks.md]: 效能實測
+- [CHANGELOG.md]: 更新紀錄
+- [CONTRIBUTING.md]: 開發環境、提交前檢查、撰寫原則
+- [SECURITY.md]: 部署範圍、資料處理、漏洞回報
+- [CODE_OF_CONDUCT.md]: 行為準則與檢舉方式
+- [ACCESSIBILITY.md]: 無障礙聲明、已知限制與回報方式
+- [.github/ISSUE_TEMPLATE/]: 問題回報、功能建議、無障礙問題的 issue 範本
+- [NOTICE.md]: 第三方作品與授權
+
+## Core Files
+- [app/main.py]: FastAPI 路由與服務組裝
+- [app/config.py]: 讀取並檢查 `.env` 設定
+- [app/catalog.py]: 讀取並檢查 `models.json`
+- [app/jobs.py]: 工作佇列、結果保存與過期清理
+- [app/inference.py]: 推論子行程、崩潰後自動重啟、取消工作與切換設定時的重啟
+- [app/engine.py]: 模型的準備、載入與卸載
+- [app/preparation.py]: 下載權重、匯出 OpenVINO、壓縮成其他權重格式
+- [app/backend_openvino.py], [app/backend_torch.py], [app/backend_remote.py]: 三種推論方式
+- [app/tune.py], [app/benchmark.py], [app/hardware.py]: 自動調校與硬體設定檔
+- [app/segmentation.py]: Breeze ASR 26 的句子分段
+- [app/diarize.py], [app/speakers.py], [app/voices.py]: 分辨說話者、對到字幕、語者庫
+- [app/audio.py], [app/exports.py]: ffmpeg 解碼、TXT／SRT／VTT／JSON 匯出
+- [static/]: 前端（工具列、波形時間軸、字幕列表、右側面板、狀態列）
+- [tests/]: 不需要模型的單元測試
+- [models.json]: 模型清單與分辨說話者設定
+- [.env.example]: 所有環境設定的範例值
+- [scripts/]: Windows 與 Linux 的安裝、啟動腳本
+- [compose.yaml]: Docker 部署；`compose.cuda.yaml`、`compose.rocm.yaml`、`compose.cpuset.yaml`、`compose.remote-net.yaml` 為疊加檔
+
+## Key Concepts
+- 模型清單：每個模型是 `local`（本機推論，固定 Hugging Face commit）或 `remote`（轉呼叫既有服務）其中之一。
+- 自動調校：第一次啟動時依 OpenVINO 裝置回報的運算精度列出裝置 × 權重格式（int4、int8、fp16、fp32），只轉換要實測的格式，實測速度與字元錯誤率後寫出硬體設定檔；之後直接讀取，也能在介面改用其他實測過的設定。
+- 推論子行程：推論與調校都在子行程執行，網頁行程保持回應。
+- 句子分段：用逐字時間戳把 30 秒長段落切成句子級字幕，OpenVINO 與 PyTorch（CUDA、ROCm）都支援。
+- 分辨說話者：每 10 分鐘一塊分段分群，再以平均連結跨塊合併；聲紋只存在本機資料目錄。
+- 設定：所有 `.env` 變數都必須填寫，缺少時服務拒絕啟動，程式裡沒有預設值。
+- API：`POST /api/jobs` 建立工作、`GET /api/jobs/{id}` 輪詢、`DELETE /api/jobs/{id}` 取消、`GET /api/jobs/{id}/export/{fmt}` 下載；`POST /api/hardware/retune` 重新調校、`POST /api/hardware/settings` 改用實測過的設定。

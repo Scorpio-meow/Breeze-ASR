@@ -1,0 +1,78 @@
+[project]
+name = "breeze-asr-webapp"
+version = "0.1.0"
+description = "Breeze ASR 25 / 26 語音辨識網頁 APP（OpenVINO 或 PyTorch 推論，可切換模型）"
+requires-python = ">=3.12,<3.13"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "NOTICE.md"]
+authors = [{ name = "Scorpio-meow" }]
+dependencies = [
+    "fastapi==0.162.0",
+    "uvicorn==0.54.0",
+    "python-multipart==0.0.32",
+    "httpx==0.28.1",
+    "imageio-ffmpeg==0.7.0",
+    "numpy==2.4.6",
+    "sherpa-onnx==2.0.1",
+    "sherpa-onnx-core==2.0.1",
+    "psutil==7.2.2",
+    "huggingface-hub==1.21.0",
+    "openvino==2026.4.1",
+    "openvino-tokenizers==2026.4.1.0",
+    "openvino-genai==2026.4.1.0",
+    "optimum-intel==2.2.0",
+    "optimum==2.3.0",
+    "transformers==5.5.4",
+]
+
+[dependency-groups]
+cpu = ["torch==2.14.1", "torchvision==0.29.1"]
+cu130 = ["torch==2.14.1", "torchvision==0.29.1"]
+rocm72 = ["torch==2.14.1", "torchvision==0.29.1", "triton-rocm==3.8.0; sys_platform == 'linux'"]
+dev = ["pytest==9.2.0", "ruff==0.17.3"]
+
+[tool.uv]
+package = false
+default-groups = ["cpu"]
+conflicts = [[{ group = "cpu" }, { group = "cu130" }, { group = "rocm72" }]]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", group = "cpu" },
+    { index = "pytorch-cu130", group = "cu130" },
+    { index = "pytorch-rocm72", group = "rocm72" },
+]
+torchvision = [
+    { index = "pytorch-cpu", group = "cpu" },
+    { index = "pytorch-cu130", group = "cu130" },
+    { index = "pytorch-rocm72", group = "rocm72" },
+]
+triton-rocm = [{ index = "pytorch-rocm72", group = "rocm72" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-rocm72"
+url = "https://download.pytorch.org/whl/rocm7.2"
+explicit = true
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

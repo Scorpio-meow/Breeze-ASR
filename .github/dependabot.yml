@@ -1,0 +1,23 @@
+version: 2
+updates:
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      openvino:
+        patterns: ["openvino", "openvino-*"]
+      optimum:
+        patterns: ["optimum", "optimum-intel", "transformers"]
+      torch:
+        patterns: ["torch", "torchvision", "triton-rocm"]
+      sherpa-onnx:
+        patterns: ["sherpa-onnx", "sherpa-onnx-core"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

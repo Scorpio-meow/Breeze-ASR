@@ -1,0 +1,8 @@
+.env*
+.venv/
+data/
+**/__pycache__/
+Dockerfile
+compose*.yaml
+README.md
+private/
