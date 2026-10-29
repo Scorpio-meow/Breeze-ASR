@@ -151,17 +151,18 @@ def _format_reason(weight_format: str, compute: tuple[str, ov.Type], source: tup
 
 
 def _phase(config: EngineConfig) -> int:
-    if config.engine == "openvino" and config.device.startswith("CPU"):
-        return 0
-    if config.device.startswith("NPU"):
-        return 2
-    return 1
+    return 0 if config.engine == "openvino" and config.device.startswith("CPU") else 1
 
 
 def _candidates(hardware: dict, source: tuple[str, ov.Type] | None) -> tuple[list[_Candidate], list[dict]]:
     candidates: list[_Candidate] = []
     skipped: list[dict] = []
     for device, info in hardware["openvino_devices"].items():
+        if device.startswith("NPU"):
+            skipped.append(
+                {"label": f"{info['name']}（{device}）", "reason": "實測時驅動回報 DEVICE_LOST、裝置被重置，不支援 NPU"}
+            )
+            continue
         compute = _compute_precision(info["precisions"])
         if compute is None:
             skipped.append({"label": f"{info['name']}（{device}）", "reason": "裝置沒有回報可用的浮點運算精度"})

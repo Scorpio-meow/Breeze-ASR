@@ -53,11 +53,11 @@ flowchart TD
 
 1. 偵測硬體：CPU、記憶體、OpenVINO 看得到的裝置、PyTorch 看得到的 GPU（CUDA 或 ROCm）。每個 OpenVINO 裝置記錄它回報的運算精度（`OPTIMIZATION_CAPABILITIES`）、內顯或獨顯（`DEVICE_TYPE`）與可用的 GPU 記憶體（`GPU_DEVICE_TOTAL_MEM_SIZE`）。
 2. 讀預設模型的 safetensors 檔頭，得到原始精度與參數量，不看 `config.json`（Breeze ASR 25 的 `config.json` 寫 float32，實際是 bf16；Breeze ASR 26 是 fp32；兩者都是 1,543,304,960 個參數）。
-3. 列出組合：每個 OpenVINO 裝置 × int4、int8、fp16、fp32。裝置以它回報的最窄浮點精度運算（CPU 多半是 FP32，內顯與 NPU 是 FP16，有 AMX 的 CPU 是 BF16），比運算精度寬的浮點格式不測，例如 GPU、NPU 的 fp32；比原始權重寬的也不測，例如 Breeze ASR 25 的 fp32 只會保留原本的 bf16。
-4. 依序實測：先 CPU（取得錯誤率基準），再 GPU 與 PyTorch，NPU 最後；同一裝置由小到大（int4 → int8 → fp16 → fp32）。每項以內附的 29 秒範例語音（`app/assets/tune-sample.ogg`）暖機一次再量兩次、取較快的一次，並比對參考逐字稿算字元錯誤率。每項在獨立的子行程裡測，出錯、當掉或超過 15 分鐘只淘汰那一項。
+3. 列出組合：每個 OpenVINO 裝置（NPU 除外）× int4、int8、fp16、fp32。裝置以它回報的最窄浮點精度運算（CPU 多半是 FP32，內顯是 FP16，有 AMX 的 CPU 是 BF16），比運算精度寬的浮點格式不測，例如 GPU 的 fp32；比原始權重寬的也不測，例如 Breeze ASR 25 的 fp32 只會保留原本的 bf16。
+4. 依序實測：先 CPU（取得錯誤率基準），再 GPU 與 PyTorch；同一裝置由小到大（int4 → int8 → fp16 → fp32）。每項以內附的 29 秒範例語音（`app/assets/tune-sample.ogg`）暖機一次再量兩次、取較快的一次，並比對參考逐字稿算字元錯誤率。每項在獨立的子行程裡測，出錯、當掉或超過 15 分鐘只淘汰那一項。
 5. 每項開始前依序檢查，任一成立就略過並寫明原因：
    - 錯誤率：錯誤率主要由權重格式決定，在 CPU 上超過 15%，或比最準的設定高出超過 1 個百分點的格式，不再拿到其他裝置測。
-   - 裝置故障：某裝置第一個實測的項目就當掉或逾時（例如 NPU 驅動回報 `DEVICE_LOST`），該裝置其餘格式不再測，壞掉的裝置最多只耗一次逾時。
+   - 裝置故障：某裝置第一個實測的項目就當掉或逾時，該裝置其餘格式不再測，壞掉的裝置最多只耗一次逾時。
    - 記憶體（只檢查 fp16、fp32）：預估 = 參數量 × 權重格式的大小 ＋ 已實測項目中最小的「私有記憶體 − 權重大小」。權重不以裝置的運算精度計算：在 Core Ultra 7 155U 上實測，CPU 跑 fp16 的私有記憶體是 5.2 GB，比整份展開成 fp32 的 6.2 GB 還少。上限是當下的系統可用記憶體，內顯再以裝置回報的 GPU 記憶體為上限，獨顯直接用 GPU 記憶體。int8、int4 一律實測不檢查：它們是最小的格式，也是錯誤率的比較基準，當下記憶體暫時吃緊時不能因此讓整輪調校沒有結果。
 6. 只有真的要實測的格式才轉換：OpenVINO 從 PyTorch 以原始精度匯出一次（最花時間、最吃記憶體的一步），其他格式再從它壓縮權重，壓縮設定與 `optimum-cli --weight-format` 的預設相同。被略過的格式不轉換；已經轉好的格式直接沿用。
 7. 選最快的；但 GPU 與最快的 CPU 差距在 15% 以內時改用 GPU，讓 CPU 留給使用者的其他工作。
@@ -68,7 +68,7 @@ flowchart TD
 | --- | --- |
 | Intel／AMD CPU | 測 OpenVINO 各格式（原始權重是 16 位元時不測 fp32；CPU 上比 PyTorch 快，PyTorch CPU 不測） |
 | Intel 內顯／獨顯 | 測 OpenVINO int4、int8、fp16 中在 CPU 上錯誤率合格的格式 |
-| Intel NPU | 最後才測，規則同內顯；先前在 Core Ultra 7 155U 上編譯約 10 分鐘後推論時回報 `DEVICE_LOST`，若仍失敗只會淘汰 NPU。編譯結果會留在選中格式的編譯快取裡，之後重新調校約 30 秒就會失敗，不必再等編譯 |
+| Intel NPU | 不測，列為未測試：在 Core Ultra 7 155U 上編譯約 10 分鐘後，推論時驅動回報 `DEVICE_LOST`、裝置被重置 |
 | NVIDIA GPU | 測 PyTorch fp16；須安裝 CUDA 版 PyTorch（`uv sync --no-default-groups --group cu130`），否則列為未測試並說明原因 |
 | AMD GPU | 測 PyTorch fp16；須在 Linux 安裝 ROCm 版 PyTorch（`uv sync --no-default-groups --group rocm72`），偵測到 `rocm-smi` 或 `amd-smi` 但沒裝時列為未測試並說明原因 |
 
@@ -76,7 +76,7 @@ flowchart TD
 
 ## 編譯快取
 
-OpenVINO 第一次把模型編譯到某個裝置時會存下編譯結果，之後載入直接讀快取：內顯從約 30 秒縮短到約 6 秒，Core Ultra 7 155U 的 NPU 從約 10 分鐘縮短到約 20 秒。
+OpenVINO 第一次把模型編譯到某個裝置時會存下編譯結果，之後載入直接讀快取：內顯從約 30 秒縮短到約 6 秒。
 
 - 每個轉換後的模型有自己的快取資料夾 `data/openvino-cache/<轉換後的模型資料夾名稱>`，例如 `MediaTek-Research--Breeze-ASR-25--cffe7ccb404d--int8`；同一個模型在各裝置上的編譯結果都放在這裡。
 - 推論子行程每次啟動（包括重新調校與改用其他設定之後）都會清一次：對應的模型已不存在的快取資料夾，以及直接放在 `data/openvino-cache` 底下的舊版快取檔，全部刪除，並在日誌記下刪了幾項、釋出多少空間。

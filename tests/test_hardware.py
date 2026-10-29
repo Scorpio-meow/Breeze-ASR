@@ -122,7 +122,7 @@ def test_select_switches_to_a_measured_candidate():
                 "transcribe_seconds": 15.0,
                 "memory_bytes": 2,
             },
-            tested | {"label": "NPU・int8", "device": "NPU", "status": "failed", "reason": "DEVICE_LOST"},
+            tested | {"label": "GPU・fp16", "weight_format": "fp16", "status": "failed", "reason": "DEVICE_LOST"},
         ],
         "reasons": ["自動調校的理由"],
     }
@@ -137,7 +137,7 @@ def test_select_switches_to_a_measured_candidate():
     assert chosen.tuning["reasons"][0] == "手動選擇 CPU・int4（實測時錯誤率太高）"
     assert chosen.tuning["candidates"] == tuning["candidates"]
 
-    for label, message in (("NPU・int8", "無法執行"), ("不存在", "沒有這個設定")):
+    for label, message in (("GPU・fp16", "無法執行"), ("不存在", "沒有這個設定")):
         with pytest.raises(SelectionError, match=message):
             select(profile, label, 1)
     with pytest.raises(SelectionError, match="手寫"):

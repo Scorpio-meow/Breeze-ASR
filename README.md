@@ -64,7 +64,7 @@ NVIDIA、AMD 顯示卡與 GitHub 發布的映像檔見[部署](docs/deployment.m
 | Python | 3.12（uv 會自動下載） |
 | 記憶體 | 建議 16 GB 以上；第一次轉換模型時峰值約 9.5 GB，8 GB 也能完成但會大量使用分頁檔 |
 | 磁碟 | 約 16 GB（原始權重、轉換後的模型、編譯快取）；第一次自動調校期間暫時多約 4–7 GB |
-| 加速 | Intel 內顯（OpenVINO）、NVIDIA GPU（CUDA）、AMD GPU（ROCm，僅 Linux），沒有也能用 CPU；Intel NPU 會納入自動調校，但先前實測無法使用；Qualcomm 的 NPU、GPU 用不到。支援範圍見[部署](docs/deployment.md#gpu-支援) |
+| 加速 | Intel 內顯（OpenVINO）、NVIDIA GPU（CUDA）、AMD GPU（ROCm，僅 Linux），沒有也能用 CPU；Intel NPU 實測無法使用，不支援；Qualcomm 的 NPU、GPU 用不到。支援範圍見[部署](docs/deployment.md#gpu-支援) |
 
 ## 文件
 

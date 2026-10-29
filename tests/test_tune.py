@@ -24,7 +24,7 @@ def _config(device: str, weight_format: str) -> EngineConfig:
     return EngineConfig("openvino", device, weight_format, None, None, 1)
 
 
-def test_formats_follow_device_and_source_precision_with_npu_last():
+def test_formats_follow_device_and_source_precision_without_npu():
     candidates, skipped = _candidates(_hardware(), ("BF16", ov.Type.bf16))
     assert [(c.config.device, c.config.weight_format) for c in candidates] == [
         ("CPU", "int4"),
@@ -33,14 +33,11 @@ def test_formats_follow_device_and_source_precision_with_npu_last():
         ("GPU", "int4"),
         ("GPU", "int8"),
         ("GPU", "fp16"),
-        ("NPU", "int4"),
-        ("NPU", "int8"),
-        ("NPU", "fp16"),
     ]
     reasons = {item["label"]: item["reason"] for item in skipped}
     assert "原始權重是 BF16" in reasons["Test CPU（OpenVINO CPU・fp32）"]
     assert "以 FP16 運算" in reasons["Test iGPU（OpenVINO GPU・fp32）"]
-    assert "以 FP16 運算" in reasons["Test NPU（OpenVINO NPU・fp32）"]
+    assert "不支援 NPU" in reasons["Test NPU（NPU）"]
 
 
 def test_fp32_source_is_tested_on_fp32_devices_only():
@@ -65,7 +62,6 @@ def test_cuda_and_rocm_gpus_become_torch_candidates():
     assert [c.config.device for c in torch_configs] == ["cuda:0", "cuda:1"]
     assert "ROCm" in torch_configs[1].label
     assert all(c.config.torch_dtype == "float16" for c in torch_configs)
-    assert candidates[-1].config.device == "NPU"
 
 
 def test_hint_when_gpu_present_but_pytorch_lacks_support():
