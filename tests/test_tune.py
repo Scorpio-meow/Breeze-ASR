@@ -93,19 +93,20 @@ def test_formats_much_less_accurate_than_the_best_are_rejected():
     assert records[3]["reason"] == "超過 900 秒仍未完成"
 
 
-def test_float_weights_are_sized_at_the_device_compute_precision():
-    assert _weight_bytes(_config("CPU", "int4"), 1000, DEVICES) == 500
-    assert _weight_bytes(_config("CPU", "int8"), 1000, DEVICES) == 1000
-    assert _weight_bytes(_config("CPU", "fp16"), 1000, DEVICES) == 4000
-    assert _weight_bytes(_config("GPU", "fp16"), 1000, DEVICES) == 2000
+def test_weights_are_sized_at_their_own_format_on_every_device():
+    assert _weight_bytes(_config("CPU", "int4"), 1000) == 500
+    assert _weight_bytes(_config("CPU", "int8"), 1000) == 1000
+    assert _weight_bytes(_config("CPU", "fp16"), 1000) == 2000
+    assert _weight_bytes(_config("GPU", "fp16"), 1000) == 2000
+    assert _weight_bytes(_config("CPU", "fp32"), 1000) == 4000
 
 
 def test_only_float_formats_are_held_back_by_memory():
-    assert _memory_need(_config("CPU", "int4"), 1000, DEVICES, [300]) == 0
-    assert _memory_need(_config("GPU", "int8"), 1000, DEVICES, [300]) == 0
-    assert _memory_need(_config("CPU", "fp16"), 1000, DEVICES, [700, 300]) == 4300
-    assert _memory_need(_config("GPU", "fp16"), 1000, DEVICES, []) == 2000
-    assert _memory_need(EngineConfig("torch", "cuda:0", None, "float16", 1, 1), 1000, DEVICES, [300]) == 0
+    assert _memory_need(_config("CPU", "int4"), 1000, [300]) == 0
+    assert _memory_need(_config("GPU", "int8"), 1000, [300]) == 0
+    assert _memory_need(_config("CPU", "fp16"), 1000, [700, 300]) == 2300
+    assert _memory_need(_config("GPU", "fp16"), 1000, []) == 2000
+    assert _memory_need(EngineConfig("torch", "cuda:0", None, "float16", 1, 1), 1000, [300]) == 0
 
 
 def test_memory_limit_uses_device_memory_where_reported():

@@ -198,17 +198,14 @@ def _candidates(hardware: dict, source: tuple[str, ov.Type] | None) -> tuple[lis
     return sorted(candidates, key=lambda c: _phase(c.config)), skipped
 
 
-def _weight_bytes(config: EngineConfig, parameters: int, devices: dict) -> int:
-    weight_type = _FORMAT_TYPES[config.weight_format]
-    if weight_type.is_real():
-        weight_type = _compute_precision(devices[config.device]["precisions"])[1]
-    return parameters * weight_type.bitwidth // 8
+def _weight_bytes(config: EngineConfig, parameters: int) -> int:
+    return parameters * _FORMAT_TYPES[config.weight_format].bitwidth // 8
 
 
-def _memory_need(config: EngineConfig, parameters: int, devices: dict, overheads: list[int]) -> int:
+def _memory_need(config: EngineConfig, parameters: int, overheads: list[int]) -> int:
     if config.engine != "openvino" or not _FORMAT_TYPES[config.weight_format].is_real():
         return 0
-    return _weight_bytes(config, parameters, devices) + (min(overheads) if overheads else 0)
+    return _weight_bytes(config, parameters) + (min(overheads) if overheads else 0)
 
 
 def _memory_limit(info: dict, available: int) -> int:
@@ -390,7 +387,7 @@ def run_tuning(settings: Settings, catalog: Catalog, report: Reporter) -> Hardwa
             _grade(results)
             inaccurate = {r["weight_format"] for r in results if r["status"] == "rejected"}
             graded = True
-        need = _memory_need(config, parameters, devices, overheads)
+        need = _memory_need(config, parameters, overheads)
         limit = _memory_limit(devices[config.device], psutil.virtual_memory().available) if need else 0
         reason = _blocker(config, inaccurate, failed, need, limit)
         if reason is not None:
@@ -408,8 +405,9 @@ def run_tuning(settings: Settings, catalog: Catalog, report: Reporter) -> Hardwa
             if record["status"] == "failed":
                 failed[config.device] = config.weight_format
         if config.engine == "openvino" and record["status"] == "measured":
-            overheads.append(max(0, record["memory_bytes"] - _weight_bytes(config, parameters, devices)))
-            log.info("推論時權重以外的記憶體開銷約 %.1f GB", gb(min(overheads)))
+            overhead = max(0, record["memory_bytes"] - _weight_bytes(config, parameters))
+            overheads.append(overhead)
+            log.info("推論時權重以外的記憶體開銷約 %.1f GB", gb(overhead))
     _grade(results)
 
     usable = [r for r in results if r["status"] == "ok"]
