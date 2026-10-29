@@ -32,7 +32,7 @@ class OpenVinoEngine:
         return target
 
     def load(self, spec: ModelSpec, path: Path) -> ov_genai.WhisperPipeline:
-        properties: dict[str, object] = {"CACHE_DIR": str(self._settings.compile_cache_dir)}
+        properties: dict[str, object] = {"CACHE_DIR": str(preparation.cache_dir(self._settings, path))}
         if spec.local.sentence_segments is not None:
             properties["word_timestamps"] = True
         pipeline = ov_genai.WhisperPipeline(str(path), self._config.device, **properties)

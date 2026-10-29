@@ -247,7 +247,7 @@ def _benchmark(candidate: _Candidate, model_dir: Path, spec: ModelSpec, settings
         "engine": config.engine,
         "device": config.device,
         "model_dir": str(model_dir),
-        "cache_dir": str(settings.compile_cache_dir),
+        "cache_dir": str(preparation.cache_dir(settings, model_dir)),
         "task": spec.local.task,
         "language": spec.local.language,
         "torch_dtype": config.torch_dtype,

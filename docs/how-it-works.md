@@ -22,7 +22,7 @@ flowchart TD
 | `app/main.py` | FastAPI 路由與服務組裝 |
 | `app/config.py`、`app/catalog.py` | `.env` 設定與 `models.json` 的讀取與檢查 |
 | `app/jobs.py`、`app/transcript.py` | 工作佇列、結果保存與過期清理；逐字稿資料結構 |
-| `app/inference.py`、`app/engine.py`、`app/preparation.py` | 推論子行程；模型的下載、轉換、載入與卸載 |
+| `app/inference.py`、`app/engine.py`、`app/preparation.py` | 推論子行程；模型的下載、轉換、載入與卸載；編譯快取的清理 |
 | `app/backend_openvino.py`、`app/backend_torch.py`、`app/backend_remote.py` | 三種推論方式 |
 | `app/tune.py`、`app/benchmark.py`、`app/hardware.py` | 自動調校、單一裝置實測、硬體設定檔 |
 | `app/segmentation.py` | 句子分段 |
@@ -62,17 +62,25 @@ flowchart TD
 6. 只有真的要實測的格式才轉換：OpenVINO 從 PyTorch 以原始精度匯出一次（最花時間、最吃記憶體的一步），其他格式再從它壓縮權重，壓縮設定與 `optimum-cli --weight-format` 的預設相同。被略過的格式不轉換；已經轉好的格式直接沿用。
 7. 選最快的；但 GPU 與最快的 CPU 差距在 15% 以內時改用 GPU，讓 CPU 留給使用者的其他工作。
 8. 依量到的單一模型私有記憶體與目前可用記憶體（最多用一半；NVIDIA 為可用顯示記憶體的 80%）決定同時常駐幾個模型。
-9. 刪掉沒選上的格式，只留選中的那一份；寫出硬體設定檔，之後啟動直接讀它，不再調校。
+9. 刪掉沒選上的格式，只留選中的那一份；寫出硬體設定檔，之後啟動直接讀它，不再調校。被刪掉的格式的編譯快取，會在推論子行程這次啟動時一併清掉（見[編譯快取](#編譯快取)）。
 
 | 裝置 | 處理方式 |
 | --- | --- |
 | Intel／AMD CPU | 測 OpenVINO 各格式（原始權重是 16 位元時不測 fp32；CPU 上比 PyTorch 快，PyTorch CPU 不測） |
 | Intel 內顯／獨顯 | 測 OpenVINO int4、int8、fp16 中在 CPU 上錯誤率合格的格式 |
-| Intel NPU | 最後才測，規則同內顯；先前在 Core Ultra 7 155U 上編譯約 10 分鐘後推論時回報 `DEVICE_LOST`，若仍失敗只會淘汰 NPU |
+| Intel NPU | 最後才測，規則同內顯；先前在 Core Ultra 7 155U 上編譯約 10 分鐘後推論時回報 `DEVICE_LOST`，若仍失敗只會淘汰 NPU。編譯結果會留在選中格式的編譯快取裡，之後重新調校約 30 秒就會失敗，不必再等編譯 |
 | NVIDIA GPU | 測 PyTorch fp16；須安裝 CUDA 版 PyTorch（`uv sync --no-default-groups --group cu130`），否則列為未測試並說明原因 |
 | AMD GPU | 測 PyTorch fp16；須在 Linux 安裝 ROCm 版 PyTorch（`uv sync --no-default-groups --group rocm72`），偵測到 `rocm-smi` 或 `amd-smi` 但沒裝時列為未測試並說明原因 |
 
 工具列的「硬體」顯示偵測到的硬體、各裝置實測結果、選擇理由與未測試的裝置。實測表裡跑得起來的項目都有「改用」，按兩次確認就切換過去（例如想讓 CPU 空出來給其他工作而改用內顯），推論子行程會重新啟動；也可以「重新調校」。有工作在排隊或處理中時，這兩個操作都不能用。手寫硬體設定檔的格式見[設定](configuration.md#硬體設定檔)。
+
+## 編譯快取
+
+OpenVINO 第一次把模型編譯到某個裝置時會存下編譯結果，之後載入直接讀快取：內顯從約 30 秒縮短到約 6 秒，Core Ultra 7 155U 的 NPU 從約 10 分鐘縮短到約 20 秒。
+
+- 每個轉換後的模型有自己的快取資料夾 `data/openvino-cache/<轉換後的模型資料夾名稱>`，例如 `MediaTek-Research--Breeze-ASR-25--cffe7ccb404d--int8`；同一個模型在各裝置上的編譯結果都放在這裡。
+- 推論子行程每次啟動（包括重新調校與改用其他設定之後）都會清一次：對應的模型已不存在的快取資料夾，以及直接放在 `data/openvino-cache` 底下的舊版快取檔，全部刪除，並在日誌記下刪了幾項、釋出多少空間。
+- 模型還在，它的快取資料夾就不會被清。切換 `sentence_segments` 或改用其他裝置後，舊的編譯結果會留在裡面；想清的話，在服務停止時刪掉那個資料夾，下次載入會重新編譯。
 
 ## 句子分段
 
@@ -87,7 +95,7 @@ Breeze ASR 26 幾乎不輸出段內時間戳，Whisper 的長音訊解碼只能�
 
 - 逐字結果與辨識文字對不起來時，該次改用模型原本的分段，並在日誌留下警告。
 - 逐字時間戳只影響分段，不影響辨識文字。
-- 開關 `sentence_segments` 會讓解碼器重新編譯一次（內顯約 30 秒、CPU 約 35 秒），編譯快取多約 1 GB；舊的快取檔不會自動刪除，可以清空 `data/openvino-cache` 讓它重建。
+- 開關 `sentence_segments` 會讓解碼器重新編譯一次（內顯約 30 秒、CPU 約 35 秒），編譯快取多約 1 GB；舊的快取檔留在同一個模型的快取資料夾裡，不會自動刪除，可以刪掉那個資料夾讓它重建（見[編譯快取](#編譯快取)）。
 - 想要最快速度、不在意字幕段落長度時，把 `sentence_segments` 改回 `null`。
 
 切段準確度與速度代價見[效能實測](benchmarks.md#句子分段)。

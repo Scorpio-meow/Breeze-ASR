@@ -110,9 +110,11 @@ def _worker_main(settings: Settings, requests: Queue, events: Queue) -> None:
     from .catalog import load_catalog
     from .engine import ModelManager
     from .hardware import tuned_speed
+    from .preparation import prune_cache
 
     catalog = load_catalog(settings.models_file)
     profile, unavailable = _hardware_config(settings, catalog, events)
+    prune_cache(settings)
     manager = ModelManager(
         catalog,
         settings,

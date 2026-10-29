@@ -5,6 +5,7 @@ import logging
 import math
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -15,6 +16,7 @@ from huggingface_hub import snapshot_download
 
 from .catalog import ModelSpec
 from .config import Settings, load_settings
+from .hardware import gb
 
 log = logging.getLogger(__name__)
 
@@ -33,6 +35,49 @@ def converted_dir(settings: Settings, spec: ModelSpec, weight_format: str) -> Pa
 
 def is_prepared(target: Path) -> bool:
     return (target / _MARKER).is_file()
+
+
+def cache_dir(settings: Settings, model_dir: Path) -> Path:
+    return settings.compile_cache_dir / model_dir.name
+
+
+def _size(path: Path) -> int:
+    if path.is_file():
+        return path.stat().st_size
+    return sum(item.stat().st_size for item in path.rglob("*") if item.is_file())
+
+
+def _retry_writable(function: Callable[[str], None], path: str, _exc: BaseException) -> None:
+    os.chmod(path, stat.S_IWRITE)
+    function(path)
+
+
+def _remove(path: Path) -> None:
+    if path.is_dir():
+        shutil.rmtree(path, onexc=_retry_writable)
+    else:
+        path.chmod(stat.S_IWRITE)
+        path.unlink()
+
+
+def prune_cache(settings: Settings) -> None:
+    root = settings.compile_cache_dir
+    if not root.is_dir():
+        return
+    removed, freed = 0, 0
+    for entry in root.iterdir():
+        if entry.is_dir() and is_prepared(settings.openvino_dir / entry.name):
+            continue
+        size = _size(entry)
+        try:
+            _remove(entry)
+        except OSError as exc:
+            log.warning("無法刪除編譯快取 %s：%s", entry, exc)
+            continue
+        removed += 1
+        freed += size
+    if removed:
+        log.info("刪除 %d 項對應的模型已不存在的編譯快取，釋出 %.1f GB", removed, gb(freed))
 
 
 def source_info(snapshot: Path) -> tuple[set[str], int]:
