@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from app.glossary import GlossaryStore
 from app.inference import InferenceError
 from app.jobs import JobQueue, JobStatus, SegmentNotFound
 from app.transcript import Segment, Transcript
@@ -16,7 +17,7 @@ class FakeInference:
             self.release.set()
         self.cancelled: list[str] = []
 
-    def transcribe(self, job_id, model_id, audio_path, on_stage, on_progress) -> Transcript:
+    def transcribe(self, job_id, model_id, audio_path, hotwords, on_stage, on_progress) -> Transcript:
         on_stage("transcribing")
         self.release.wait(5)
         if job_id in self.cancelled:
@@ -29,7 +30,16 @@ class FakeInference:
 
 
 def _queue(tmp_path: Path, inference: FakeInference, ttl_seconds: int = 3600) -> JobQueue:
-    queue = JobQueue(inference, None, tmp_path / "jobs", tmp_path / "results", 5, ttl_seconds)
+    queue = JobQueue(
+        inference,
+        None,
+        None,
+        GlossaryStore(tmp_path / "glossary.json"),
+        tmp_path / "jobs",
+        tmp_path / "results",
+        5,
+        ttl_seconds,
+    )
     queue.start()
     return queue
 
@@ -37,7 +47,7 @@ def _queue(tmp_path: Path, inference: FakeInference, ttl_seconds: int = 3600) ->
 def _submit(queue: JobQueue, tmp_path: Path):
     decoded = tmp_path / "decoded.f32"
     decoded.write_bytes(bytes(64))
-    return queue.submit("org/model", "a.wav", decoded, 1.0, "off")
+    return queue.submit("org/model", "a.wav", decoded, 1.0, "off", False, "")
 
 
 def _wait(condition) -> None:

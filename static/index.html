@@ -16,7 +16,7 @@
 
       <div class="tb-group">
         <label class="tb-btn" id="open-btn" for="file-input">
-          <input type="file" id="file-input" accept="audio/*,video/*,.m4a,.mp3,.wav,.flac,.ogg,.opus,.webm,.mp4,.mov,.aac,.wma,.amr" class="control-hidden">
+          <input type="file" id="file-input" multiple accept="audio/*,video/*,.m4a,.mp3,.wav,.flac,.ogg,.opus,.webm,.mp4,.mov,.aac,.wma,.amr,.mkv,.avi" class="control-hidden">
           開啟…
         </label>
         <button type="button" class="tb-btn" id="record-btn" aria-pressed="false">
@@ -43,6 +43,14 @@
             <option value="auto">自動</option>
           </select>
         </label>
+        <label class="tb-check" id="punct-group" hidden>
+          <input type="checkbox" id="punct-check">
+          <span>標點</span>
+        </label>
+        <label class="tb-check" id="hotwords-group">
+          <input type="checkbox" id="hotwords-check">
+          <span>熱詞</span>
+        </label>
         <button type="submit" class="tb-btn primary" id="submit-btn">辨識</button>
         <button type="button" class="tb-btn" id="cancel-btn" hidden>取消</button>
       </form>
@@ -50,6 +58,7 @@
       <span class="tb-spacer"></span>
 
       <div class="tb-group">
+        <button type="button" class="tb-btn" id="glossary-btn">詞彙<span class="tb-count" id="glossary-summary"></span></button>
         <button type="button" class="tb-btn" id="voices-btn" hidden>語者庫<span class="tb-count" id="voices-summary"></span></button>
         <button type="button" class="tb-btn" id="hardware-btn" hidden>硬體</button>
       </div>
@@ -66,6 +75,10 @@
         <span class="transport-file">
           <span class="file-name" id="selected-name">未載入音訊</span>
           <span class="file-size" id="selected-size"></span>
+          <label class="link-btn" id="relink-btn" for="relink-input" hidden>
+            <input type="file" id="relink-input" accept="audio/*,video/*,.m4a,.mp3,.wav,.flac,.ogg,.opus,.webm,.mp4,.mov,.aac,.wma,.amr,.mkv,.avi" class="control-hidden">
+            對應原始檔…
+          </label>
           <button type="button" class="link-btn" id="clear-audio" hidden>關閉</button>
         </span>
       </div>
@@ -98,7 +111,28 @@
           </div>
           <span class="head-meta" id="segment-count"></span>
           <span class="tb-spacer"></span>
+          <button type="button" class="link-btn" id="undo-btn" disabled title="Ctrl+Z">復原</button>
+          <button type="button" class="link-btn" id="redo-btn" disabled title="Ctrl+Y">重做</button>
+          <button type="button" class="link-btn" id="find-btn" aria-expanded="false" aria-controls="find-bar" disabled title="Ctrl+F">尋找取代</button>
           <button type="button" class="link-btn" id="copy-btn" disabled><span id="copy-label">複製全文</span></button>
+        </div>
+        <div class="find-bar" id="find-bar" role="search" hidden>
+          <label class="tb-field">
+            <span>尋找</span>
+            <input type="search" class="tb-input" id="find-input" autocomplete="off" spellcheck="false">
+          </label>
+          <span class="head-meta" id="find-count" aria-live="polite"></span>
+          <button type="button" class="tb-btn" id="find-prev" aria-label="上一個">↑</button>
+          <button type="button" class="tb-btn" id="find-next" aria-label="下一個">↓</button>
+          <label class="tb-field">
+            <span>取代為</span>
+            <input type="text" class="tb-input" id="replace-input" autocomplete="off" spellcheck="false">
+          </label>
+          <button type="button" class="tb-btn" id="replace-one">取代</button>
+          <button type="button" class="tb-btn" id="replace-all">全部取代</button>
+          <button type="button" class="tb-btn" id="apply-glossary" title="用詞彙表的取代規則改整份字幕">套用詞彙表</button>
+          <span class="tb-spacer"></span>
+          <button type="button" class="link-btn" id="find-close">關閉</button>
         </div>
         <div class="grid-scroll">
           <table class="sub-grid" id="sub-grid">
@@ -119,6 +153,43 @@
       </section>
 
       <aside class="inspector">
+        <section class="panel" id="preview-panel" aria-label="影片預覽" hidden>
+          <div class="video-frame">
+            <video id="media" preload="auto" playsinline></video>
+            <p class="video-cue" id="video-cue" aria-hidden="true"></p>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="jobs-title">
+          <h2 class="panel-head" id="jobs-title">工作<span class="head-meta" id="watch-summary"></span></h2>
+          <div class="panel-body">
+            <ul class="job-list" id="job-list"></ul>
+            <p class="panel-empty" id="jobs-empty">—</p>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="cue-title">
+          <h2 class="panel-head" id="cue-title">字幕<span class="head-meta" id="cue-number"></span></h2>
+          <div class="panel-body">
+            <p class="panel-empty" id="cue-empty">點選一段字幕</p>
+            <div class="cue-form" id="cue-form" hidden>
+              <label class="cue-field" for="cue-start">開始</label>
+              <input type="text" class="tb-input timecode-input" id="cue-start" inputmode="decimal" autocomplete="off" spellcheck="false">
+              <button type="button" class="tb-btn" id="cue-start-now" title="把開始時間設為目前播放位置">設為播放位置</button>
+              <label class="cue-field" for="cue-end">結束</label>
+              <input type="text" class="tb-input timecode-input" id="cue-end" inputmode="decimal" autocomplete="off" spellcheck="false">
+              <button type="button" class="tb-btn" id="cue-end-now" title="把結束時間設為目前播放位置">設為播放位置</button>
+              <label class="cue-field" for="cue-speaker" id="cue-speaker-label">說話者</label>
+              <select class="tb-select" id="cue-speaker"></select>
+              <div class="cue-actions">
+                <button type="button" class="tb-btn" id="cue-split" title="在文字游標處分成兩段（Ctrl+Enter）">分割</button>
+                <button type="button" class="tb-btn" id="cue-merge">與下一段合併</button>
+                <button type="button" class="tb-btn" id="cue-delete">刪除</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section class="panel" aria-labelledby="speakers-title">
           <h2 class="panel-head" id="speakers-title">說話者</h2>
           <div class="panel-body">
@@ -133,8 +204,12 @@
           <div class="panel-body export-row">
             <a class="tb-btn" id="dl-srt" download aria-disabled="true">SRT</a>
             <a class="tb-btn" id="dl-vtt" download aria-disabled="true">VTT</a>
+            <a class="tb-btn" id="dl-ass" download aria-disabled="true">ASS</a>
             <a class="tb-btn" id="dl-txt" download aria-disabled="true">TXT</a>
+            <a class="tb-btn" id="dl-md" download aria-disabled="true">MD</a>
+            <a class="tb-btn" id="dl-docx" download aria-disabled="true">DOCX</a>
             <a class="tb-btn" id="dl-json" download aria-disabled="true">JSON</a>
+            <button type="button" class="tb-btn" id="burn-btn" disabled>燒錄字幕…</button>
           </div>
         </section>
 
@@ -158,6 +233,63 @@
       <span class="sb-item sb-muted" id="runtime"></span>
     </footer>
   </div>
+
+  <dialog class="dialog wide" id="glossary-dialog" aria-labelledby="glossary-title">
+    <form method="dialog" class="dialog-head">
+      <h2 id="glossary-title">詞彙</h2>
+      <span class="tb-spacer"></span>
+      <button class="link-btn" value="close">關閉</button>
+    </form>
+    <div class="dialog-body">
+      <h3 class="dialog-section"><label for="hotwords-input">熱詞</label></h3>
+      <p class="dialog-note">勾選工具列的「熱詞」後，辨識時會參考這段文字，人名、公司名、英文術語比較容易寫對。寫成句子效果較好，例如「與會者有王小明、陳美玲，會中提到 Kubernetes。」</p>
+      <textarea class="tb-input hotwords-input" id="hotwords-input" rows="3" spellcheck="false"></textarea>
+      <p class="dialog-note" id="hotwords-count" aria-live="polite"></p>
+      <h3 class="dialog-section">取代規則</h3>
+      <p class="dialog-note">新的辨識結果會自動套用；同音字（例如「鍾雲浩 → 鍾昀澔」）熱詞修不回來時用這個。現有字幕可在「尋找取代」按「套用詞彙表」。</p>
+      <div class="table-wrap">
+        <table class="rules">
+          <thead><tr><th scope="col">原文</th><th scope="col">改成</th><th scope="col"><span class="visually-hidden">刪除</span></th></tr></thead>
+          <tbody id="rule-rows"></tbody>
+        </table>
+      </div>
+      <div class="dialog-foot">
+        <button type="button" class="tb-btn" id="rule-add">新增規則</button>
+        <span class="dialog-note" id="glossary-status" role="status"></span>
+        <span class="tb-spacer"></span>
+        <button type="button" class="tb-btn primary" id="glossary-save">儲存</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog class="dialog" id="burn-dialog" aria-labelledby="burn-title">
+    <form method="dialog" class="dialog-head">
+      <h2 id="burn-title">燒錄字幕</h2>
+      <span class="tb-spacer"></span>
+      <button class="link-btn" value="close">關閉</button>
+    </form>
+    <div class="dialog-body">
+      <p class="dialog-note">把目前的字幕燒進影片畫面，輸出 MP4。會用按下「開始」當時已儲存的字幕；影片必須是這份字幕的原始影片。</p>
+      <div class="burn-source">
+        <button type="button" class="tb-btn" id="burn-current" hidden>使用目前的影片</button>
+        <label class="tb-btn" for="burn-input">
+          <input type="file" id="burn-input" accept="video/*,.mp4,.mov,.mkv,.webm,.avi" class="control-hidden">
+          選擇影片…
+        </label>
+        <span class="file-name" id="burn-name"></span>
+      </div>
+      <div class="burn-progress" id="burn-progress" hidden>
+        <span class="sb-progress"><span class="sb-progress-fill" id="burn-fill"></span></span>
+        <span class="dialog-note" id="burn-status" role="status"></span>
+      </div>
+      <div class="dialog-foot">
+        <button type="button" class="tb-btn" id="burn-cancel" hidden>取消燒錄</button>
+        <a class="tb-btn" id="burn-download" download hidden>下載影片</a>
+        <span class="tb-spacer"></span>
+        <button type="button" class="tb-btn primary" id="burn-start" disabled>開始</button>
+      </div>
+    </div>
+  </dialog>
 
   <dialog class="dialog" id="voices-dialog" aria-labelledby="voices-title">
     <form method="dialog" class="dialog-head">
@@ -205,7 +337,6 @@
     </div>
   </dialog>
 
-  <audio id="audio-preview" preload="auto" hidden></audio>
   <div class="visually-hidden" aria-live="polite" id="announcer"></div>
 </body>
 </html>

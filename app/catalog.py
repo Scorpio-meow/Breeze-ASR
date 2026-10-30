@@ -25,6 +25,7 @@ _SPEAKER_KEYS = {
     "max_speakers",
 }
 _HUB_FILE_KEYS = {"repo", "revision", "file"}
+_PUNCTUATION_KEYS = _HUB_FILE_KEYS | {"num_threads"}
 _TASKS = ("transcribe", "translate")
 
 
@@ -95,6 +96,12 @@ class SpeakerConfig:
     max_speakers: int
 
 
+@dataclass(frozen=True)
+class PunctuationConfig:
+    model: HubFile
+    num_threads: int
+
+
 def model_status(spec: ModelSpec, state: str, error: str | None, speed: float | None) -> dict:
     return {
         "id": spec.id,
@@ -102,6 +109,7 @@ def model_status(spec: ModelSpec, state: str, error: str | None, speed: float | 
         "tagline": spec.tagline,
         "description": spec.description,
         "backend": "remote" if spec.remote is not None else "local",
+        "hotwords": spec.local is not None,
         "state": state,
         "error": error,
         "seconds_per_audio_second": speed,
@@ -113,6 +121,7 @@ class Catalog:
     default_model: str
     models: tuple[ModelSpec, ...]
     speakers: SpeakerConfig | None
+    punctuation: PunctuationConfig | None
 
     def get(self, model_id: str) -> ModelSpec | None:
         return next((m for m in self.models if m.id == model_id), None)
@@ -271,6 +280,16 @@ def _parse_speakers(raw: object, where: str) -> SpeakerConfig | None:
     )
 
 
+def _parse_punctuation(raw: object, where: str) -> PunctuationConfig | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ConfigError(f"{where} 必須是物件，或 null 表示不提供自動標點")
+    _check_keys(raw, _PUNCTUATION_KEYS, where)
+    model = _parse_hub_file({k: raw[k] for k in _HUB_FILE_KEYS}, where)
+    return PunctuationConfig(model=model, num_threads=_positive_int(raw, "num_threads", where, 1))
+
+
 def load_catalog(path: Path) -> Catalog:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -287,4 +306,11 @@ def load_catalog(path: Path) -> Catalog:
         raise ConfigError(f"{path} 的 default_model 必須是 models 裡的其中一個 id")
     if "speakers" not in data:
         raise ConfigError(f"{path} 缺少 speakers 欄位（分辨說話者的設定；不提供請設為 null）")
-    return Catalog(default_model=default_model, models=models, speakers=_parse_speakers(data["speakers"], "speakers"))
+    if "punctuation" not in data:
+        raise ConfigError(f"{path} 缺少 punctuation 欄位（自動標點的設定；不提供請設為 null）")
+    return Catalog(
+        default_model=default_model,
+        models=models,
+        speakers=_parse_speakers(data["speakers"], "speakers"),
+        punctuation=_parse_punctuation(data["punctuation"], "punctuation"),
+    )

@@ -4,7 +4,31 @@
 
 ## [Unreleased]
 
-第一個版本，`pyproject.toml` 標為 0.1.0。
+## [0.2.0] - 2026-10-31
+
+### Added
+
+- 「工作」清單與 `GET /api/jobs`：列出保留中的工作，點一下打開；重新整理後自動打開上次那一份。從清單打開的舊結果可以「對應原始檔」後再播放與對時。
+- 字幕編輯：右側「字幕」面板改時間（可設為播放位置）、改說話者或新增說話者、分割（文字游標或播放位置，Ctrl+Enter）、與下一段合併、刪除；「說話者」面板可把一位說話者併入另一位；尋找取代（Ctrl+F）；復原與重做（Ctrl+Z、Ctrl+Y）。後端新增 `PUT /api/jobs/{id}/transcript`，以版本號避免不同分頁互相覆蓋。
+- 熱詞：在「詞彙」設定後勾選「熱詞」，OpenVINO 以 `hotwords`、PyTorch 以 `prompt_ids` 帶入每個解碼視窗；送出前檢查 token 上限（223）。實測見效能實測的「熱詞」。
+- 詞彙表的取代規則：自動套用到新的辨識結果，也能套用到現有字幕；`GET`／`PUT /api/glossary`。
+- 自動標點：sherpa-onnx 的 CT-Transformer 中英標點模型，逐字對齊後只把標點放回原文；`models.json` 新增必填的 `punctuation` 欄位（不提供設為 `null`）。
+- 匯出 ASS、Markdown、DOCX；燒錄字幕到原始影片（`POST /api/jobs/{id}/renders`），字型由新的 `ASR_SUBTITLE_FONT`、`ASR_SUBTITLE_FONTS_DIR` 設定，Docker 映像檔內建 Noto Sans CJK。
+- 影片在右側預覽並疊上目前的字幕。
+- 一次選多個檔案排隊辨識。
+- 監看資料夾：新的 `ASR_WATCH_*` 設定（都必須填寫，不監看時 `ASR_WATCH_DIR=off`），Docker 用 `compose.watch.yaml` 掛入主機資料夾。
+- 命令列工具 `python -m app.cli` 與 MCP server `python -m app.mcp_server`。
+- 日誌寫進 `ASR_DATA_DIR/logs/`（網頁行程 `breeze-asr.log`、推論子行程 `inference.log`，滿 5 MB 換新、保留 5 個）；啟動時記下功能摘要，並記錄字幕編輯與版本衝突、詞彙表、語者庫、監看資料夾與 MCP 的操作，工作完成時加上段數與說話者數。熱詞計數的請求不記入存取日誌。
+
+### Changed
+
+- `POST /api/jobs` 新增必填的 `punctuation` 欄位與選填的 `hotwords` 欄位。
+- `.env` 新增必填的 `ASR_SUBTITLE_FONT`、`ASR_SUBTITLE_FONTS_DIR` 與 `ASR_WATCH_*`；舊的 `.env` 要照 `.env.example` 補上，否則服務拒絕啟動。
+- `.env.example` 的註解精簡為每區一行，各變數的說明集中在 `docs/configuration.md`。
+
+## [0.1.0] - 2026-10-29
+
+第一個版本。
 
 ### Added
 

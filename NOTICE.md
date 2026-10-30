@@ -22,7 +22,10 @@
 | [MediaTek-Research/Breeze-ASR-26](https://huggingface.co/MediaTek-Research/Breeze-ASR-26) | 語音辨識模型 | Apache-2.0 |
 | [csukuangfj/sherpa-onnx-pyannote-segmentation-3-0](https://huggingface.co/csukuangfj/sherpa-onnx-pyannote-segmentation-3-0)（[pyannote segmentation 3.0](https://huggingface.co/pyannote/segmentation-3.0) 的 ONNX 版） | 說話者分段 | MIT |
 | [csukuangfj/speaker-embedding-models](https://huggingface.co/csukuangfj/speaker-embedding-models) 的 [3D-Speaker](https://github.com/modelscope/3D-Speaker) ERes2Net（ONNX 版） | 聲紋 | 原始模型為 Apache-2.0；ONNX 轉檔的 repo 未附授權檔 |
+| [csukuangfj/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12](https://huggingface.co/csukuangfj/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12)（FunASR 的 [CT-Transformer 標點模型](https://modelscope.cn/models/iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch)，ONNX 版） | 自動標點 | 原始模型的模型卡標示 Apache-2.0；ONNX 轉檔的 repo 未附授權檔 |
 | Python 套件（見 `pyproject.toml` 與 `uv.lock`） | 執行環境 | 各自的授權 |
+
+Docker 映像檔另外安裝 Debian 的 `fonts-noto-cjk`（SIL Open Font License 1.1），給燒錄字幕使用。
 
 `imageio-ffmpeg` 會在安裝時下載 ffmpeg 執行檔，ffmpeg 依編譯方式為 LGPL 或 GPL。原始碼 repo 不含 ffmpeg；若要散布包含它的 Docker 映像檔，需一併遵守 ffmpeg 的授權。
 

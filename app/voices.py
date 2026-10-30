@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import secrets
 import threading
@@ -9,6 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+
+log = logging.getLogger(__name__)
 
 _MAX_VOICE_MEMBERS = 128
 _VECTOR_DECIMALS = 4
@@ -119,6 +122,7 @@ class VoiceLibrary:
             voice["samples"] += 1
             voice["updated_at"] = now
             self._save()
+            log.info("語者庫記住聲紋 %s（第 %d 次）", voice["id"], voice["samples"])
             return {"id": voice["id"], "name": voice["name"], "samples": voice["samples"]}
 
     def delete(self, voice_id: str) -> bool:
@@ -128,4 +132,5 @@ class VoiceLibrary:
                 return False
             self._voices = remaining
             self._save()
+            log.info("語者庫刪除聲紋 %s", voice_id)
             return True

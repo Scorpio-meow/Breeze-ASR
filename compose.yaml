@@ -15,6 +15,8 @@ services:
       ASR_DATA_DIR: /data
       HF_HOME: /data/huggingface
       ASR_HARDWARE_PROFILE: /data/hardware-profile.json
+      ASR_SUBTITLE_FONT: Noto Sans CJK TC
+      ASR_SUBTITLE_FONTS_DIR: /usr/share/fonts/opentype/noto
     ports:
       - "${ASR_PUBLISH_ADDRESS:?請在 .env 設定 ASR_PUBLISH_ADDRESS}:${ASR_PUBLISH_PORT:?請在 .env 設定 ASR_PUBLISH_PORT}:${ASR_PORT:?請在 .env 設定 ASR_PORT}"
     volumes:

@@ -100,6 +100,7 @@ class TorchEngine:
         spec: ModelSpec,
         audio: np.ndarray,
         audio_seconds: float,
+        hotwords: str,
         on_progress: Callable[[float], None],
     ) -> tuple[list[Segment], str]:
         import torch
@@ -117,6 +118,8 @@ class TorchEngine:
         }
         if local.language is not None:
             generate_kwargs["language"] = local.language
+        if hotwords:
+            generate_kwargs["prompt_ids"] = pipe.tokenizer.get_prompt_ids(hotwords, return_tensors="pt").to(pipe.device)
         rule = local.sentence_segments
         if rule is not None:
             with torch.inference_mode():

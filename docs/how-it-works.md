@@ -4,30 +4,42 @@
 
 ```mermaid
 flowchart TD
-    browser["瀏覽器"] -->|HTTP| web["網頁行程<br/>FastAPI：上傳、ffmpeg 解碼、工作佇列、匯出、語者庫"]
+    browser["瀏覽器"] -->|HTTP| web["網頁行程<br/>FastAPI：上傳、ffmpeg 解碼、工作佇列、字幕編輯、匯出、詞彙表、語者庫、監看資料夾"]
     web -->|multiprocessing 佇列| infer["推論子行程<br/>自動調校、下載與轉換模型<br/>OpenVINO／PyTorch 推論或轉呼叫遠端服務"]
     web -->|每個要分辨說話者的工作<br/>與辨識同時執行| diar["分辨說話者子行程<br/>python -m app.diarize<br/>sherpa-onnx、CPU"]
+    web -->|要加標點的工作<br/>辨識完成後| punct["自動標點子行程<br/>python -m app.punctuate<br/>sherpa-onnx、CPU"]
+    web -->|燒錄字幕| ffmpeg["ffmpeg 子行程<br/>libass、libx264"]
+    folder["監看資料夾"] -->|新的錄音| web
+    cli["命令列工具、MCP server"] -->|HTTP| web
     infer -->|每個候選裝置一個| bench["調校實測子行程<br/>python -m app.benchmark"]
 ```
 
 圖的文字說明：
 
-- 瀏覽器透過 HTTP 連到網頁行程。網頁行程用 FastAPI 處理上傳、用 ffmpeg 解碼音訊，並負責工作佇列、匯出與語者庫。
+- 瀏覽器透過 HTTP 連到網頁行程。網頁行程用 FastAPI 處理上傳、用 ffmpeg 解碼音訊，並負責工作佇列、字幕編輯、匯出、詞彙表、語者庫與監看資料夾。
 - 網頁行程透過 multiprocessing 佇列把工作交給推論子行程；推論子行程負責自動調校、下載與轉換模型，再用 OpenVINO 或 PyTorch 推論，或轉呼叫遠端服務。
 - 要分辨說話者的工作，網頁行程另外為它啟動一個分辨說話者子行程，和辨識同時執行，只用 CPU。
 - 自動調校時，推論子行程為每個候選裝置各啟動一個調校實測子行程。
+- 要加標點的工作，辨識完成後網頁行程啟動一個自動標點子行程；燒錄字幕時啟動 ffmpeg。
+- 監看資料夾的新檔案由網頁行程自己送進同一個工作佇列；命令列工具與 MCP server 是另外的程式，透過 HTTP 呼叫執行中的服務。
 
 | 路徑 | 內容 |
 | --- | --- |
+| `app/__main__.py`、`app/logsetup.py` | 啟動服務；日誌（終端機與 `ASR_DATA_DIR/logs`，見[部署](deployment.md#日誌)） |
 | `app/main.py` | FastAPI 路由與服務組裝 |
 | `app/config.py`、`app/catalog.py` | `.env` 設定與 `models.json` 的讀取與檢查 |
-| `app/jobs.py`、`app/transcript.py` | 工作佇列、結果保存與過期清理；逐字稿資料結構 |
+| `app/jobs.py`、`app/transcript.py` | 工作佇列、結果保存與過期清理、字幕編輯與版本號；逐字稿資料結構 |
 | `app/inference.py`、`app/engine.py`、`app/preparation.py` | 推論子行程；模型的下載、轉換、載入與卸載；編譯快取的清理 |
 | `app/backend_openvino.py`、`app/backend_torch.py`、`app/backend_remote.py` | 三種推論方式 |
 | `app/tune.py`、`app/benchmark.py`、`app/hardware.py` | 自動調校、單一裝置實測、硬體設定檔 |
 | `app/segmentation.py` | 句子分段 |
 | `app/diarize.py`、`app/speakers.py`、`app/voices.py` | 分辨說話者、對到字幕、語者庫 |
-| `app/audio.py`、`app/exports.py` | ffmpeg 解碼、TXT／SRT／VTT／JSON 匯出 |
+| `app/audio.py`、`app/exports.py` | ffmpeg 解碼與讀取影片資訊；TXT／SRT／VTT／ASS／Markdown／DOCX／JSON 匯出 |
+| `app/hotwords.py`、`app/glossary.py` | 熱詞的 token 計數與上限；詞彙表（熱詞與取代規則） |
+| `app/punctuate.py`、`app/punctuation.py` | 自動標點子行程與把標點放回原文的對齊；標點模型的下載與呼叫 |
+| `app/renders.py` | 燒錄字幕的佇列與 ffmpeg 呼叫 |
+| `app/watch.py` | 監看資料夾 |
+| `app/client.py`、`app/cli.py`、`app/mcp_server.py` | 呼叫服務的 HTTP 客戶端；命令列工具；MCP server |
 | `static/` | 前端（純 HTML／CSS／JavaScript，不需建置） |
 
 - OpenVINO 把模型編譯到內顯時會鎖住 Python GIL（首次約 30 秒到 1 分半，依內顯而定；之後讀編譯快取只要十幾秒）；推論放在子行程，網頁在這段期間仍能即時回應。
@@ -102,11 +114,11 @@ Breeze ASR 26 幾乎不輸出段內時間戳，Whisper 的長音訊解碼只能�
 
 ## 分辨說話者
 
-在工具列的「說話者」選「自動」或指定人數，結果會標出每段是誰說的，下載的 TXT／SRT 也帶名字（VTT 用 `<v 名字>` 標記，JSON 多 `speaker`、`speaker_name` 與 `speakers` 欄位）。
+在工具列的「說話者」選「自動」或指定人數，結果會標出每段是誰說的，下載的 TXT、SRT、ASS、Markdown、DOCX 也帶名字（VTT 用 `<v 名字>` 標記，JSON 多 `speaker`、`speaker_name` 與 `speakers` 欄位）。分錯時可以在「說話者」面板把一位併入另一位，或在「字幕」面板把某一段改給別人或新的說話者。
 
 1. **分段**：用 [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) 跑 [pyannote segmentation 3.0](https://huggingface.co/pyannote/segmentation-3.0) 找出每一小段時間有誰在說話，再用 [3D-Speaker](https://github.com/modelscope/3D-Speaker) 的 ERes2Net 聲紋模型分群。
 2. **對到字幕**：每個字幕段落歸給說話時間重疊最多的人，完全沒重疊的短句歸給時間上最近的人；說話者依第一次開口的順序編號為「說話者 1、2…」。同一段裡換人說話時，標的是說得比較多的那位。
-3. **認人**：在右側「說話者」面板替說話者取名後按「記住聲音」，聲紋就存進語者庫；之後與語者庫裡某人的相似度達到 `match_threshold` 就自動填上名字，一個人只會對到一位說話者。同一個名字可以記好幾次，在不同場合（麥克風、距離）各記一次會更準。
+3. **認人**：在右側「說話者」面板替說話者取名後按「記住聲音」，聲紋就存進語者庫（手動新增的說話者沒有聲紋，不會出現這個按鈕）；之後與語者庫裡某人的相似度達到 `match_threshold` 就自動填上名字，一個人只會對到一位說話者。同一個名字可以記好幾次，在不同場合（麥克風、距離）各記一次會更準。
 
 分辨說話者在獨立的子行程執行，和辨識同時進行、只用 CPU；失敗時（例如模型下載不到）不影響字幕，「說話者」面板會說明原因。
 
@@ -130,3 +142,50 @@ Breeze ASR 26 幾乎不輸出段內時間戳，Whisper 的長音訊解碼只能�
 - 每個聲紋模型各自一個檔案（檔名含模型與版本）。換了聲紋模型，語者庫會是空的；舊檔案保留，換回原模型就能再用。
 - 辨識結果另外保存各說話者的聲紋（給「記住聲音」用，不會回傳給瀏覽器），和結果一起在 `ASR_JOB_TTL_SECONDS` 到期時刪除。
 - 舊版格式（聲紋只存一個平均向量）記住的人仍會列在語者庫，但標示為需要重新記住、不會用來自動認人；在新的辨識結果裡替他再按一次「記住聲音」就會換成新格式。
+
+## 熱詞
+
+Breeze ASR 是 Whisper 架構，可以把一段文字當成「前一段的逐字稿」放在 `<|startofprev|>` 後面，引導模型用指定的寫法。網頁勾選「熱詞」時會帶上「詞彙」裡的熱詞：
+
+- OpenVINO 用 `WhisperPipeline` 的 `hotwords`，每個 30 秒視窗都帶；不用只影響第一個視窗的 `initial_prompt`。
+- PyTorch 用 transformers 的 `prompt_ids`，不開 `condition_on_prev_tokens`，同樣每段都帶。
+- 熱詞最多佔模型解碼長度的一半減一（Breeze ASR 是 223 個 token）。實測約 390 個 token 時一個視窗可輸出的字數不夠，結果會被截掉，所以送出時就擋下；約 220 個 token 在內顯上慢約 18%，100 個 token 左右幾乎不影響速度。
+- 轉呼叫外部服務的模型不支援。
+
+寫成句子（「與會者有王小明、陳美玲，會中提到 Kubernetes。」）比單純列出詞彙有效；只能修正清單裡的詞，同音的常見字人名（例如「昀澔」被寫成「雲浩」）多半修不回來，這種用取代規則處理。實測數字見[效能實測](benchmarks.md#熱詞)。
+
+## 詞彙表與取代規則
+
+詞彙表存在 `ASR_DATA_DIR/glossary.json`，網頁、命令列工具與監看資料夾共用。取代規則在每個新結果完成時依序套用（在加標點之前，讓標點模型看到正確的詞）；已有的結果在「尋找取代」按「套用詞彙表」，可以復原。
+
+## 自動標點
+
+Breeze ASR 的輸出沒有標點。勾選「標點」時，辨識完成後用 [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) 跑 FunASR 的 CT-Transformer 中英標點模型：
+
+1. 把所有字幕段落以空白連起來交給模型，讓它看到上下文。
+2. 模型會順便刪掉中英文之間的空白，所以不直接用它的輸出，而是逐字對齊原文，只把它加的標點放回去；落在段落交界的標點歸前一段，原文已有的半形標點換成模型選的全形標點。
+3. 對不起來（模型改了字）時保留原本沒有標點的文字，資訊面板顯示「標點：失敗」，滑鼠移到上面可以看原因。
+
+1 萬字約 2 秒，在 CPU 上執行；標點模型約 280 MB，第一次啟動時下載。
+
+## 編輯與復原
+
+網頁的修改都送到伺服器保存，下載的檔案與重新整理後看到的都是修改後的版本：
+
+- 文字直接在字幕列表上改；時間、說話者、分割、合併、刪除在右側「字幕」面板，對應原始檔後可以用「設為播放位置」對時，分割時以文字游標（或播放位置）為分界，Ctrl+Enter 也能分割。
+- 「說話者」面板可以把一位說話者併入另一位；字幕面板可以把某段改給新的說話者。
+- 除了在「說話者」面板改名字（`PATCH …/speakers/{speaker_id}`），其他修改都會把整份字幕連同版本號送出（`PUT /api/jobs/{id}/transcript`），版本號不符就拒絕，避免兩個分頁互相覆蓋。復原、重做（Ctrl+Z、Ctrl+Y）是在瀏覽器記住修改前的整份字幕再送一次，最多 100 步，換工作或重新整理後就清空。
+
+## 找回結果與原始檔
+
+完成的結果保存在 `ASR_DATA_DIR/results`，網頁右側的「工作」列出所有保留中的工作，重新整理後會自動打開上次看的那一份。上傳的音訊辨識完就刪除，所以從清單打開的舊結果只有文字；要播放、看波形、對時或燒錄字幕時，按「對應原始檔…」再選一次原始檔（長度要相差 2 秒以內）。同一個分頁送出的檔案會記在瀏覽器裡，切換工作時自動對應。
+
+影片檔會在右側顯示預覽，播放時把目前的字幕疊在畫面上。
+
+## 燒錄字幕
+
+「匯出」的「燒錄字幕…」把目前已儲存的字幕燒進原始影片，用內建 ffmpeg 的 libass 依 ASS 匯出的樣式（`ASR_SUBTITLE_FONT`）畫字幕，影像重新編碼成 H.264、聲音轉成 AAC，輸出 MP4。燒好的影片放在 `ASR_DATA_DIR/renders`，保留 `ASR_JOB_TTL_SECONDS`，服務重新啟動時清掉；上傳的原始影片在燒完後立即刪除。
+
+## 監看資料夾
+
+見[部署](deployment.md#監看資料夾)。監看資料夾送出的工作和網頁送出的一樣排隊，完成時把 `ASR_WATCH_FORMATS` 的格式寫在原檔旁邊。

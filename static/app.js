@@ -14,16 +14,34 @@ const STAGE_LABELS = {
   preparing: "準備模型",
   loading: "載入模型",
   transcribing: "辨識中",
+  punctuating: "加標點",
   diarizing: "分辨說話者",
 };
 
+const STATUS_LABELS = { queued: "排隊中", running: "處理中", succeeded: "完成", failed: "失敗", cancelled: "已取消" };
+const RENDER_LABELS = { queued: "排隊中", running: "燒錄中", cancelling: "取消中", succeeded: "完成", failed: "失敗", cancelled: "已取消" };
 const CANDIDATE_STATUS = { ok: "可用", rejected: "錯誤率太高", failed: "無法執行" };
+const EXPORT_FORMATS = ["srt", "vtt", "ass", "txt", "md", "docx", "json"];
 
-const STORAGE_KEYS = { model: "breeze-asr:model", view: "breeze-asr:view", speakers: "breeze-asr:speakers" };
+const STORAGE_KEYS = {
+  model: "breeze-asr:model",
+  view: "breeze-asr:view",
+  speakers: "breeze-asr:speakers",
+  punctuation: "breeze-asr:punctuation",
+  hotwords: "breeze-asr:hotwords",
+  job: "breeze-asr:job",
+};
+const NEW_SPEAKER = "__new__";
+const LEADING_MARKS = /[\s，。？！、；：,.?!;:]/;
 const SPEAKER_COLORS = 8;
 const CONFIRM_MS = 5000;
 const CONFIG_REFRESH_MS = 4000;
 const JOB_POLL_MS = 1000;
+const RENDER_POLL_MS = 1000;
+const HOTWORDS_COUNT_DELAY_MS = 400;
+const HISTORY_LIMIT = 100;
+const DURATION_TOLERANCE_SECONDS = 2;
+const SPLIT_MARGIN_SECONDS = 0.05;
 const WAVEFORM_MAX_SECONDS = 1800;
 const WAVEFORM_MAX_BYTES = 512 * 1024 * 1024;
 const WAVEFORM_SAMPLE_RATE = 8000;
@@ -36,13 +54,27 @@ const RULER_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600];
 const state = {
   config: null,
   audio: null,
+  batch: null,
   previewUrl: null,
   job: null,
   result: null,
+  revision: 0,
   pollTimer: null,
   segments: [],
   speakers: [],
   activeIndex: -1,
+  selected: -1,
+  caret: null,
+  history: { past: [], future: [] },
+  saving: false,
+  pendingSave: null,
+  find: { matches: [], current: -1 },
+  blobs: new Map(),
+  jobs: [],
+  glossary: { hotwords: "", replacements: [] },
+  burnFile: null,
+  render: null,
+  renderTimer: null,
   recording: null,
   uploading: false,
   peaks: null,
@@ -66,6 +98,14 @@ function storageSet(key, value) {
     return true;
   } catch {
     return false;
+  }
+}
+
+function storageRemove(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    return;
   }
 }
 
@@ -96,6 +136,12 @@ function timecode(seconds) {
   return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}.${String(c).padStart(2, "0")}`;
 }
 
+function parseTimecode(text) {
+  const parts = text.trim().split(/[:：]/);
+  if (parts.length > 3 || parts.some((part) => !/^\d+(\.\d+)?$/.test(part))) return NaN;
+  return parts.reduce((total, part) => total * 60 + Number(part), 0);
+}
+
 function duration(seconds) {
   const total = Math.round(seconds);
   if (total < 60) return `${total} 秒`;
@@ -123,6 +169,10 @@ function el(tag, className, text) {
   return node;
 }
 
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 async function api(url, options = {}) {
   const init = { method: options.method ?? "GET", cache: "no-store" };
   if (options.body !== undefined) {
@@ -131,7 +181,11 @@ async function api(url, options = {}) {
   }
   const res = await fetch(url, init);
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : `HTTP ${res.status}`);
+  if (!res.ok) {
+    const error = new Error(typeof data.detail === "string" ? data.detail : `HTTP ${res.status}`);
+    error.status = res.status;
+    throw error;
+  }
   return data;
 }
 
@@ -185,11 +239,16 @@ async function refreshConfig() {
     renderModels(config);
     renderStaticInfo(config);
     renderSpeakersOption(config.speakers);
+    renderPunctuationOption(config.punctuation);
+    loadGlossary();
+    restoreLastJob();
   } else {
     updateModelStates(config);
   }
   renderHardware(config.hardware);
   renderNotice(config);
+  renderWatch(config.watch);
+  refreshJobs();
 }
 
 function selectedModelId() {
@@ -208,6 +267,7 @@ function renderModels(config) {
   select.addEventListener("change", () => {
     storageSet(STORAGE_KEYS.model, select.value);
     updateModelStatus();
+    updateHotwordsOption();
   });
   updateModelStates(config);
 }
@@ -240,7 +300,7 @@ function updateModelStatus() {
 
 function renderStaticInfo(config) {
   $("open-btn").title =
-    `mp3、wav、m4a、flac、ogg、webm、mp4\n上限 ${uploadLimit(config.max_upload_mb)}、${duration(config.max_audio_seconds)}`;
+    `mp3、wav、m4a、flac、ogg、webm、mp4，可一次選多個檔案\n上限 ${uploadLimit(config.max_upload_mb)}、${duration(config.max_audio_seconds)}`;
 }
 
 function renderSpeakersOption(info) {
@@ -255,13 +315,44 @@ function renderSpeakersOption(info) {
   loadVoices();
 }
 
+function renderPunctuationOption(info) {
+  $("punct-group").hidden = !info;
+  if (!info) return;
+  const check = $("punct-check");
+  check.checked = storageGet(STORAGE_KEYS.punctuation) === "on";
+  check.addEventListener("change", () => storageSet(STORAGE_KEYS.punctuation, check.checked ? "on" : "off"));
+}
+
 function selectedSpeakers() {
   return $("speakers-group").hidden ? "off" : $("speakers-select").value;
+}
+
+function selectedPunctuation() {
+  return !$("punct-group").hidden && $("punct-check").checked ? "on" : "off";
+}
+
+function updateHotwordsOption() {
+  const check = $("hotwords-check");
+  const group = $("hotwords-group");
+  const model = modelById(selectedModelId());
+  const hotwords = state.glossary.hotwords;
+  let reason = "";
+  if (!hotwords) reason = "先在「詞彙」設定熱詞";
+  else if (model && !model.hotwords) reason = `${model.name} 轉呼叫外部服務，不支援熱詞`;
+  check.disabled = !!reason;
+  check.checked = !reason && storageGet(STORAGE_KEYS.hotwords) !== "off";
+  group.classList.toggle("is-disabled", !!reason);
+  group.title = reason || `辨識時參考：${hotwords}`;
+}
+
+function selectedHotwords() {
+  return $("hotwords-check").checked && !$("hotwords-check").disabled ? state.glossary.hotwords : "";
 }
 
 function renderNotice(config) {
   const hardware = config.hardware;
   const speakers = config.speakers;
+  const punctuation = config.punctuation;
   let text = "";
   let tone = "";
   let title = "";
@@ -280,12 +371,29 @@ function renderNotice(config) {
   } else if (speakers?.state === "failed") {
     text = `說話者模型：${speakers.error}`;
     tone = "error";
+  } else if (punctuation?.state === "downloading") {
+    text = "下載標點模型";
+    tone = "busy";
+  } else if (punctuation?.state === "failed") {
+    text = `標點模型：${punctuation.error}`;
+    tone = "error";
+  } else if (config.watch?.error) {
+    text = `監看資料夾：${config.watch.error}`;
+    tone = "error";
   }
   const node = $("notice");
   node.textContent = text;
   node.title = title;
   node.dataset.tone = tone;
   node.hidden = !text;
+}
+
+function renderWatch(watch) {
+  const node = $("watch-summary");
+  node.textContent = watch ? `監看中${watch.active ? `（${watch.active} 個處理中）` : ""}` : "";
+  node.title = watch
+    ? `${watch.directory}\n格式：${watch.formats.join("、")}\n說話者：${watch.speakers}，標點：${watch.punctuation ? "開" : "關"}`
+    : "";
 }
 
 function hardwareLabel(hardware) {
@@ -324,9 +432,11 @@ function renderHardware(hardware) {
 
 function renderProps(list, pairs) {
   list.replaceChildren(
-    ...pairs.map(([term, value]) => {
+    ...pairs.map(([term, value, title]) => {
       const row = el("div", "");
-      row.append(el("dt", "", term), el("dd", "", value));
+      const dd = el("dd", "", value);
+      if (title) dd.title = title;
+      row.append(el("dt", "", term), dd);
       return row;
     }),
   );
@@ -455,8 +565,84 @@ function bindDialogs() {
   }
 }
 
+async function refreshJobs() {
+  try {
+    const data = await api("/api/jobs");
+    state.jobs = data.jobs;
+  } catch {
+    return;
+  }
+  renderJobs();
+}
+
+function jobStatusText(job) {
+  if (job.status === "running") return STAGE_LABELS[job.stage] || "處理中";
+  if (job.status === "succeeded") return `${job.segments} 段`;
+  return STATUS_LABELS[job.status] ?? job.status;
+}
+
+function jobItem(job) {
+  const item = el("li", "");
+  const button = el("button", "job-item");
+  button.type = "button";
+  if (state.job?.id === job.id) button.setAttribute("aria-current", "true");
+  const when = new Date(job.created_at * 1000).toLocaleString("zh-TW", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const status = el("span", "job-status", jobStatusText(job));
+  if (job.status === "failed") status.dataset.tone = "error";
+  else if (job.status === "queued" || job.status === "running") status.dataset.tone = "busy";
+  button.append(el("span", "job-name", job.filename), el("span", "job-meta", `${clock(job.audio_seconds)}　${when}`), status);
+  button.title = job.filename;
+  button.addEventListener("click", () => openJob(job.id));
+  item.append(button);
+  return item;
+}
+
+function renderJobs() {
+  const list = $("job-list");
+  $("jobs-empty").hidden = state.jobs.length > 0;
+  const key = JSON.stringify([state.jobs, state.job?.id ?? null]);
+  if (list.dataset.key === key) return;
+  list.dataset.key = key;
+  list.replaceChildren(...state.jobs.map(jobItem));
+}
+
+async function openJob(id, quiet = false) {
+  if (state.job?.id === id) return;
+  if (state.uploading) return setStatus("上傳中，請等上傳完成再切換工作", "", "error");
+  if (state.recording) return setStatus("請先停止錄音", "", "error");
+  let job;
+  try {
+    job = await api(`/api/jobs/${encodeURIComponent(id)}`);
+  } catch (err) {
+    if (err.status === 404) storageRemove(STORAGE_KEYS.job);
+    if (!quiet) setStatus(err.message, "", "error");
+    return;
+  }
+  const known = state.blobs.get(id);
+  if (known) {
+    if (state.audio?.blob !== known.blob) setAudio(known.blob, known.name);
+  } else {
+    clearAudio();
+  }
+  startJob(job, known?.blob ?? null, true);
+}
+
+function restoreLastJob() {
+  const id = storageGet(STORAGE_KEYS.job);
+  if (id && !state.job) openJob(id, true);
+}
+
 function audioEl() {
-  return $("audio-preview");
+  return $("media");
+}
+
+function hasVideo() {
+  return audioEl().videoWidth > 0;
 }
 
 function timelineDuration() {
@@ -479,6 +665,7 @@ function setAudio(blob, name) {
   }
   if (state.uploading) return setStatus("上傳中，請等上傳完成再換音訊", "", "error");
   if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
+  state.batch = null;
   state.audio = { blob, name };
   state.previewUrl = URL.createObjectURL(blob);
   audioEl().src = state.previewUrl;
@@ -491,11 +678,36 @@ function setAudio(blob, name) {
   loadPeaks(blob);
   refreshTimeline();
   updateSubmit();
+  updateRelink();
+}
+
+function setFiles(files) {
+  if (!files.length) return;
+  if (files.length === 1) {
+    setAudio(files[0], files[0].name);
+    return;
+  }
+  const limit = state.config ? state.config.max_upload_mb * 1024 * 1024 : null;
+  const large = files.find((file) => limit !== null && file.size > limit);
+  if (large) {
+    setStatus(`${large.name} 超過上限 ${uploadLimit(state.config.max_upload_mb)}`, "", "error");
+    return;
+  }
+  if (state.uploading) return setStatus("上傳中，請等上傳完成再換檔案", "", "error");
+  clearAudio();
+  state.batch = files;
+  $("selected-name").textContent = `${files.length} 個檔案`;
+  $("selected-name").title = files.map((file) => file.name).join("\n");
+  $("selected-size").textContent = bytes(files.reduce((total, file) => total + file.size, 0));
+  $("clear-audio").hidden = false;
+  setStatus(`已選擇 ${files.length} 個檔案`, "按「辨識」全部送出排隊");
+  updateSubmit();
 }
 
 function updateSubmit() {
-  const busy = !!state.job && !state.job.done && state.job.blob === state.audio?.blob;
+  const busy = !!state.job && !state.job.done && !!state.audio && state.job.blob === state.audio.blob;
   $("submit-btn").disabled = !!state.recording || state.uploading || busy;
+  $("submit-btn").textContent = state.batch ? `辨識 ${state.batch.length} 個` : "辨識";
 }
 
 function clearAudio() {
@@ -506,24 +718,62 @@ function clearAudio() {
   audio.load();
   if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
   state.audio = null;
+  state.batch = null;
   state.previewUrl = null;
   state.peaks = null;
   state.waveToken += 1;
   updateSubmit();
   $("file-input").value = "";
   $("selected-name").textContent = "未載入音訊";
+  $("selected-name").removeAttribute("title");
   $("selected-size").textContent = "";
   $("clear-audio").hidden = true;
   $("wave-note").textContent = "";
+  $("preview-panel").hidden = true;
   setActive(-1);
   refreshTimeline();
+  updateRelink();
+}
+
+function updateRelink() {
+  const unlinked = !!state.result && !previewHoldsJobAudio();
+  $("relink-btn").hidden = !unlinked;
+  if (unlinked && !state.audio) $("selected-name").textContent = "這份字幕沒有對應的音訊";
+  renderCuePanel();
+}
+
+async function linkSource(file) {
+  const job = state.job;
+  if (!job) return;
+  setAudio(file, file.name);
+  const ok = await waitForMetadata(audioEl());
+  if (state.job !== job || state.audio?.blob !== file) return;
+  if (!ok) {
+    setStatus("瀏覽器無法播放這個檔案", "", "error");
+    return;
+  }
+  const length = audioEl().duration;
+  if (Number.isFinite(length) && job.audioSeconds && Math.abs(length - job.audioSeconds) > DURATION_TOLERANCE_SECONDS) {
+    setStatus(`長度 ${clock(length)} 和這份字幕的 ${clock(job.audioSeconds)} 不符`, "請選擇原始檔", "error");
+    return;
+  }
+  job.blob = file;
+  state.blobs.set(job.id, { blob: file, name: file.name });
+  setStatus("已對應原始檔", file.name);
+  announce("已對應原始檔");
+  refreshTimeline();
+  syncPlayback(false);
+  updateRelink();
+  updateSubmit();
 }
 
 function bindUpload() {
   const input = $("file-input");
-  input.addEventListener("change", () => {
-    const file = input.files?.[0];
-    if (file) setAudio(file, file.name);
+  input.addEventListener("change", () => setFiles([...(input.files ?? [])]));
+  $("relink-input").addEventListener("change", (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (file) linkSource(file);
   });
   const carriesFiles = (event) => [...(event.dataTransfer?.types ?? [])].includes("Files");
   let depth = 0;
@@ -550,8 +800,7 @@ function bindUpload() {
     event.preventDefault();
     reset();
     if (state.recording) return setStatus("請先停止錄音", "", "error");
-    const file = event.dataTransfer.files[0];
-    if (file) setAudio(file, file.name);
+    setFiles([...event.dataTransfer.files]);
   });
   $("clear-audio").addEventListener("click", clearAudio);
 }
@@ -709,6 +958,7 @@ function renderLanes() {
       block.style.left = `${(segment.start / total) * 100}%`;
       block.style.width = `${(Math.max(segment.end - segment.start, 0) / total) * 100}%`;
       if (index === state.activeIndex) block.classList.add("is-active");
+      if (index === state.selected) block.classList.add("is-selected");
       body.append(block);
     });
     lane.append(el("span", "track-head lane-name", group.name), body);
@@ -758,6 +1008,12 @@ function segmentIndexAt(t) {
   return state.segments.findIndex((s) => t >= s.start && t < s.end);
 }
 
+function updateVideoCue() {
+  const segment = previewHoldsJobAudio() ? state.segments[state.activeIndex] : null;
+  const name = segment?.speaker ? speakerName(segment.speaker) : null;
+  $("video-cue").textContent = segment ? `${name ? `${name}：` : ""}${segment.text}` : "";
+}
+
 function setActive(index, follow) {
   if (index === state.activeIndex) return;
   for (const node of document.querySelectorAll(".is-active[data-index]")) {
@@ -765,6 +1021,7 @@ function setActive(index, follow) {
     node.removeAttribute("aria-current");
   }
   state.activeIndex = index;
+  updateVideoCue();
   if (index < 0) return;
   const row = $("segments").querySelector(`tr[data-index="${index}"]`);
   row?.classList.add("is-active");
@@ -808,11 +1065,18 @@ function bindPlayback() {
     syncPlayback(false);
   });
   audio.addEventListener("seeked", () => syncPlayback(false));
-  audio.addEventListener("loadedmetadata", refreshTimeline);
+  audio.addEventListener("loadedmetadata", () => {
+    $("preview-panel").hidden = !hasVideo();
+    refreshTimeline();
+    renderCuePanel();
+  });
   audio.addEventListener("error", () => {
     if (state.audio) setStatus("瀏覽器無法播放這個格式", "仍可送出辨識", "error");
   });
-  audio.addEventListener("emptied", updateTransport);
+  audio.addEventListener("emptied", () => {
+    $("preview-panel").hidden = true;
+    updateTransport();
+  });
   $("player-toggle").addEventListener("click", togglePlay);
 
   const tracks = $("tracks");
@@ -977,14 +1241,13 @@ function stopRecording() {
   $("file-input").disabled = false;
 }
 
-function uploadJob(model, speakers, audio, onProgress) {
+function upload(url, fields, file, name, onProgress) {
   return new Promise((resolve, reject) => {
     const body = new FormData();
-    body.append("model", model);
-    body.append("speakers", speakers);
-    body.append("file", audio.blob, audio.name);
+    for (const [key, value] of Object.entries(fields)) body.append(key, value);
+    body.append("file", file, name);
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/jobs");
+    xhr.open("POST", url);
     xhr.responseType = "json";
     xhr.upload.addEventListener("progress", (event) => {
       if (event.lengthComputable) onProgress(event.loaded / event.total);
@@ -992,7 +1255,7 @@ function uploadJob(model, speakers, audio, onProgress) {
     xhr.addEventListener("load", () => {
       const data = xhr.response || {};
       if (xhr.status >= 200 && xhr.status < 300) resolve(data);
-      else reject(new Error(data.detail || `上傳失敗（HTTP ${xhr.status}）`));
+      else reject(new Error(typeof data.detail === "string" ? data.detail : `上傳失敗（HTTP ${xhr.status}）`));
     });
     xhr.addEventListener("error", () => reject(new Error("網路連線中斷")));
     xhr.send(body);
@@ -1006,36 +1269,58 @@ function bindForm() {
     const model = selectedModelId();
     if (!model) return setStatus("沒有可用的模型", "", "error");
     if (state.recording) return setStatus("請先停止錄音", "", "error");
-    if (!state.audio) return setStatus("請先開啟音訊", "", "error");
+    const items = state.batch ? state.batch.map((file) => ({ blob: file, name: file.name })) : state.audio ? [state.audio] : [];
+    if (!items.length) return setStatus("請先開啟音訊", "", "error");
 
-    const audio = state.audio;
+    const fields = {
+      model,
+      speakers: selectedSpeakers(),
+      punctuation: selectedPunctuation(),
+      hotwords: selectedHotwords(),
+    };
+    const batch = items.length > 1;
     state.uploading = true;
     updateSubmit();
-    setStatus("上傳中", "");
     setEta(0);
+    let first = null;
+    let failure = null;
     try {
-      const job = await uploadJob(model, selectedSpeakers(), audio, (ratio) => {
-        if (ratio < 1) {
-          setStatus("上傳中", `${Math.round(ratio * 100)}%`);
-          setEta(ratio);
-        } else {
-          setStatus("解析音訊", "");
-          setEta(null);
-        }
-      });
-      startJob(job, audio.blob);
-      applyServerPeaks(job, audio.blob);
+      for (const [i, item] of items.entries()) {
+        const label = batch ? `上傳 ${i + 1}／${items.length}：${item.name}` : "上傳中";
+        setStatus(label, "");
+        const job = await upload("/api/jobs", fields, item.blob, item.name, (ratio) => {
+          if (ratio < 1) {
+            setStatus(label, `${Math.round(ratio * 100)}%`);
+            setEta(ratio);
+          } else {
+            setStatus("解析音訊", batch ? item.name : "");
+            setEta(null);
+          }
+        });
+        state.blobs.set(job.id, item);
+        if (!first) first = { job, item };
+      }
     } catch (err) {
-      setStatus(err.message, "", "error");
+      failure = err.message;
+      setStatus(failure, "", "error");
       setEta(null);
     } finally {
       state.uploading = false;
       updateSubmit();
     }
+    if (!first) return;
+    if (batch) {
+      setAudio(first.item.blob, first.item.name);
+      if (!failure) announce(`已送出 ${items.length} 個檔案`);
+    }
+    startJob(first.job, first.item.blob, false);
+    applyServerPeaks(first.job, first.item.blob);
+    refreshJobs();
+    if (failure) setStatus(failure, "前面的檔案已送出，可在「工作」查看", "error");
   });
 }
 
-function startJob(job, blob) {
+function startJob(job, blob, opened) {
   clearTimeout(state.pollTimer);
   state.job = {
     id: job.id,
@@ -1043,13 +1328,16 @@ function startJob(job, blob) {
     modelName: modelById(job.model)?.name || job.model,
     filename: job.filename,
     audioSeconds: job.audio_seconds,
+    status: job.status,
     done: false,
   };
+  storageSet(STORAGE_KEYS.job, job.id);
   clearResult();
-  setGridEmpty("辨識中…");
-  renderJob(job);
-  announce("已送出");
-  state.pollTimer = setTimeout(pollJob, JOB_POLL_MS);
+  setGridEmpty(job.status === "queued" || job.status === "running" ? "辨識中…" : "");
+  renderJob(job, opened);
+  renderJobs();
+  if (!opened) announce("已送出");
+  if (job.status === "queued" || job.status === "running") state.pollTimer = setTimeout(pollJob, JOB_POLL_MS);
 }
 
 async function pollJob() {
@@ -1077,9 +1365,11 @@ async function pollJob() {
     state.pollTimer = setTimeout(pollJob, JOB_POLL_MS * 3);
     return;
   }
-  renderJob(job);
+  renderJob(job, false);
   if (job.status === "queued" || job.status === "running") {
     state.pollTimer = setTimeout(pollJob, JOB_POLL_MS);
+  } else {
+    refreshJobs();
   }
 }
 
@@ -1095,12 +1385,16 @@ function renderMeta(job) {
     meta.push(["段數", String(job.result.segments.length)]);
     if (job.result.speakers?.length) meta.push(["說話者", String(job.result.speakers.length)]);
   }
+  const punctuationError = job.result?.punctuation_error;
+  meta.push(["標點", job.punctuation ? (punctuationError ? "失敗" : "開") : "關", punctuationError ?? ""]);
+  meta.push(["熱詞", job.hotwords ? `${job.hotwords.length} 字` : "無", job.hotwords]);
   renderProps($("result-meta"), meta);
   $("meta-empty").hidden = true;
 }
 
-function renderJob(job) {
+function renderJob(job, opened) {
   state.job.audioSeconds = job.audio_seconds;
+  state.job.status = job.status;
   renderMeta(job);
   $("cancel-btn").hidden = job.status !== "queued" && job.status !== "running";
   setEta(null);
@@ -1143,9 +1437,9 @@ function renderJob(job) {
     case "succeeded":
       state.job.done = true;
       updateSubmit();
-      setStatus("完成", `${job.result.segments.length} 段`);
+      setStatus(opened ? "已開啟" : "完成", `${job.filename}，${job.result.segments.length} 段`);
       renderTranscript(job);
-      announce(`辨識完成，共 ${job.result.segments.length} 段`);
+      announce(opened ? `已開啟 ${job.filename}` : `辨識完成，共 ${job.result.segments.length} 段`);
       break;
     case "failed":
       showJobError(job.error || "辨識失敗");
@@ -1172,6 +1466,7 @@ function bindCancel() {
     try {
       await api(`/api/jobs/${encodeURIComponent(state.job.id)}`, { method: "DELETE" });
       showJobError("已取消");
+      refreshJobs();
     } catch (err) {
       $("status-detail").textContent = err.message;
       announce(err.message);
@@ -1182,27 +1477,39 @@ function bindCancel() {
 function setGridEmpty(message) {
   const node = $("grid-empty");
   node.textContent = message;
-  node.hidden = false;
+  node.hidden = !message;
 }
 
 function clearResult() {
   state.result = null;
+  state.revision = 0;
   state.segments = [];
   state.speakers = [];
   state.activeIndex = -1;
+  state.selected = -1;
+  state.caret = null;
+  state.history = { past: [], future: [] };
+  state.find = { matches: [], current: -1 };
   $("segments").replaceChildren();
   $("fulltext").textContent = "";
   $("segment-count").textContent = "";
   $("copy-btn").disabled = true;
+  $("find-btn").disabled = true;
+  closeFind();
   $("speaker-list").replaceChildren();
+  $("speaker-list").dataset.key = "";
   $("speakers-empty").hidden = false;
   $("speakers-error").hidden = true;
-  for (const fmt of ["txt", "srt", "vtt", "json"]) {
+  for (const fmt of EXPORT_FORMATS) {
     const link = $(`dl-${fmt}`);
     link.removeAttribute("href");
     link.setAttribute("aria-disabled", "true");
   }
+  $("burn-btn").disabled = true;
+  updateHistoryButtons();
+  updateVideoCue();
   renderLanes();
+  updateRelink();
 }
 
 function fullText(result) {
@@ -1218,79 +1525,130 @@ function fullText(result) {
   return blocks.map((lines) => lines.join("\n")).join("\n\n");
 }
 
-function playSegment(index) {
-  if (!previewHoldsJobAudio()) {
-    setStatus("目前的音訊不是這份字幕的來源", "", "error");
-    return;
+function editable() {
+  return !!state.result && !!state.job?.done && state.job.status === "succeeded";
+}
+
+function segmentRow(index) {
+  const row = el("tr", "");
+  row.dataset.index = String(index);
+  const start = el("button", "cue-time");
+  start.type = "button";
+  const startCell = el("td", "c-time");
+  startCell.append(start);
+  const textCell = el("td", "cue-text");
+  textCell.append(cueEditor(index));
+  row.append(el("td", "c-num", String(index + 1)), startCell, el("td", "c-time cue-end"), el("td", "c-spk"), textCell);
+  row.addEventListener("click", (event) => {
+    selectSegment(index);
+    if (!event.target.closest(".cue-edit") && previewHoldsJobAudio()) playSegment(index);
+  });
+  row.addEventListener("focusin", () => selectSegment(index));
+  return row;
+}
+
+function fillRow(row, segment) {
+  const start = row.querySelector(".cue-time");
+  start.textContent = timecode(segment.start);
+  start.setAttribute("aria-label", `第 ${Number(row.dataset.index) + 1} 段，從 ${clock(segment.start)} 開始`);
+  row.querySelector(".cue-end").textContent = timecode(segment.end);
+  const speakerCell = row.querySelector(".c-spk");
+  if (segment.speaker) {
+    row.dataset.speakerColor = speakerColor(segment.speaker);
+    const tag = speakerCell.firstElementChild ?? speakerCell.appendChild(el("span", "cue-speaker"));
+    tag.textContent = speakerName(segment.speaker);
+    tag.dataset.speakerTag = segment.speaker;
+  } else {
+    delete row.dataset.speakerColor;
+    speakerCell.replaceChildren();
   }
-  seek(state.segments[index].start);
-  audioEl().play().catch(() => {});
+  const editor = row.querySelector(".cue-edit");
+  if (document.activeElement !== editor && editor.textContent !== segment.text) editor.textContent = segment.text;
+}
+
+function renderRows() {
+  const rows = $("segments");
+  const existing = rows.children;
+  let refocus = null;
+  if (existing.length !== state.segments.length) {
+    const focused = document.activeElement;
+    const focusRow = focused?.closest?.("tr[data-index]")?.dataset.index;
+    const focusClass = focused?.classList?.contains("cue-edit") ? ".cue-edit" : focused?.classList?.contains("cue-time") ? ".cue-time" : null;
+    rows.replaceChildren(...state.segments.map((_, index) => segmentRow(index)));
+    if (focusRow !== undefined && focusClass) refocus = `tr[data-index="${focusRow}"] ${focusClass}`;
+  }
+  state.segments.forEach((segment, index) => fillRow(existing[index], segment));
+  if (refocus) rows.querySelector(refocus)?.focus();
+  for (const row of rows.querySelectorAll(".is-active, .is-selected")) row.classList.remove("is-active", "is-selected");
+  rows.querySelector(`tr[data-index="${state.activeIndex}"]`)?.classList.add("is-active");
+  rows.querySelector(`tr[data-index="${state.selected}"]`)?.classList.add("is-selected");
 }
 
 function renderTranscript(job) {
   const { result } = job;
   state.result = result;
+  state.revision = result.revision;
   state.segments = result.segments;
   state.speakers = result.speakers ?? [];
+  if (state.selected >= state.segments.length) state.selected = state.segments.length - 1;
+  if (state.activeIndex >= state.segments.length) state.activeIndex = -1;
   renderSpeakers(result);
-  const rows = $("segments");
-  rows.replaceChildren();
-  for (const [index, segment] of result.segments.entries()) {
-    const row = el("tr", "");
-    row.dataset.index = String(index);
-    const start = el("button", "cue-time", timecode(segment.start));
-    start.type = "button";
-    start.setAttribute("aria-label", `從 ${clock(segment.start)} 播放`);
-    const speakerCell = el("td", "c-spk");
-    if (segment.speaker) {
-      row.dataset.speakerColor = speakerColor(segment.speaker);
-      const tag = el("span", "cue-speaker", speakerName(segment.speaker));
-      tag.dataset.speakerTag = segment.speaker;
-      speakerCell.append(tag);
-    }
-    const startCell = el("td", "c-time");
-    startCell.append(start);
-    const textCell = el("td", "cue-text");
-    textCell.append(cueEditor(index, segment.text));
-    row.append(
-      el("td", "c-num", String(index + 1)),
-      startCell,
-      el("td", "c-time cue-end", timecode(segment.end)),
-      speakerCell,
-      textCell,
-    );
-    row.addEventListener("click", (event) => {
-      if (!event.target.closest(".cue-edit")) playSegment(index);
-    });
-    rows.append(row);
-  }
+  renderRows();
   $("sub-grid").classList.toggle("no-speakers", !state.speakers.length);
   const text = fullText(result);
   $("fulltext").textContent = text || "（沒有辨識到語音）";
   $("segment-count").textContent = `${result.segments.length} 段`;
   $("copy-btn").disabled = !text;
+  $("find-btn").disabled = !result.segments.length;
   if (result.segments.length) $("grid-empty").hidden = true;
   else setGridEmpty("沒有辨識到語音");
 
-  for (const fmt of ["txt", "srt", "vtt", "json"]) {
+  for (const fmt of EXPORT_FORMATS) {
     const link = $(`dl-${fmt}`);
     link.href = `/api/jobs/${encodeURIComponent(job.id)}/export/${fmt}`;
     link.removeAttribute("aria-disabled");
   }
+  $("burn-btn").disabled = !result.segments.length;
+  renderMeta(job);
   applyView(storageGet(STORAGE_KEYS.view) === "full" ? "full" : "segments");
+  if (!$("find-bar").hidden) updateMatches();
   renderLanes();
+  updateVideoCue();
+  updateRelink();
   syncPlayback(false);
 }
 
-function cueEditor(index, text) {
-  const node = el("span", "cue-edit", text);
+function playSegment(index) {
+  seek(state.segments[index].start);
+  audioEl().play().catch(() => {});
+}
+
+function selectSegment(index, scroll) {
+  if (index === state.selected && !scroll) return;
+  state.selected = index;
+  for (const node of document.querySelectorAll(".is-selected[data-index]")) node.classList.remove("is-selected");
+  const row = $("segments").querySelector(`tr[data-index="${index}"]`);
+  row?.classList.add("is-selected");
+  $("timeline-lanes").querySelector(`.lane-block[data-index="${index}"]`)?.classList.add("is-selected");
+  if (scroll && row) row.scrollIntoView({ block: "nearest" });
+  renderCuePanel();
+}
+
+function cueEditor(index) {
+  const node = el("span", "cue-edit");
   node.contentEditable = "plaintext-only";
   node.spellcheck = false;
   node.setAttribute("role", "textbox");
   node.setAttribute("aria-label", `第 ${index + 1} 段文字`);
-  node.addEventListener("keydown", (event) => {
+  node.addEventListener("keydown", async (event) => {
     if (event.isComposing) return;
-    if (event.key === "Enter") {
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      rememberCaret();
+      node.blur();
+      await settle();
+      splitCue();
+    } else if (event.key === "Enter") {
       event.preventDefault();
       node.blur();
     } else if (event.key === "Escape") {
@@ -1302,30 +1660,316 @@ function cueEditor(index, text) {
   return node;
 }
 
-async function saveSegmentText(index, node) {
-  const saved = state.segments[index].text;
+function rememberCaret() {
+  const selection = getSelection();
+  const editor = selection?.anchorNode && (selection.anchorNode.nodeType === Node.TEXT_NODE ? selection.anchorNode.parentElement : selection.anchorNode)?.closest?.(".cue-edit");
+  if (!editor) return;
+  const index = Number(editor.closest("tr[data-index]").dataset.index);
+  const offset =
+    selection.anchorNode.nodeType === Node.TEXT_NODE
+      ? selection.anchorOffset
+      : selection.anchorOffset === 0
+        ? 0
+        : editor.textContent.length;
+  state.caret = { index, offset };
+}
+
+function settle() {
+  return state.pendingSave ?? Promise.resolve();
+}
+
+function saveSegmentText(index, node) {
+  const saved = state.segments[index]?.text;
+  if (saved === undefined || !editable()) return Promise.resolve();
   const text = node.textContent.replace(/\s+/g, " ").trim();
   if (!text || text === saved) {
     node.textContent = saved;
-    return;
+    return Promise.resolve();
+  }
+  const draft = currentDraft();
+  draft.segments[index].text = text;
+  const saving = commit(draft, `已更新第 ${index + 1} 段`)
+    .then((ok) => {
+      if (!ok && node.isConnected && document.activeElement !== node) node.textContent = saved;
+    })
+    .finally(() => {
+      if (state.pendingSave === saving) state.pendingSave = null;
+    });
+  state.pendingSave = saving;
+  return saving;
+}
+
+function currentDraft() {
+  return {
+    segments: state.segments.map((s) => ({ start: s.start, end: s.end, text: s.text, speaker: s.speaker })),
+    speakers: state.result.speakers
+      ? state.speakers.map((s) => ({ id: s.id, name: s.name, voice_id: s.voice_id, similarity: s.similarity }))
+      : null,
+  };
+}
+
+async function reloadResult() {
+  const job = await api(`/api/jobs/${encodeURIComponent(state.job.id)}`);
+  if (state.job?.id === job.id && job.result) renderTranscript(job);
+}
+
+async function saveDraft(draft, message) {
+  if (state.saving) {
+    setStatus("上一個修改還在儲存，請稍候", "", "error");
+    return false;
   }
   const jobId = state.job.id;
+  state.saving = true;
   try {
-    const job = await api(`/api/jobs/${encodeURIComponent(jobId)}/segments/${index}`, {
-      method: "PATCH",
-      body: { text },
+    const job = await api(`/api/jobs/${encodeURIComponent(jobId)}/transcript`, {
+      method: "PUT",
+      body: { revision: state.revision, segments: draft.segments, speakers: draft.speakers },
     });
-    if (state.job?.id !== jobId) return;
-    state.result = job.result;
-    state.segments = job.result.segments;
-    if (document.activeElement !== node) node.textContent = state.segments[index].text;
-    $("fulltext").textContent = fullText(state.result) || "（沒有辨識到語音）";
-    announce(`已更新第 ${index + 1} 段`);
+    if (state.job?.id !== jobId) return false;
+    renderTranscript(job);
+    if (message) {
+      setStatus(message, "");
+      announce(message);
+    }
+    return true;
   } catch (err) {
-    if (state.job?.id !== jobId) return;
-    if (document.activeElement !== node) node.textContent = saved;
-    setStatus(`無法更新第 ${index + 1} 段：${err.message}`, "", "error");
+    if (state.job?.id !== jobId) return false;
+    if (err.status === 409) {
+      state.history = { past: [], future: [] };
+      updateHistoryButtons();
+      await reloadResult().catch(() => {});
+    }
+    setStatus(`無法儲存：${err.message}`, "", "error");
+    announce(`無法儲存：${err.message}`);
+    return false;
+  } finally {
+    state.saving = false;
   }
+}
+
+function remember(before) {
+  state.history.past.push(before);
+  if (state.history.past.length > HISTORY_LIMIT) state.history.past.shift();
+  state.history.future = [];
+  updateHistoryButtons();
+}
+
+async function commit(draft, message) {
+  const before = currentDraft();
+  if (!(await saveDraft(draft, message))) return false;
+  remember(before);
+  return true;
+}
+
+async function undo() {
+  await settle();
+  if (!state.history.past.length || !editable()) return;
+  const before = currentDraft();
+  const draft = state.history.past.pop();
+  if (await saveDraft(draft, "已復原")) state.history.future.push(before);
+  else state.history.past.push(draft);
+  updateHistoryButtons();
+}
+
+async function redo() {
+  await settle();
+  if (!state.history.future.length || !editable()) return;
+  const before = currentDraft();
+  const draft = state.history.future.pop();
+  if (await saveDraft(draft, "已重做")) state.history.past.push(before);
+  else state.history.future.push(draft);
+  updateHistoryButtons();
+}
+
+function updateHistoryButtons() {
+  $("undo-btn").disabled = !state.history.past.length;
+  $("redo-btn").disabled = !state.history.future.length;
+}
+
+function renderCuePanel() {
+  const segment = state.segments[state.selected];
+  const shown = editable() && !!segment;
+  $("cue-form").hidden = !shown;
+  $("cue-empty").hidden = shown;
+  $("cue-number").textContent = shown ? `#${state.selected + 1}` : "";
+  if (!shown) return;
+  if (document.activeElement !== $("cue-start")) $("cue-start").value = timecode(segment.start);
+  if (document.activeElement !== $("cue-end")) $("cue-end").value = timecode(segment.end);
+  const withSpeakers = !!state.result.speakers;
+  const select = $("cue-speaker");
+  select.hidden = !withSpeakers;
+  $("cue-speaker-label").hidden = !withSpeakers;
+  if (withSpeakers) {
+    select.replaceChildren(...state.speakers.map((s) => new Option(s.name, s.id)), new Option("新增說話者", NEW_SPEAKER));
+    select.value = segment.speaker;
+  }
+  const linked = previewHoldsJobAudio();
+  $("cue-start-now").disabled = !linked;
+  $("cue-end-now").disabled = !linked;
+  $("cue-merge").disabled = state.selected >= state.segments.length - 1;
+}
+
+async function setCueTime(which, seconds) {
+  await settle();
+  const index = state.selected;
+  const segment = state.segments[index];
+  if (!segment) return;
+  const value = Math.round(seconds * 100) / 100;
+  const start = which === "start" ? value : segment.start;
+  const end = which === "end" ? value : segment.end;
+  if (!Number.isFinite(value) || start < 0 || end > state.job.audioSeconds + 0.01 || end <= start) {
+    setStatus("時間不正確：結束必須晚於開始，而且不能超過音訊長度", "", "error");
+    renderCuePanel();
+    return;
+  }
+  if (start === segment.start && end === segment.end) return;
+  const draft = currentDraft();
+  const moved = { ...draft.segments[index], start, end };
+  draft.segments[index] = moved;
+  draft.segments.sort((a, b) => a.start - b.start);
+  if (await commit(draft, `已調整第 ${index + 1} 段的時間`)) selectSegment(draft.segments.indexOf(moved), true);
+  else renderCuePanel();
+}
+
+async function setCueSpeaker(value) {
+  await settle();
+  const index = state.selected;
+  if (!state.segments[index]) return;
+  const draft = currentDraft();
+  let speakerId = value;
+  if (value === NEW_SPEAKER) {
+    const taken = [...draft.speakers.map((s) => s.id), ...state.result.voiceprint_speakers];
+    const next = Math.max(0, ...taken.map((id) => Number(id.slice(1)))) + 1;
+    speakerId = `S${next}`;
+    draft.speakers.push({ id: speakerId, name: `說話者 ${next}`, voice_id: null, similarity: null });
+  }
+  draft.segments[index].speaker = speakerId;
+  const name = draft.speakers.find((s) => s.id === speakerId).name;
+  if (!(await commit(draft, `第 ${index + 1} 段改為「${name}」`))) renderCuePanel();
+}
+
+async function splitCue() {
+  await settle();
+  const index = state.selected;
+  const segment = state.segments[index];
+  if (!segment) return;
+  const text = segment.text;
+  const now = previewHoldsJobAudio() ? audioEl().currentTime : null;
+  const inside = now !== null && now > segment.start + SPLIT_MARGIN_SECONDS && now < segment.end - SPLIT_MARGIN_SECONDS;
+  const span = segment.end - segment.start;
+  let offset = state.caret?.index === index ? state.caret.offset : null;
+  if (offset === null) {
+    const at = inside ? now : segment.start + span / 2;
+    offset = Math.round((text.length * (at - segment.start)) / span);
+  }
+  while (offset < text.length && LEADING_MARKS.test(text[offset])) offset += 1;
+  const head = text.slice(0, offset).trim();
+  const tail = text.slice(offset).trim();
+  if (!head || !tail) {
+    setStatus("分割點兩邊都要有文字", "把文字游標放在要分開的位置，再按「分割」或 Ctrl+Enter", "error");
+    return;
+  }
+  const time = Math.round((inside ? now : segment.start + (span * offset) / text.length) * 100) / 100;
+  if (time <= segment.start || time >= segment.end) {
+    setStatus("這一段太短，無法分割", "", "error");
+    return;
+  }
+  const draft = currentDraft();
+  const original = draft.segments[index];
+  draft.segments.splice(index, 1, { ...original, end: time, text: head }, { ...original, start: time, text: tail });
+  if (await commit(draft, `已把第 ${index + 1} 段分成兩段`)) {
+    state.caret = null;
+    selectSegment(index + 1, true);
+  }
+}
+
+async function mergeCue() {
+  await settle();
+  const index = state.selected;
+  const a = state.segments[index];
+  const b = state.segments[index + 1];
+  if (!a || !b) return;
+  const joiner = /[A-Za-z0-9]$/.test(a.text) && /^[A-Za-z0-9]/.test(b.text) ? " " : "";
+  const text = a.text + joiner + b.text;
+  if (text.length > state.config.max_text_length) {
+    setStatus(`合併後超過 ${state.config.max_text_length} 個字`, "", "error");
+    return;
+  }
+  const draft = currentDraft();
+  draft.segments.splice(index, 2, { ...draft.segments[index], end: Math.max(a.end, b.end), text });
+  if (await commit(draft, `已合併第 ${index + 1}、${index + 2} 段`)) selectSegment(index, true);
+}
+
+async function deleteCue() {
+  await settle();
+  const index = state.selected;
+  if (!state.segments[index]) return;
+  const draft = currentDraft();
+  draft.segments.splice(index, 1);
+  if (await commit(draft, `已刪除第 ${index + 1} 段，可按「復原」還原`)) {
+    selectSegment(Math.min(index, draft.segments.length - 1), true);
+  }
+}
+
+async function mergeSpeaker(from, into) {
+  await settle();
+  const fromName = speakerName(from);
+  const intoName = speakerName(into);
+  const draft = currentDraft();
+  for (const segment of draft.segments) if (segment.speaker === from) segment.speaker = into;
+  draft.speakers = draft.speakers.filter((s) => s.id !== from);
+  await commit(draft, `已把「${fromName}」併入「${intoName}」`);
+}
+
+function bindCueEditor() {
+  document.addEventListener("selectionchange", () => {
+    const anchor = getSelection()?.anchorNode;
+    const node = anchor?.nodeType === Node.TEXT_NODE ? anchor.parentElement : anchor;
+    if (node?.closest?.(".cue-edit")) rememberCaret();
+  });
+  for (const which of ["start", "end"]) {
+    const input = $(`cue-${which}`);
+    const apply = () => {
+      const seconds = parseTimecode(input.value);
+      if (Number.isNaN(seconds)) {
+        setStatus("時間格式是 時:分:秒.百分秒，例如 0:01:23.45", "", "error");
+        renderCuePanel();
+        return;
+      }
+      setCueTime(which, seconds);
+    };
+    input.addEventListener("change", apply);
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        input.value = timecode(state.segments[state.selected][which]);
+        input.blur();
+      }
+    });
+    $(`cue-${which}-now`).addEventListener("click", () => setCueTime(which, audioEl().currentTime));
+  }
+  $("cue-speaker").addEventListener("change", (event) => setCueSpeaker(event.target.value));
+  $("cue-split").addEventListener("click", splitCue);
+  $("cue-merge").addEventListener("click", mergeCue);
+  $("cue-delete").addEventListener("click", deleteCue);
+  $("undo-btn").addEventListener("click", undo);
+  $("redo-btn").addEventListener("click", redo);
+  document.addEventListener("keydown", (event) => {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+    const key = event.key.toLowerCase();
+    if (key === "f" && editable() && state.segments.length) {
+      event.preventDefault();
+      openFind();
+      return;
+    }
+    if (event.target.closest("input, textarea, [contenteditable]")) return;
+    if (key === "z" && !event.shiftKey) {
+      event.preventDefault();
+      undo();
+    } else if (key === "y" || (key === "z" && event.shiftKey)) {
+      event.preventDefault();
+      redo();
+    }
+  });
 }
 
 function renderSpeakers(result) {
@@ -1338,7 +1982,17 @@ function renderSpeakers(result) {
   notice.textContent = message;
   notice.hidden = !message;
   $("speakers-empty").hidden = !!state.speakers.length || !!message;
-  $("speaker-list").replaceChildren(...state.speakers.map(speakerItem));
+  const list = $("speaker-list");
+  const key = JSON.stringify(state.speakers.map((s) => s.id));
+  if (list.dataset.key === key) {
+    for (const speaker of state.speakers) {
+      const item = list.querySelector(`[data-speaker-id="${CSS.escape(speaker.id)}"]`);
+      if (item) updateSpeakerItem(item, speaker);
+    }
+    return;
+  }
+  list.dataset.key = key;
+  list.replaceChildren(...state.speakers.map(speakerItem));
 }
 
 function speakerItem(speaker) {
@@ -1369,13 +2023,21 @@ function speakerItem(speaker) {
   });
   input.addEventListener("change", () => saveSpeakerName(speaker.id, input, status));
 
-  const remember = el("button", "link-btn", "記住聲音");
+  const remember = el("button", "link-btn speaker-remember", "記住聲音");
   remember.type = "button";
   remember.title = "存進語者庫，之後自動認出";
   remember.addEventListener("click", () => rememberVoice(speaker.id, input, status, remember));
 
+  const merge = el("select", "speaker-merge");
+  merge.hidden = state.speakers.length < 2;
+  merge.addEventListener("change", () => {
+    const into = merge.value;
+    merge.value = "";
+    if (into) mergeSpeaker(speaker.id, into);
+  });
+
   const line = el("span", "speaker-line");
-  line.append(el("span", "speaker-meta"), el("span", "speaker-badge"), remember);
+  line.append(el("span", "speaker-meta"), el("span", "speaker-badge"), merge, remember);
   item.append(swatch, input, line, status);
   updateSpeakerItem(item, speaker);
   return item;
@@ -1394,21 +2056,18 @@ function updateSpeakerItem(item, speaker) {
     badge.textContent = speaker.voice_id ? "已記住" : "";
     badge.removeAttribute("title");
   }
+  item.querySelector(".speaker-remember").hidden = !state.result.voiceprint_speakers.includes(speaker.id);
+  const merge = item.querySelector(".speaker-merge");
+  merge.setAttribute("aria-label", `把 ${speaker.name} 併入其他說話者`);
+  merge.replaceChildren(
+    new Option("併入…", ""),
+    ...state.speakers.filter((s) => s.id !== speaker.id).map((s) => new Option(s.name, s.id)),
+  );
 }
 
 function applySpeakerUpdate(job) {
   if (state.job?.id !== job.id || !job.result) return;
-  state.speakers = job.result.speakers ?? [];
-  for (const speaker of state.speakers) {
-    const item = $("speaker-list").querySelector(`[data-speaker-id="${CSS.escape(speaker.id)}"]`);
-    if (item) updateSpeakerItem(item, speaker);
-    for (const tag of $("segments").querySelectorAll(`[data-speaker-tag="${CSS.escape(speaker.id)}"]`)) {
-      tag.textContent = speaker.name;
-    }
-    const laneName = $("timeline-lanes").querySelector(`[data-lane-speaker="${CSS.escape(speaker.id)}"] .lane-name`);
-    if (laneName) laneName.textContent = speaker.name;
-  }
-  $("fulltext").textContent = fullText(job.result) || "（沒有辨識到語音）";
+  renderTranscript(job);
 }
 
 function setSpeakerStatus(status, message, tone) {
@@ -1426,12 +2085,14 @@ function saveSpeakerName(speakerId, input, status) {
   }
   setSpeakerStatus(status, "儲存中…");
   const jobId = state.job.id;
+  const before = currentDraft();
   const saving = api(`/api/jobs/${encodeURIComponent(jobId)}/speakers/${encodeURIComponent(speakerId)}`, {
     method: "PATCH",
     body: { name },
   })
     .then((job) => {
       applySpeakerUpdate(job);
+      if (state.job?.id === jobId) remember(before);
       setSpeakerStatus(status, "");
       announce(`已改名為 ${name}`);
       return true;
@@ -1515,6 +2176,353 @@ async function forgetVoice(voice) {
   }
 }
 
+function openFind() {
+  $("find-bar").hidden = false;
+  $("find-btn").setAttribute("aria-expanded", "true");
+  $("find-input").focus();
+  $("find-input").select();
+  updateMatches();
+}
+
+function closeFind() {
+  $("find-bar").hidden = true;
+  $("find-btn").setAttribute("aria-expanded", "false");
+  state.find = { matches: [], current: -1 };
+  for (const row of $("segments").querySelectorAll(".is-match")) row.classList.remove("is-match");
+}
+
+function findPattern() {
+  const query = $("find-input").value;
+  return query ? new RegExp(escapeRegExp(query), "gi") : null;
+}
+
+function updateMatches() {
+  const pattern = findPattern();
+  const matches = pattern ? state.segments.flatMap((s, i) => (s.text.match(pattern) ? [i] : [])) : [];
+  state.find.matches = matches;
+  if (state.find.current >= matches.length || state.find.current < 0) state.find.current = matches.length ? 0 : -1;
+  const set = new Set(matches);
+  for (const row of $("segments").children) row.classList.toggle("is-match", set.has(Number(row.dataset.index)));
+  const count = $("find-count");
+  count.textContent = !pattern ? "" : matches.length ? `${state.find.current + 1}／${matches.length}` : "沒有符合";
+  for (const id of ["find-prev", "find-next", "replace-one", "replace-all"]) $(id).disabled = !matches.length;
+}
+
+function stepMatch(delta) {
+  const { matches } = state.find;
+  if (!matches.length) return;
+  state.find.current = (state.find.current + delta + matches.length) % matches.length;
+  selectSegment(matches[state.find.current], true);
+  updateMatches();
+}
+
+async function replaceIn(indices, message) {
+  await settle();
+  const pattern = findPattern();
+  if (!pattern || !indices.length) return;
+  const replacement = $("replace-input").value;
+  const draft = currentDraft();
+  let changed = 0;
+  for (const index of indices) {
+    const text = draft.segments[index].text.replace(pattern, () => replacement).replace(/\s+/g, " ").trim();
+    if (text !== draft.segments[index].text) changed += 1;
+    draft.segments[index].text = text;
+  }
+  draft.segments = draft.segments.filter((s) => s.text);
+  if (!changed) return;
+  if (await commit(draft, message(changed))) updateMatches();
+}
+
+async function applyGlossary() {
+  await settle();
+  let glossary;
+  try {
+    glossary = await api("/api/glossary");
+  } catch (err) {
+    setStatus(`無法讀取詞彙表：${err.message}`, "", "error");
+    return;
+  }
+  state.glossary = glossary;
+  if (!glossary.replacements.length) {
+    setStatus("詞彙表沒有取代規則", "在工具列的「詞彙」新增", "error");
+    return;
+  }
+  const draft = currentDraft();
+  let changed = 0;
+  for (const segment of draft.segments) {
+    let text = segment.text;
+    for (const rule of glossary.replacements) text = text.split(rule.find).join(rule.replace);
+    if (text !== segment.text) changed += 1;
+    segment.text = text.replace(/\s+/g, " ").trim();
+  }
+  draft.segments = draft.segments.filter((s) => s.text);
+  if (!changed) {
+    setStatus("套用詞彙表：沒有需要改的地方", "");
+    return;
+  }
+  if (await commit(draft, `套用詞彙表：改了 ${changed} 段`)) updateMatches();
+}
+
+function bindFind() {
+  $("find-btn").addEventListener("click", () => ($("find-bar").hidden ? openFind() : closeFind()));
+  $("find-close").addEventListener("click", () => {
+    closeFind();
+    $("find-btn").focus();
+  });
+  $("find-input").addEventListener("input", () => {
+    state.find.current = 0;
+    updateMatches();
+    if (state.find.matches.length) selectSegment(state.find.matches[0], true);
+  });
+  for (const input of [$("find-input"), $("replace-input")]) {
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        closeFind();
+        $("find-btn").focus();
+      } else if (event.key === "Enter" && input.id === "find-input") {
+        event.preventDefault();
+        stepMatch(event.shiftKey ? -1 : 1);
+      }
+    });
+  }
+  $("find-prev").addEventListener("click", () => stepMatch(-1));
+  $("find-next").addEventListener("click", () => stepMatch(1));
+  $("replace-one").addEventListener("click", () => {
+    const index = state.find.matches[state.find.current];
+    if (index !== undefined) replaceIn([index], () => `已取代第 ${index + 1} 段`);
+  });
+  $("replace-all").addEventListener("click", () => replaceIn(state.find.matches, (n) => `已取代 ${n} 段`));
+  $("apply-glossary").addEventListener("click", applyGlossary);
+}
+
+async function loadGlossary() {
+  try {
+    state.glossary = await api("/api/glossary");
+  } catch {
+    return;
+  }
+  renderGlossarySummary();
+  updateHotwordsOption();
+}
+
+function renderGlossarySummary() {
+  const rules = state.glossary.replacements.length;
+  $("glossary-summary").textContent = rules ? String(rules) : "";
+  $("glossary-btn").title = `${state.glossary.hotwords ? "已設定熱詞" : "沒有熱詞"}，取代規則 ${rules} 條`;
+}
+
+function ruleRow(rule) {
+  const row = el("tr", "");
+  const find = el("input", "tb-input");
+  find.value = rule.find;
+  find.maxLength = 100;
+  find.setAttribute("aria-label", "原文");
+  const replace = el("input", "tb-input");
+  replace.value = rule.replace;
+  replace.maxLength = 100;
+  replace.setAttribute("aria-label", "改成");
+  const remove = el("button", "link-btn danger", "刪除");
+  remove.type = "button";
+  remove.addEventListener("click", () => {
+    const next = row.nextElementSibling ?? row.previousElementSibling;
+    row.remove();
+    (next?.querySelector("input") ?? $("rule-add")).focus();
+  });
+  const cells = [find, replace, remove].map((node) => {
+    const cell = el("td", "");
+    cell.append(node);
+    return cell;
+  });
+  row.append(...cells);
+  return row;
+}
+
+let hotwordsTimer = 0;
+
+function countHotwords() {
+  clearTimeout(hotwordsTimer);
+  const node = $("hotwords-count");
+  const text = $("hotwords-input").value.trim();
+  const model = modelById(selectedModelId());
+  if (!text) {
+    node.textContent = "";
+    return;
+  }
+  if (model && !model.hotwords) {
+    node.textContent = `${model.name} 不支援熱詞`;
+    node.dataset.tone = "error";
+    return;
+  }
+  hotwordsTimer = setTimeout(async () => {
+    try {
+      const data = await api("/api/hotwords/count", { method: "POST", body: { model: selectedModelId(), text } });
+      const over = data.tokens > data.limit;
+      node.textContent = `${data.tokens}／${data.limit} token（${model?.name ?? ""}）${over ? "，太長了，請刪減" : ""}`;
+      if (over) node.dataset.tone = "error";
+      else delete node.dataset.tone;
+    } catch (err) {
+      node.textContent = err.message;
+      node.dataset.tone = "error";
+    }
+  }, HOTWORDS_COUNT_DELAY_MS);
+}
+
+async function openGlossary() {
+  await loadGlossary();
+  $("hotwords-input").value = state.glossary.hotwords;
+  if (state.config) $("hotwords-input").maxLength = state.config.max_hotwords_length;
+  $("rule-rows").replaceChildren(...state.glossary.replacements.map(ruleRow));
+  $("glossary-status").textContent = "";
+  $("glossary-dialog").showModal();
+  countHotwords();
+}
+
+async function saveGlossary() {
+  const replacements = [...$("rule-rows").children]
+    .map((row) => {
+      const [find, replace] = row.querySelectorAll("input");
+      return { find: find.value.trim(), replace: replace.value.trim() };
+    })
+    .filter((rule) => rule.find);
+  const status = $("glossary-status");
+  try {
+    state.glossary = await api("/api/glossary", {
+      method: "PUT",
+      body: { hotwords: $("hotwords-input").value, replacements },
+    });
+    $("rule-rows").replaceChildren(...state.glossary.replacements.map(ruleRow));
+    status.textContent = "已儲存";
+    delete status.dataset.tone;
+    announce("詞彙已儲存");
+    renderGlossarySummary();
+    updateHotwordsOption();
+  } catch (err) {
+    status.textContent = `無法儲存：${err.message}`;
+    status.dataset.tone = "error";
+    announce(status.textContent);
+  }
+}
+
+function bindGlossary() {
+  $("glossary-btn").addEventListener("click", openGlossary);
+  $("hotwords-input").addEventListener("input", countHotwords);
+  $("rule-add").addEventListener("click", () => {
+    const row = ruleRow({ find: "", replace: "" });
+    $("rule-rows").append(row);
+    row.querySelector("input").focus();
+  });
+  $("glossary-save").addEventListener("click", saveGlossary);
+  $("hotwords-check").addEventListener("change", (event) =>
+    storageSet(STORAGE_KEYS.hotwords, event.target.checked ? "on" : "off"),
+  );
+}
+
+function renderBurn() {
+  const render = state.render;
+  const running = !!render && !["succeeded", "failed", "cancelled"].includes(render.status);
+  $("burn-progress").hidden = !render;
+  $("burn-cancel").hidden = !running;
+  $("burn-start").disabled = running || !state.burnFile || !editable();
+  const download = $("burn-download");
+  download.hidden = render?.status !== "succeeded";
+  if (render?.status === "succeeded") {
+    download.href = `/api/renders/${encodeURIComponent(render.id)}/file`;
+    download.setAttribute("download", render.filename);
+  }
+  if (!render) return;
+  $("burn-fill").style.transform = `scaleX(${render.progress ?? 0})`;
+  const status = $("burn-status");
+  const label = RENDER_LABELS[render.status] ?? render.status;
+  status.textContent = render.error ?? (render.status === "running" ? `${label} ${Math.round(render.progress * 100)}%` : label);
+  if (render.status === "failed") status.dataset.tone = "error";
+  else delete status.dataset.tone;
+}
+
+async function pollRender() {
+  const render = state.render;
+  if (!render) return;
+  try {
+    state.render = await api(`/api/renders/${encodeURIComponent(render.id)}`);
+  } catch (err) {
+    state.render = { ...render, status: "failed", error: err.message };
+  }
+  renderBurn();
+  if (["succeeded", "failed", "cancelled"].includes(state.render.status)) {
+    announce(`燒錄字幕${RENDER_LABELS[state.render.status]}`);
+    return;
+  }
+  state.renderTimer = setTimeout(pollRender, RENDER_POLL_MS);
+}
+
+function chooseBurnFile(file, name) {
+  state.burnFile = { blob: file, name };
+  $("burn-name").textContent = name;
+  renderBurn();
+}
+
+async function startBurn() {
+  const source = state.burnFile;
+  if (!source || !editable()) return;
+  await settle();
+  clearTimeout(state.renderTimer);
+  state.render = { id: "", status: "queued", progress: 0, error: null };
+  renderBurn();
+  $("burn-status").textContent = "上傳影片…";
+  try {
+    state.render = await upload(
+      `/api/jobs/${encodeURIComponent(state.job.id)}/renders`,
+      {},
+      source.blob,
+      source.name,
+      (ratio) => {
+        $("burn-status").textContent = ratio < 1 ? `上傳影片 ${Math.round(ratio * 100)}%` : "檢查影片…";
+      },
+    );
+  } catch (err) {
+    state.render = { id: "", status: "failed", progress: 0, error: err.message };
+    renderBurn();
+    announce(err.message);
+    return;
+  }
+  renderBurn();
+  state.renderTimer = setTimeout(pollRender, RENDER_POLL_MS);
+}
+
+function openBurn() {
+  if (state.render && state.render.job_id !== state.job?.id) {
+    clearTimeout(state.renderTimer);
+    state.render = null;
+  }
+  const current = previewHoldsJobAudio() && hasVideo();
+  $("burn-current").hidden = !current;
+  if (!state.render) {
+    state.burnFile = null;
+    $("burn-name").textContent = current ? "" : "請選擇這份字幕的原始影片";
+  }
+  renderBurn();
+  $("burn-dialog").showModal();
+}
+
+function bindBurn() {
+  $("burn-btn").addEventListener("click", openBurn);
+  $("burn-current").addEventListener("click", () => chooseBurnFile(state.audio.blob, state.audio.name));
+  $("burn-input").addEventListener("change", (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (file) chooseBurnFile(file, file.name);
+  });
+  $("burn-start").addEventListener("click", startBurn);
+  $("burn-cancel").addEventListener("click", async () => {
+    if (!state.render?.id) return;
+    try {
+      state.render = await api(`/api/renders/${encodeURIComponent(state.render.id)}`, { method: "DELETE" });
+      renderBurn();
+    } catch (err) {
+      $("burn-status").textContent = err.message;
+    }
+  });
+}
+
 function applyView(view) {
   $(view === "full" ? "view-full" : "view-segments").checked = true;
   $("sub-grid").hidden = view === "full";
@@ -1574,6 +2582,10 @@ bindResultTools();
 bindPlayback();
 bindRetune();
 bindDialogs();
+bindCueEditor();
+bindFind();
+bindGlossary();
+bindBurn();
 refreshTimeline();
 refreshConfig();
 setInterval(() => {

@@ -1,0 +1,6 @@
+services:
+  breeze-asr:
+    environment:
+      ASR_WATCH_DIR: /watch
+    volumes:
+      - ${ASR_WATCH_SOURCE:?請在 .env 設定 ASR_WATCH_SOURCE（要監看的主機資料夾）}:/watch

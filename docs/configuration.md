@@ -8,12 +8,20 @@
 | --- | --- | --- |
 | `ASR_HOST`、`ASR_PORT` | 原生執行的監聽位址與埠（Docker 版的 `ASR_PORT` 是容器內的埠） | `127.0.0.1`、`7860` |
 | `ASR_MODELS_FILE` | 模型清單檔 | `models.json` |
-| `ASR_DATA_DIR` | 轉換後模型、編譯快取、辨識結果、語者庫與上傳暫存的目錄 | `data` |
+| `ASR_DATA_DIR` | 轉換後模型、編譯快取、辨識結果、語者庫、詞彙表、日誌與上傳暫存的目錄 | `data` |
 | `ASR_HARDWARE_PROFILE` | 硬體設定檔；不存在時第一次啟動自動調校並寫出 | `data/hardware-profile.json` |
 | `ASR_MAX_UPLOAD_MB` | 單檔大小上限 | `2048` |
 | `ASR_MAX_AUDIO_SECONDS` | 音訊長度上限 | `10800` |
 | `ASR_MAX_QUEUE` | 最多可排隊的工作數 | `20` |
-| `ASR_JOB_TTL_SECONDS` | 完成的結果保留多久，至少 60 | `86400` |
+| `ASR_JOB_TTL_SECONDS` | 完成的結果與燒好字幕的影片保留多久，至少 60 | `86400` |
+| `ASR_SUBTITLE_FONT` | ASS 匯出與燒錄字幕的字型名稱；含空白時加引號 | `"Microsoft JhengHei"` |
+| `ASR_SUBTITLE_FONTS_DIR` | 燒錄字幕時尋找字型檔的資料夾，必須存在 | `C:/Windows/Fonts` |
+| `ASR_WATCH_DIR` | [監看資料夾](deployment.md#監看資料夾)；不監看填 `off` | `off` |
+| `ASR_WATCH_MODEL` | 監看資料夾用的模型 id | `MediaTek-Research/Breeze-ASR-25` |
+| `ASR_WATCH_SPEAKERS` | 監看資料夾的說話者：`off`、`auto` 或人數 | `auto` |
+| `ASR_WATCH_PUNCTUATION` | 監看資料夾是否自動加標點：`on` 或 `off` | `on` |
+| `ASR_WATCH_FORMATS` | 監看資料夾寫出的格式，以逗號分隔：`txt`、`srt`、`vtt`、`ass`、`md`、`docx`、`json` | `srt,md,json` |
+| `ASR_WATCH_POLL_SECONDS` | 監看資料夾多久檢查一次（秒） | `10` |
 | `HF_HUB_DISABLE_TELEMETRY` | 關閉 Hugging Face 用量回報 | `1` |
 | `HF_HUB_DISABLE_SYMLINKS_WARNING` | 關閉 Windows 無法建立符號連結時的快取警告（快取改用複製檔案，每個模型只固定一個版本，不會多佔空間） | `1` |
 
@@ -31,6 +39,7 @@
 | `ASR_CUDA_DEVICE_ID` | 交給容器的 GPU 編號，用 `compose.cuda.yaml` 時才需要 | — |
 | `ASR_VIDEO_GID`、`ASR_RENDER_GID` | 主機 `video`、`render` 群組的 GID，用 `compose.rocm.yaml` 時才需要 | — |
 | `ASR_REMOTE_DOCKER_NETWORK` | 遠端服務所在的 Docker 網路，用 `compose.remote-net.yaml` 時才需要 | — |
+| `ASR_WATCH_SOURCE` | 要監看的主機資料夾，用 `compose.watch.yaml` 時才需要 | — |
 | `ASR_CPUSET` | 容器可用的 CPU 編號，用 `compose.cpuset.yaml` 時才需要 | — |
 
 `models.json` 裡 `remote.api_key_env` 指定的變數（例如 `ASR_BREEZE26_SERVICE_API_KEY`）也放在 `.env`。
@@ -54,7 +63,8 @@
       }
     }
   ],
-  "speakers": { "…": "見下方說話者設定" }
+  "speakers": { "…": "見下方說話者設定" },
+  "punctuation": { "…": "見下方自動標點設定" }
 }
 ```
 
@@ -65,6 +75,7 @@
 | `models[].name`、`tagline`、`description` | 顯示在模型選單與提示 |
 | `models[].local` 或 `models[].remote` | 本機推論或轉呼叫遠端服務，每個模型必須剛好一個 |
 | `speakers` | 分辨說話者的設定；不提供這個功能時設為 `null`，介面就不會出現相關選項 |
+| `punctuation` | 自動標點的設定；不提供這個功能時設為 `null`，介面就不會出現「標點」 |
 
 新增其他 Whisper 架構的模型只要加一筆，工具列的模型選單會自動出現。
 
@@ -97,6 +108,8 @@
 | `fields` | 建立工作時一併送出的表單欄位 |
 | `poll_seconds`、`timeout_seconds` | 輪詢間隔與單次請求逾時 |
 | `job_timeout_seconds` | 一個工作最多等多久；遠端服務卡住時，超過就以錯誤結束，不會擋住後面的工作 |
+
+轉呼叫遠端的模型不支援熱詞；自動標點、取代規則與分辨說話者在本服務執行，照常可用。
 
 ### `speakers`
 
@@ -136,6 +149,22 @@
 
 各欄位的作用見[分辨說話者](how-it-works.md#分辨說話者)。
 
+### `punctuation`
+
+```json
+"punctuation": {
+  "repo": "csukuangfj/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12",
+  "revision": "432aeba669265e7aeb06b9359753419683b38597",
+  "file": "model.onnx",
+  "num_threads": 4
+}
+```
+
+| 欄位 | 說明 |
+| --- | --- |
+| `repo`、`revision`、`file` | sherpa-onnx 標點模型（CT-Transformer）在 Hugging Face 的位置，固定 commit；約 280 MB，啟動時下載 |
+| `num_threads` | 加標點用的 CPU 執行緒數 |
+
 ## 硬體設定檔
 
 第一次啟動時自動調校並寫出。要換成實測表裡的其他設定，在工具列的「硬體」按該項目的「改用」即可，會一併重新計算常駐模型數並寫回這個檔案。也可以手寫固定設定、跳過調校（例如共用主機要限定只用 CPU）：
@@ -157,7 +186,7 @@
 | 欄位 | OpenVINO | PyTorch |
 | --- | --- | --- |
 | `engine` | `openvino` | `torch` |
-| `device` | `CPU`、`GPU` 等 | `cuda:0` 等 |
+| `device` | `CPU`、`GPU` 等（NPU 實測無法使用） | `cuda:0` 等 |
 | `weight_format` | `fp32`、`fp16`、`int8`、`int4` | `null` |
 | `torch_dtype` | `null` | `float16`、`bfloat16`、`float32` |
 | `torch_num_beams` | `null` | 1 以上的整數 |

@@ -67,7 +67,7 @@ body:
     id: logs
     attributes:
       label: 日誌
-      description: 終端機輸出或 docker compose logs 的相關片段。
+      description: 終端機輸出、docker compose logs，或 data/logs 裡 breeze-asr.log、inference.log 的相關片段。
       render: text
   - type: checkboxes
     id: privacy

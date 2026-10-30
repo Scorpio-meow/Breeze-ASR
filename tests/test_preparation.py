@@ -8,7 +8,20 @@ from app.preparation import _MARKER, PreparationError, cache_dir, inside, prune_
 
 
 def _settings(data_dir) -> Settings:
-    return Settings("127.0.0.1", 7860, data_dir / "models.json", data_dir, data_dir / "profile.json", 1, 1, 1, 60)
+    return Settings(
+        "127.0.0.1",
+        7860,
+        data_dir / "models.json",
+        data_dir,
+        data_dir / "profile.json",
+        1,
+        1,
+        1,
+        60,
+        "Font",
+        data_dir,
+        None,
+    )
 
 
 def _read_only_file(path) -> None:

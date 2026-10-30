@@ -52,10 +52,13 @@ class OpenVinoEngine:
         spec: ModelSpec,
         audio: np.ndarray,
         audio_seconds: float,
+        hotwords: str,
         on_progress: Callable[[float], None],
     ) -> tuple[list[Segment], str]:
         local = spec.local
         options: dict[str, object] = {"task": local.task, "return_timestamps": True}
+        if hotwords:
+            options["hotwords"] = hotwords
         if local.language is not None:
             options["language"] = f"<|{local.language}|>"
         if local.sentence_segments is not None:

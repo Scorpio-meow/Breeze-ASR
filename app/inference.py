@@ -19,7 +19,7 @@ import psutil
 from .catalog import Catalog, model_status
 from .config import ConfigError, Settings
 from .hardware import HardwareProfile, save_profile
-from .logsetup import setup_logging
+from .logsetup import log_to_file, setup_logging
 from .transcript import Transcript
 
 log = logging.getLogger(__name__)
@@ -104,6 +104,7 @@ def _hardware_config(settings: Settings, catalog: Catalog, events: Queue):
 
 def _worker_main(settings: Settings, requests: Queue, events: Queue) -> None:
     setup_logging("推論")
+    log_to_file(settings.logs_dir / "inference.log", "推論")
     threading.Thread(target=_watch_parent, name="parent-watch", daemon=True).start()
 
     from .audio import load_audio
@@ -127,12 +128,12 @@ def _worker_main(settings: Settings, requests: Queue, events: Queue) -> None:
     manager.start()
     try:
         while (request := requests.get()) is not None:
-            job_id, model_id, audio_path = request
+            job_id, model_id, audio_path, hotwords = request
             try:
                 audio = load_audio(Path(audio_path))
                 on_stage = functools.partial(_put_event, events, "stage", job_id)
                 on_progress = functools.partial(_put_event, events, "progress", job_id)
-                transcript = manager.transcribe(model_id, audio, on_stage, on_progress)
+                transcript = manager.transcribe(model_id, audio, hotwords, on_stage, on_progress)
                 events.put(("done", job_id, transcript.to_dict()))
             except Exception as exc:
                 log.exception("工作 %s 辨識失敗", job_id)
@@ -268,6 +269,7 @@ class InferenceClient:
         job_id: str,
         model_id: str,
         audio_path: Path,
+        hotwords: str,
         on_stage: Callable[[str], None],
         on_progress: Callable[[float], None],
     ) -> Transcript:
@@ -276,7 +278,7 @@ class InferenceClient:
             with self._lock:
                 self._pending[job_id] = pending
                 requests = self._requests
-            requests.put((job_id, model_id, str(audio_path)))
+            requests.put((job_id, model_id, str(audio_path), hotwords))
             pending.done.wait()
             with self._lock:
                 self._pending.pop(job_id, None)

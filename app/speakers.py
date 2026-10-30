@@ -37,7 +37,7 @@ class RawSpeaker:
         return sum(end - start for start, end in self.turns)
 
 
-def _download(file: HubFile) -> Path:
+def download_hub_file(file: HubFile) -> Path:
     from huggingface_hub import hf_hub_download
 
     return Path(hf_hub_download(file.repo, file.file, revision=file.revision))
@@ -161,7 +161,7 @@ class SpeakerService:
             log.info("開始準備分辨說話者的模型")
             started = time.perf_counter()
             try:
-                self._paths = (_download(self._config.segmentation), _download(self._config.embedding))
+                self._paths = (download_hub_file(self._config.segmentation), download_hub_file(self._config.embedding))
             except Exception as exc:
                 log.exception("下載分辨說話者的模型失敗")
                 message = f"無法下載分辨說話者的模型：{exc}"

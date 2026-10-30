@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import re
 import subprocess
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 import imageio_ffmpeg
@@ -10,7 +12,7 @@ import numpy as np
 SAMPLE_RATE = 16_000
 _SAMPLE_BYTES = np.dtype(np.float32).itemsize
 
-_DEMUXERS = ",".join(
+DEMUXERS = ",".join(
     (
         "wav",
         "w64",
@@ -40,6 +42,31 @@ class AudioDecodeError(ValueError):
     pass
 
 
+@dataclass(frozen=True)
+class MediaInfo:
+    seconds: float | None
+    has_video: bool
+
+
+def probe_media(path: Path) -> MediaInfo:
+    cmd = [
+        imageio_ffmpeg.get_ffmpeg_exe(),
+        "-nostdin",
+        "-hide_banner",
+        "-protocol_whitelist",
+        "file",
+        "-format_whitelist",
+        DEMUXERS,
+        "-i",
+        str(path),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, check=False)
+    output = proc.stderr.decode("utf-8", errors="replace")
+    found = re.search(r"Duration: (\d+):(\d{2}):(\d{2}(?:\.\d+)?)", output)
+    seconds = int(found[1]) * 3600 + int(found[2]) * 60 + float(found[3]) if found else None
+    return MediaInfo(seconds=seconds, has_video=re.search(r"Stream #\S+.*: Video:", output) is not None)
+
+
 def decode_to_file(path: Path, max_seconds: int, target: Path) -> float:
     cmd = [
         imageio_ffmpeg.get_ffmpeg_exe(),
@@ -50,7 +77,7 @@ def decode_to_file(path: Path, max_seconds: int, target: Path) -> float:
         "-protocol_whitelist",
         "file",
         "-format_whitelist",
-        _DEMUXERS,
+        DEMUXERS,
         "-i",
         str(path),
         "-map",

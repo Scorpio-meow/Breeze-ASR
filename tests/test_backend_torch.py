@@ -15,13 +15,22 @@ SEGMENT_CHUNKS = [{"text": " 今天天氣很好。我們去公園吧", "timestam
 TEXT = "今天天氣很好。 我們去公園吧"
 
 
+class FakeTokenizer:
+    def get_prompt_ids(self, text, return_tensors):
+        return torch.tensor([50361, len(text)])
+
+
 class FakePipeline:
     def __init__(self, word_chunks):
         self.calls = []
+        self.kwargs = []
         self._word_chunks = word_chunks
+        self.tokenizer = FakeTokenizer()
+        self.device = torch.device("cpu")
 
     def __call__(self, audio, return_timestamps, generate_kwargs):
         self.calls.append(return_timestamps)
+        self.kwargs.append(generate_kwargs)
         chunks = self._word_chunks if return_timestamps == "word" else SEGMENT_CHUNKS
         return {"text": TEXT, "chunks": chunks}
 
@@ -44,7 +53,7 @@ def _engine() -> TorchEngine:
 def test_sentence_segments_use_word_timestamps():
     pipe = FakePipeline(WORD_CHUNKS)
     rule = SentenceSegments(max_seconds=10, min_seconds=0.5)
-    segments, text = _engine().transcribe(pipe, _spec(rule), np.zeros(1), 5.0, lambda _: None)
+    segments, text = _engine().transcribe(pipe, _spec(rule), np.zeros(1), 5.0, "", lambda _: None)
     assert pipe.calls == ["word"]
     assert [(s.text, s.start, s.end) for s in segments] == [("今天天氣很好。", 0.0, 1.25), ("我們去公園吧", 1.5, 2.7)]
     assert text == TEXT
@@ -53,15 +62,29 @@ def test_sentence_segments_use_word_timestamps():
 def test_mismatched_words_fall_back_to_model_segments():
     pipe = FakePipeline([{"text": "別的字", "timestamp": (0.0, 1.0)}])
     rule = SentenceSegments(max_seconds=10, min_seconds=0.5)
-    segments, _ = _engine().transcribe(pipe, _spec(rule), np.zeros(1), 5.0, lambda _: None)
+    segments, _ = _engine().transcribe(pipe, _spec(rule), np.zeros(1), 5.0, "", lambda _: None)
     assert pipe.calls == ["word", True]
     assert [(s.text, s.start, s.end) for s in segments] == [("今天天氣很好。我們去公園吧", 0.0, 5.0)]
 
 
 def test_without_sentence_segments_runs_once_with_segment_timestamps():
     pipe = FakePipeline(WORD_CHUNKS)
-    _engine().transcribe(pipe, _spec(None), np.zeros(1), 5.0, lambda _: None)
+    _engine().transcribe(pipe, _spec(None), np.zeros(1), 5.0, "", lambda _: None)
     assert pipe.calls == [True]
+
+
+def test_hotwords_become_prompt_ids_for_every_segment():
+    pipe = FakePipeline(WORD_CHUNKS)
+    _engine().transcribe(pipe, _spec(None), np.zeros(1), 5.0, "與會者有王小明。", lambda _: None)
+    assert pipe.kwargs[0]["prompt_ids"].tolist() == [50361, 8]
+    assert "prompt_condition_type" not in pipe.kwargs[0]
+    assert "condition_on_prev_tokens" not in pipe.kwargs[0]
+
+
+def test_without_hotwords_no_prompt_is_sent():
+    pipe = FakePipeline(WORD_CHUNKS)
+    _engine().transcribe(pipe, _spec(None), np.zeros(1), 5.0, "", lambda _: None)
+    assert "prompt_ids" not in pipe.kwargs[0]
 
 
 def test_missing_word_times_are_filled_from_neighbours():

@@ -190,12 +190,15 @@ class ModelManager:
         self,
         model_id: str,
         audio: np.ndarray,
+        hotwords: str,
         on_stage: Callable[[str], None],
         on_progress: Callable[[float], None],
     ) -> Transcript:
         entry = self._entries[model_id]
         spec = entry.spec
         audio_seconds = audio.size / SAMPLE_RATE
+        if spec.remote is not None and hotwords:
+            raise ModelUnavailable(f"{spec.name} 轉呼叫外部服務，不支援熱詞")
         if spec.remote is not None:
             on_stage("transcribing")
             started = time.perf_counter()
@@ -213,7 +216,7 @@ class ModelManager:
             with self.use(model_id, on_wait=on_stage) as handle:
                 on_stage("transcribing")
                 started = time.perf_counter()
-                segments, raw_text = self._engine.transcribe(handle, spec, audio, audio_seconds, on_progress)
+                segments, raw_text = self._engine.transcribe(handle, spec, audio, audio_seconds, hotwords, on_progress)
                 elapsed = time.perf_counter() - started
         with self._state_lock:
             entry.processed_seconds += elapsed

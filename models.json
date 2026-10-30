@@ -48,5 +48,11 @@
     "min_duration_on": 0.3,
     "min_duration_off": 0.5,
     "max_speakers": 8
+  },
+  "punctuation": {
+    "repo": "csukuangfj/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12",
+    "revision": "432aeba669265e7aeb06b9359753419683b38597",
+    "file": "model.onnx",
+    "num_threads": 4
   }
 }
