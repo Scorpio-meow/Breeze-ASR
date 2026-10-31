@@ -2,52 +2,52 @@
 > 在瀏覽器用 MediaTek Research 的 Breeze ASR 25／26 模型把語音轉成字幕的本機服務：FastAPI 後端加純 HTML／CSS／JavaScript 前端，支援 OpenVINO、PyTorch 或轉呼叫遠端服務，含分辨說話者與語者庫、熱詞、自動標點、字幕編輯與復原、燒錄字幕、監看資料夾、命令列工具與 MCP server。非 MediaTek 官方專案。
 
 ## Docs
-- [README.md]: 介紹、快速開始、功能、系統需求
-- [docs/deployment.md]: Windows 原生、Docker、更新版本、監看資料夾、日誌、字幕字型、共用主機、限制
-- [docs/configuration.md]: `.env`、`models.json`、硬體設定檔
-- [docs/how-it-works.md]: 架構、自動調校、句子分段、分辨說話者與語者庫、熱詞、詞彙表、自動標點、編輯與復原、燒錄字幕
-- [docs/api.md]: API 各端點的參數與回應
-- [docs/benchmarks.md]: 效能實測（含熱詞）
-- [docs/cli.md]: 命令列工具與 MCP server
-- [CHANGELOG.md]: 更新紀錄
-- [CONTRIBUTING.md]: 開發環境、提交前檢查、撰寫原則
-- [SECURITY.md]: 部署範圍、資料處理、漏洞回報
-- [CODE_OF_CONDUCT.md]: 行為準則與檢舉方式
-- [ACCESSIBILITY.md]: 無障礙聲明、已知限制與回報方式
-- [.github/ISSUE_TEMPLATE/]: 問題回報、功能建議、無障礙問題的 issue 範本
-- [NOTICE.md]: 第三方作品與授權
+- [README.md](README.md): 介紹、快速開始、功能、系統需求
+- [docs/deployment.md](docs/deployment.md): Windows 原生、Docker、更新版本、監看資料夾、日誌、字幕字型、共用主機、限制
+- [docs/configuration.md](docs/configuration.md): `.env`、`models.json`、硬體設定檔
+- [docs/how-it-works.md](docs/how-it-works.md): 架構、自動調校、句子分段、分辨說話者與語者庫、熱詞、詞彙表、自動標點、編輯與復原、燒錄字幕
+- [docs/api.md](docs/api.md): API 各端點的參數與回應
+- [docs/benchmarks.md](docs/benchmarks.md): 效能實測：辨識速度與自動調校、句子分段、分辨說話者、熱詞
+- [docs/cli.md](docs/cli.md): 命令列工具與 MCP server
+- [CHANGELOG.md](CHANGELOG.md): 更新紀錄
+- [CONTRIBUTING.md](CONTRIBUTING.md): 開發環境、提交前檢查、撰寫原則
+- [SECURITY.md](SECURITY.md): 部署範圍、資料處理、漏洞回報
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md): 行為準則與檢舉方式
+- [ACCESSIBILITY.md](ACCESSIBILITY.md): 無障礙聲明、已知限制與回報方式
+- [.github/ISSUE_TEMPLATE/](.github/ISSUE_TEMPLATE/): 問題回報、功能建議、無障礙問題的 issue 範本
+- [NOTICE.md](NOTICE.md): 第三方作品與授權
 
 ## Core Files
-- [app/__main__.py], [app/logsetup.py]: 啟動服務；日誌（終端機與 `ASR_DATA_DIR/logs`）
-- [app/main.py]: FastAPI 路由與服務組裝
-- [app/config.py]: 讀取並檢查 `.env` 設定
-- [app/catalog.py]: 讀取並檢查 `models.json`
-- [app/jobs.py]: 工作佇列、結果保存與過期清理、字幕編輯與版本號
-- [app/inference.py]: 推論子行程、崩潰後自動重啟、取消工作與切換設定時的重啟
-- [app/engine.py]: 模型的準備、載入與卸載
-- [app/preparation.py]: 下載權重、匯出 OpenVINO、壓縮成其他權重格式
-- [app/backend_openvino.py], [app/backend_torch.py], [app/backend_remote.py]: 三種推論方式
-- [app/tune.py], [app/benchmark.py], [app/hardware.py]: 自動調校與硬體設定檔
-- [app/segmentation.py]: Breeze ASR 26 的句子分段
-- [app/diarize.py], [app/speakers.py], [app/voices.py]: 分辨說話者、對到字幕、語者庫
-- [app/audio.py], [app/exports.py]: ffmpeg 解碼與讀取影片資訊、TXT／SRT／VTT／ASS／Markdown／DOCX／JSON 匯出
-- [app/hotwords.py], [app/glossary.py]: 熱詞的 token 上限、詞彙表（熱詞與取代規則）
-- [app/punctuate.py], [app/punctuation.py]: 自動標點子行程與標點對齊
-- [app/renders.py]: 燒錄字幕
-- [app/watch.py]: 監看資料夾
-- [app/client.py], [app/cli.py], [app/mcp_server.py]: HTTP 客戶端、命令列工具、MCP server
-- [static/]: 前端（工具列、波形時間軸、字幕列表與尋找取代、右側的影片預覽、工作清單、字幕編輯、說話者、匯出面板、狀態列）
-- [tests/]: 不需要模型的單元測試
-- [models.json]: 模型清單、分辨說話者與自動標點的設定
-- [.env.example]: 所有環境設定的範例值
-- [scripts/]: Windows 與 Linux 的安裝、啟動腳本
-- [compose.yaml]: Docker 部署；`compose.cuda.yaml`、`compose.rocm.yaml`、`compose.cpuset.yaml`、`compose.remote-net.yaml`、`compose.watch.yaml` 為疊加檔
+- [app/__main__.py](app/__main__.py), [app/logsetup.py](app/logsetup.py): 啟動服務；日誌（終端機與 `ASR_DATA_DIR/logs`）
+- [app/main.py](app/main.py): FastAPI 路由與服務組裝
+- [app/config.py](app/config.py): 讀取並檢查 `.env` 設定
+- [app/catalog.py](app/catalog.py): 讀取並檢查 `models.json`
+- [app/jobs.py](app/jobs.py): 工作佇列、結果儲存與過期清理、字幕編輯與版本號
+- [app/inference.py](app/inference.py): 推論子行程、當掉後自動重新啟動，以及取消工作、切換設定時的重新啟動
+- [app/engine.py](app/engine.py): 模型的準備、載入與卸載
+- [app/preparation.py](app/preparation.py): 下載權重、匯出 OpenVINO、壓縮成其他權重格式
+- [app/backend_openvino.py](app/backend_openvino.py), [app/backend_torch.py](app/backend_torch.py), [app/backend_remote.py](app/backend_remote.py): 三種推論方式
+- [app/tune.py](app/tune.py), [app/benchmark.py](app/benchmark.py), [app/hardware.py](app/hardware.py): 自動調校與硬體設定檔
+- [app/segmentation.py](app/segmentation.py): Breeze ASR 26 的句子分段
+- [app/diarize.py](app/diarize.py), [app/speakers.py](app/speakers.py), [app/voices.py](app/voices.py): 分辨說話者、對到字幕、語者庫
+- [app/audio.py](app/audio.py), [app/exports.py](app/exports.py): ffmpeg 解碼與讀取影片資訊、TXT／SRT／VTT／ASS／Markdown／DOCX／JSON 匯出
+- [app/hotwords.py](app/hotwords.py), [app/glossary.py](app/glossary.py): 熱詞的 token 上限、詞彙表（熱詞與取代規則）
+- [app/punctuate.py](app/punctuate.py), [app/punctuation.py](app/punctuation.py): 自動標點子行程與標點對齊
+- [app/renders.py](app/renders.py): 燒錄字幕
+- [app/watch.py](app/watch.py): 監看資料夾
+- [app/client.py](app/client.py), [app/cli.py](app/cli.py), [app/mcp_server.py](app/mcp_server.py): HTTP 用戶端、命令列工具、MCP server
+- [static/](static/): 前端（工具列、波形時間軸、字幕列表與尋找取代、右側的影片預覽、工作清單、字幕編輯、說話者、匯出面板、狀態列）
+- [tests/](tests/): 不需要模型的單元測試
+- [models.json](models.json): 模型清單、分辨說話者與自動標點的設定
+- [.env.example](.env.example): 所有環境設定的範例值
+- [scripts/](scripts/): Windows 與 Linux 的安裝、啟動腳本
+- [compose.yaml](compose.yaml): Docker 部署；`compose.cuda.yaml`、`compose.rocm.yaml`、`compose.cpuset.yaml`、`compose.remote-net.yaml`、`compose.watch.yaml` 為疊加檔
 
 ## Key Concepts
 - 模型清單：每個模型是 `local`（本機推論，固定 Hugging Face commit）或 `remote`（轉呼叫既有服務）其中之一。
-- 自動調校：第一次啟動時依 OpenVINO 裝置回報的運算精度列出裝置 × 權重格式（int4、int8、fp16、fp32），只轉換要實測的格式，實測速度與字元錯誤率後寫出硬體設定檔；之後直接讀取，也能在介面改用其他實測過的設定。
+- 自動調校：第一次啟動時依 OpenVINO 裝置回報的運算精度列出裝置 × 權重格式（int4、int8、fp16、fp32），只轉換要實測的格式，實測速度與字元錯誤率後選出最快且夠準的設定（同一裝置上速度相差 5% 以內時改選記憶體較少的格式），寫出硬體設定檔；之後直接讀取，也能在介面改用其他實測過的設定。
 - 推論子行程：推論與調校都在子行程執行，網頁行程保持回應。
-- 句子分段：用逐字時間戳把 30 秒長段落切成句子級字幕，OpenVINO 與 PyTorch（CUDA、ROCm）都支援。
+- 句子分段：用逐字時間戳記把 30 秒長段落切成句子級字幕，OpenVINO 與 PyTorch（CUDA、ROCm）都支援。
 - 分辨說話者：每 10 分鐘一塊分段分群，再以平均連結跨塊合併；聲紋只存在本機資料目錄。
 - 設定：所有 `.env` 變數都必須填寫，缺少時服務拒絕啟動，程式裡沒有預設值。
 - 熱詞：OpenVINO 用 `hotwords`、PyTorch 用 `prompt_ids`，上限是模型解碼長度的一半減一（223 token）。

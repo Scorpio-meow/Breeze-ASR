@@ -1,8 +1,17 @@
 # 設定
 
+[README](../README.md) · [部署](deployment.md) · **設定** · [運作方式](how-it-works.md) · [API](api.md) · [命令列與 MCP](cli.md) · [效能實測](benchmarks.md)
+
+服務的行為由三個檔案決定：環境設定 `.env`、模型清單 `models.json`，以及自動調校寫出的硬體設定檔。
+
+**本頁**：[`.env`](#env) · [`models.json`](#modelsjson) · [`local`](#local) · [`remote`](#remote) · [`speakers`](#speakers) · [`punctuation`](#punctuation) · [硬體設定檔](#硬體設定檔)
+
 ## `.env`
 
-所有設定都必須填寫，缺少或格式錯誤時服務會直接拒絕啟動並說明原因；程式裡沒有預設值。下表的值是 `.env.example` 的值。
+> [!IMPORTANT]
+> 所有設定都必須填寫，缺少或格式錯誤時服務會直接拒絕啟動並說明原因；程式裡沒有預設值。
+
+下表的值是 `.env.example` 的值。
 
 | 變數 | 說明 | `.env.example` |
 | --- | --- | --- |
@@ -86,7 +95,7 @@
 | `revision` | 固定的 commit，確保每次部署拿到同一份權重；要更新模型時改這裡 |
 | `language` | `null` 表示讓模型自動偵測，或填語言代碼（例如 `zh`） |
 | `task` | `transcribe` 或 `translate` |
-| `sentence_segments` | `null` 表示沿用模型自己輸出的分段；`{"max_seconds": 10, "min_seconds": 1}` 表示用逐字時間戳重新切成句子級段落，見[句子分段](how-it-works.md#句子分段) |
+| `sentence_segments` | `null` 表示沿用模型自己輸出的分段；`{"max_seconds": 10, "min_seconds": 1}` 表示用逐字時間戳記重新切成句子級段落，見[句子分段](how-it-works.md#句子分段) |
 
 ### `remote`
 
@@ -167,7 +176,9 @@
 
 ## 硬體設定檔
 
-第一次啟動時自動調校並寫出。要換成實測表裡的其他設定，在工具列的「硬體」按該項目的「改用」即可，會一併重新計算常駐模型數並寫回這個檔案。也可以手寫固定設定、跳過調校（例如共用主機要限定只用 CPU）：
+第一次啟動時自動調校並寫出。要換成實測表裡的其他設定，在工具列的「硬體」按該項目的「改用」即可，會一併重新計算常駐模型數並寫回這個檔案。
+
+也可以手寫固定設定、跳過調校（例如共用主機要限定只用 CPU）：
 
 ```json
 {
@@ -186,7 +197,7 @@
 | 欄位 | OpenVINO | PyTorch |
 | --- | --- | --- |
 | `engine` | `openvino` | `torch` |
-| `device` | `CPU`、`GPU` 等（NPU 實測無法使用） | `cuda:0` 等 |
+| `device` | `CPU`、`GPU` 等（不支援 NPU） | `cuda:0` 等 |
 | `weight_format` | `fp32`、`fp16`、`int8`、`int4` | `null` |
 | `torch_dtype` | `null` | `float16`、`bfloat16`、`float32` |
 | `torch_num_beams` | `null` | 1 以上的整數 |

@@ -1,7 +1,7 @@
 import openvino as ov
 
 from app.hardware import EngineConfig
-from app.tune import _blocker, _candidates, _grade, _memory_limit, _memory_need, _weight_bytes
+from app.tune import _blocker, _candidates, _choose, _grade, _memory_limit, _memory_need, _weight_bytes
 
 GB = 1024**3
 DEVICES = {
@@ -74,6 +74,52 @@ def test_hint_when_gpu_present_but_pytorch_lacks_support():
     reasons = " ".join(item["reason"] for item in skipped)
     assert "cu130" in reasons
     assert "rocm72" in reasons
+
+
+def _usable(device: str, weight_format: str, rtf: float, memory_gb: float) -> dict:
+    return {
+        "label": f"{device}・{weight_format}",
+        "engine": "openvino",
+        "device": device,
+        "weight_format": weight_format,
+        "rtf": rtf,
+        "memory_bytes": int(memory_gb * GB),
+    }
+
+
+def test_fastest_wins_when_nothing_close_uses_less_memory():
+    chosen, reasons = _choose([_usable("GPU", "int8", 0.45, 2.8), _usable("GPU", "fp16", 0.51, 4.2)])
+    assert chosen["label"] == "GPU・int8"
+    assert reasons == ["選擇 GPU・int8：實測處理時間為音訊長度的 0.45 倍，是可用裝置中最快的"]
+
+
+def test_format_within_margin_on_same_device_wins_on_memory():
+    chosen, reasons = _choose([_usable("GPU", "int8", 0.382, 2.8), _usable("GPU", "fp16", 0.378, 4.2)])
+    assert chosen["label"] == "GPU・int8"
+    assert reasons[0].startswith("選擇 GPU・fp16")
+    assert reasons[1] == (
+        "改用 GPU・int8：實測為音訊長度的 0.382 倍，和上面的 0.378 倍相差 5% 以內，執行時記憶體 2.8 GB，比它少 1.4 GB"
+    )
+
+
+def test_memory_does_not_outweigh_a_clear_speed_gap():
+    chosen, _ = _choose([_usable("GPU", "int8", 0.40, 2.8), _usable("GPU", "fp16", 0.378, 4.2)])
+    assert chosen["label"] == "GPU・fp16"
+
+
+def test_memory_only_compares_formats_on_the_same_device():
+    chosen, reasons = _choose([_usable("CPU", "int8", 0.385, 2.2), _usable("GPU", "fp16", 0.378, 4.2)])
+    assert chosen["label"] == "GPU・fp16"
+    assert len(reasons) == 1
+
+
+def test_gpu_kept_for_cpu_then_lighter_format_on_that_gpu():
+    chosen, reasons = _choose(
+        [_usable("CPU", "int8", 0.35, 2.2), _usable("GPU", "fp16", 0.38, 4.2), _usable("GPU", "int8", 0.39, 2.8)]
+    )
+    assert chosen["label"] == "GPU・int8"
+    assert "讓 CPU 留給其他工作" in reasons[0]
+    assert reasons[1].startswith("改用 GPU・int8")
 
 
 def test_formats_much_less_accurate_than_the_best_are_rejected():

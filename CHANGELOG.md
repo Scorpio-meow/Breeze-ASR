@@ -4,11 +4,17 @@
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-31
+
+### Changed
+
+- 自動調校選定裝置後，同一裝置上若有別的格式速度相差 5% 以內、執行時記憶體較少，改用記憶體最少的那一個，選擇理由多一行「改用…」。已經寫好的硬體設定檔不受影響，要套用請重新調校。
+
 ## [0.2.0] - 2026-10-31
 
 ### Added
 
-- 「工作」清單與 `GET /api/jobs`：列出保留中的工作，點一下打開；重新整理後自動打開上次那一份。從清單打開的舊結果可以「對應原始檔」後再播放與對時。
+- 「工作」清單與 `GET /api/jobs`：列出保留中的工作，點一下開啟；重新整理後自動開啟上次那一份。從清單開啟的舊結果可以按「對應原始檔…」後再播放與對時。
 - 字幕編輯：右側「字幕」面板改時間（可設為播放位置）、改說話者或新增說話者、分割（文字游標或播放位置，Ctrl+Enter）、與下一段合併、刪除；「說話者」面板可把一位說話者併入另一位；尋找取代（Ctrl+F）；復原與重做（Ctrl+Z、Ctrl+Y）。後端新增 `PUT /api/jobs/{id}/transcript`，以版本號避免不同分頁互相覆蓋。
 - 熱詞：在「詞彙」設定後勾選「熱詞」，OpenVINO 以 `hotwords`、PyTorch 以 `prompt_ids` 帶入每個解碼視窗；送出前檢查 token 上限（223）。實測見效能實測的「熱詞」。
 - 詞彙表的取代規則：自動套用到新的辨識結果，也能套用到現有字幕；`GET`／`PUT /api/glossary`。
@@ -40,9 +46,9 @@
 - 排隊中與處理中的工作都能取消；工作進行中不能重複送出同一段音訊。
 - 瀏覽器從其他網站送來的寫入請求一律拒絕。
 - 日誌記錄下載、轉換、調校、工作與分辨說話者的開始、完成與耗時。
-- Breeze ASR 26 的句子分段：用逐字時間戳把 30 秒長段落切成句子級字幕。
+- Breeze ASR 26 的句子分段：用逐字時間戳記把 30 秒長段落切成句子級字幕。
 - 分辨說話者（自動或指定人數）與語者庫，可替說話者取名並自動認人。
-- 匯出 TXT、SRT、VTT、JSON；結果保存到資料目錄，重新啟動後仍可下載。
+- 匯出 TXT、SRT、VTT、JSON；結果儲存到資料目錄，重新啟動後仍可下載。
 - Windows 原生執行與 Docker 部署（CPU、NVIDIA GPU、限定 CPU 核心、加入既有 Docker 網路）。
 - 單元測試（pytest）、ruff 檢查與格式設定、GitHub Actions CI。
 - 安裝腳本：Windows（`scripts/install.ps1`，含桌面捷徑）與 Linux（`scripts/install.sh`），自動偵測顯示卡。
@@ -56,3 +62,8 @@
 - 超過 30 分鐘或瀏覽器無法解碼的音訊，送出辨識後由伺服器產生波形。
 - 在不能錄音的網址按「錄音」，狀態列說明原因與瀏覽器的設定方式。
 - 所有回應加上 `Cache-Control: no-cache`，更新版本後瀏覽器不會繼續使用舊的前端程式。
+
+[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/Scorpio-meow/Breeze-ASR/releases/tag/v0.1.0

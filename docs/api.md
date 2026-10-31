@@ -1,8 +1,13 @@
 # API
 
-網頁用的就是這組 API。所有路徑都在 `/api` 底下，錯誤回應是 `{"detail": "原因"}`。OpenAPI 規格在 `/api/openapi.json`。
+[README](../README.md) · [部署](deployment.md) · [設定](configuration.md) · [運作方式](how-it-works.md) · **API** · [命令列與 MCP](cli.md) · [效能實測](benchmarks.md)
 
-瀏覽器從其他網站送來的 `POST`、`PUT`、`PATCH`、`DELETE`（`Sec-Fetch-Site` 是 `cross-site` 或 `same-site`）一律回 403；curl 等不帶這個標頭的程式不受影響。
+網頁用的就是這組 API。所有路徑都在 `/api` 底下，錯誤回應是 `{"detail": "原因"}`；欄位缺少或型別錯誤時回 422，`detail` 是陣列。OpenAPI 規格在 `/api/openapi.json`。
+
+> [!NOTE]
+> 瀏覽器從其他網站送來的 `POST`、`PUT`、`PATCH`、`DELETE`（`Sec-Fetch-Site` 是 `cross-site` 或 `same-site`）一律回 403；curl 等不帶這個標頭的程式不受影響。
+
+## 一次完整的辨識
 
 ```bash
 curl -F model=MediaTek-Research/Breeze-ASR-25 -F speakers=auto -F punctuation=on -F file=@meeting.m4a http://127.0.0.1:7860/api/jobs
@@ -10,9 +15,27 @@ curl http://127.0.0.1:7860/api/jobs/<id>
 curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 ```
 
+```mermaid
+sequenceDiagram
+    participant C as 用戶端
+    participant S as Breeze ASR 服務
+    C->>S: POST /api/jobs（音訊檔、模型、說話者、標點、熱詞）
+    S-->>C: 202 工作狀態（id、排隊位置）
+    loop 直到 status 是 succeeded、failed 或 cancelled
+        C->>S: GET /api/jobs/{id}
+        S-->>C: status、stage、progress
+    end
+    C->>S: GET /api/jobs/{id}/export/srt
+    S-->>C: 字幕檔
+```
+
+圖的文字說明：用戶端以 `POST /api/jobs` 送出音訊檔與選項，服務回 202 與工作編號；之後反覆呼叫 `GET /api/jobs/{id}` 查詢狀態與進度，直到工作結束；成功時再用 `GET /api/jobs/{id}/export/{fmt}` 下載需要的格式。
+
+## 端點一覽
+
 | 方法 | 路徑 | 說明 |
 | --- | --- | --- |
-| `GET` | [`/api/health`](#get-apihealth) | 服務是否在線 |
+| `GET` | [`/api/health`](#get-apihealth) | 服務是否正常運作 |
 | `GET` | [`/api/config`](#get-apiconfig) | 模型、硬體、分辨說話者、自動標點、監看資料夾的狀態，匯出格式與上限設定 |
 | `POST` | [`/api/hardware/retune`](#post-apihardwareretune) | 重新調校 |
 | `POST` | [`/api/hardware/settings`](#post-apihardwaresettings) | 改用另一個實測過的設定 |
@@ -47,7 +70,7 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 | --- | --- |
 | `default_model` | 預設模型的 id |
 | `models` | 每個模型的 `id`、`name`、`tagline`、`description`、`backend`（`local`／`remote`）、`hotwords`（是否支援熱詞）、`state`、`error`、`seconds_per_audio_second` |
-| `hardware` | 調校狀態（`state`：`tuning`、`ready`、`failed`、`not_needed`）、使用中的設定與實測紀錄 |
+| `hardware` | 調校狀態（`state`：`starting`、`tuning`、`ready`、`failed`、`not_needed`）、使用中的設定與實測紀錄 |
 | `speakers` | 分辨說話者模型的狀態、`max_speakers`、`max_name_length`；沒有提供這個功能時是 `null` |
 | `punctuation` | 標點模型的狀態（`state`：`downloading`、`ready`、`failed`）；沒有提供這個功能時是 `null` |
 | `watch` | 監看資料夾的設定與狀態（`directory`、`model`、`speakers`、`punctuation`、`formats`、處理中的 `active`、已完成的 `processed`、`error`）；沒有監看時是 `null` |
@@ -59,7 +82,7 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 
 ## POST /api/hardware/retune
 
-重新偵測硬體，把預設模型重新轉成要實測的權重格式並實測（i7-9700 上約 7–9 分鐘），期間無法辨識。
+重新偵測硬體，把預設模型重新轉成要實測的權重格式並實測（Core i7-9700 上約 7–9 分鐘，Core Ultra 7 155U 上約 7 分鐘），期間無法辨識。
 
 **回應：**
 - 202：新的調校狀態
@@ -189,7 +212,7 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 
 替說話者改名，JSON：`{"name": "王小明"}`，最多 40 字。
 
-**回應：** 200 更新後的工作狀態，或 404（找不到工作或說話者）
+**回應：** 200 更新後的工作狀態、404（找不到工作或說話者），或 422（空白或超過 40 字）
 
 ## PATCH /api/jobs/{id}/segments/{index}
 
@@ -237,7 +260,7 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 
 ## GET /api/renders/{id}/file
 
-**回應：** 200 MP4 檔（附件），檔名是「原檔名-字幕.mp4」；或 409（還沒完成）
+**回應：** 200 MP4 檔（附件），檔名是「原檔名-字幕.mp4」；404（找不到或已過期），或 409（還沒完成）
 
 ## GET /api/voices
 

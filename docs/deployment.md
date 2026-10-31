@@ -1,5 +1,11 @@
 # 部署
 
+[README](../README.md) · **部署** · [設定](configuration.md) · [運作方式](how-it-works.md) · [API](api.md) · [命令列與 MCP](cli.md) · [效能實測](benchmarks.md)
+
+安裝、啟動、更新與日常維運：本機安裝腳本、Docker、監看資料夾、日誌，以及各種硬體的支援範圍。
+
+**本頁**：[第一次啟動](#第一次啟動) · [Windows](#windows-安裝腳本) · [Linux](#linux-安裝腳本) · [更新版本](#更新版本) · [讓其他電腦連線](#讓其他電腦連線) · [Docker](#docker) · [監看資料夾](#監看資料夾) · [日誌](#日誌) · [字幕字型](#字幕字型) · [共用主機](#共用主機) · [限制](#限制) · [GPU 支援](#gpu-支援)
+
 | 方式 | 適用 | GPU |
 | --- | --- | --- |
 | [Windows 安裝腳本](#windows-安裝腳本) | 個人電腦 | Intel 內顯（OpenVINO）、NVIDIA（CUDA） |
@@ -8,12 +14,25 @@
 
 GPU 加速的範圍見文末的 [GPU 支援](#gpu-支援)。
 
+```mermaid
+flowchart TD
+    start{"要在哪裡執行？"}
+    start -->|Windows 個人電腦| win["Windows 安裝腳本<br/>install.ps1<br/>可用 Intel 內顯、NVIDIA"]
+    start -->|Linux 個人電腦或伺服器| linux["Linux 安裝腳本<br/>install.sh<br/>可用 Intel 內顯、NVIDIA、AMD"]
+    start -->|伺服器，用 Docker| gpu{"有哪種顯示卡？"}
+    gpu -->|沒有| cpu["compose.yaml<br/>CPU 版"]
+    gpu -->|NVIDIA| cuda["再疊加<br/>compose.cuda.yaml"]
+    gpu -->|AMD，Linux 主機| rocm["再疊加<br/>compose.rocm.yaml"]
+```
+
+圖的文字說明：Windows 個人電腦用 Windows 安裝腳本，Linux 個人電腦或伺服器用 Linux 安裝腳本，兩者都會自動偵測顯示卡，也能用 Intel 內顯。用 Docker 時，沒有顯示卡就用 `compose.yaml` 的 CPU 版；NVIDIA 顯示卡再疊加 `compose.cuda.yaml`，AMD 顯示卡（只限 Linux 主機）再疊加 `compose.rocm.yaml`。本專案的 Docker 設定不支援 Intel 內顯（見[不支援或未實測的硬體](#不支援或未實測的硬體)）。
+
 ## 第一次啟動
 
 不論用哪種方式部署，第一次啟動都會：
 
 - 下載兩個模型的原始權重（約 9 GB），需要連上 Hugging Face；分辨說話者與自動標點的模型（共約 330 MB）在背景下載。
-- [自動調校](how-it-works.md#自動調校)：預設模型以原始精度匯出一次，只壓縮出真正要實測的權重格式，再在各裝置上實測。在 Core i7-9700（8 GB 記憶體）上，匯出約 2 分鐘、每種格式壓縮約 1–1.5 分鐘、實測約 4 分鐘，整輪約 7–9 分鐘；期間暫時多佔約 4–7 GB 磁碟，調校完只留選中的格式。
+- [自動調校](how-it-works.md#自動調校)：預設模型以原始精度匯出一次，只壓縮出真正要實測的權重格式，再在各裝置上實測。在 Core i7-9700（8 GB 記憶體）上，匯出約 2 分鐘、每種格式壓縮約 1–1.5 分鐘、實測約 4 分鐘，整輪約 7–9 分鐘；在 Core Ultra 7 155U（32 GB 記憶體）上，int8 已轉好時整輪約 7 分鐘。期間暫時多佔約 4–7 GB 磁碟，調校完只留選中的格式。
 - 把另一個模型轉成選中的格式；Breeze ASR 26 轉 int8 在同一台電腦上約 7 分鐘。
 
 轉換期間記憶體峰值約 9.5 GB；8 GB 記憶體的電腦也能完成，但會大量使用分頁檔、比較慢。進度顯示在狀態列；預設模型準備好就能先用，之後啟動約 15 秒就緒。
@@ -67,15 +86,20 @@ git pull
 uv sync --frozen
 ```
 
-NVIDIA、AMD 顯示卡的環境改用安裝時的 `--group`（或重跑安裝腳本）。安裝腳本只在 `.env` 不存在時才從 `.env.example` 建立，已有的 `.env` 不會被改；新版本若新增了必填的變數，服務會拒絕啟動並說出缺少哪一個，照 `.env.example` 補上即可（[CHANGELOG](../CHANGELOG.md) 會列出）。
+NVIDIA、AMD 顯示卡的環境改用 `uv sync --frozen --no-default-groups --group cu130`（AMD 換成 `rocm72`），或重跑安裝腳本。
+
+> [!IMPORTANT]
+> 安裝腳本只在 `.env` 不存在時才從 `.env.example` 建立，已有的 `.env` 不會被改。新版本若新增了必填的變數，服務會拒絕啟動並說出缺少哪一個，照 `.env.example` 補上即可；每版新增了什麼見 [CHANGELOG](../CHANGELOG.md)。
 
 Docker：`git pull` 後 `docker compose up -d --build`，或用發布的映像檔 `docker compose pull`、`docker compose up -d --no-build`；`.env` 一樣要補上新的變數。
 
 ## 讓其他電腦連線
 
+> [!WARNING]
+> 服務沒有登入驗證，連得到的電腦都能讀取、修改所有辨識結果與語者庫。開放前請先看 [SECURITY.md](../SECURITY.md)。
+
 - 原生執行：把 `.env` 的 `ASR_HOST` 改成 `0.0.0.0`，並確認防火牆允許該埠。
 - Docker：把 `ASR_PUBLISH_ADDRESS` 改成 `0.0.0.0`。
-- 服務沒有登入驗證，開放前請先看 [SECURITY.md](../SECURITY.md)。
 - 瀏覽器只允許在 HTTPS 或 `localhost` 的網頁使用麥克風，其他電腦以 http 開啟時按「錄音」只會提示原因。要錄音有兩種做法：
   - 長期使用：在服務前面加一層 HTTPS 反向代理。
   - 測試或內網少數電腦：在那台電腦的 Chrome 開 `chrome://flags/#unsafely-treat-insecure-origin-as-secure`（Edge 是 `edge://flags/#unsafely-treat-insecure-origin-as-secure`），把「Insecure origins treated as secure」改成 Enabled，在文字框填入服務的完整網址（含 `http://` 與埠號，例如 `http://192.168.1.10:7860`，多個網址用逗號分隔），再按 Relaunch 重新啟動瀏覽器。這個設定只對該台電腦的瀏覽器有效，公司管理的瀏覽器可能被政策鎖住；錄音在 http 下以明文傳送，不要用在不信任的網路。
@@ -92,7 +116,7 @@ docker compose up -d --build
 ```
 
 - 資料（權重快取、轉換後的模型、硬體設定檔、辨識結果、詞彙表、語者庫、日誌）存在 `breeze-asr_asr-data` volume，重建映像檔不會重新下載或重新調校。
-- 容器網段由 `ASR_DOCKER_SUBNET` 指定，預設 `192.168.202.0/24`，請確認不會和內部網路衝突。
+- 容器網段由 `ASR_DOCKER_SUBNET` 指定，`.env.example` 填的是 `192.168.202.0/24`，請確認不會和內部網路衝突。
 - 轉換 Breeze ASR 26（原始權重 6 GB）時容器記憶體峰值約 6 GB，Docker Desktop 建議至少配置 8 GB（WSL2 預設為實體記憶體的一半）。
 
 ### NVIDIA GPU（CUDA）
@@ -195,7 +219,7 @@ COMPOSE_PATH_SEPARATOR=:
 
 ## 限制
 
-- 同一時間只處理一個辨識工作，其餘排隊；燒錄字幕另外排隊，一次燒一支，可以和辨識同時進行。重新啟動時還在排隊或處理中的工作會消失；已完成的結果保存在 `ASR_DATA_DIR/results`，到 `ASR_JOB_TTL_SECONDS` 才刪除。
+- 同一時間只處理一個辨識工作，其餘排隊；燒錄字幕另外排隊，一次燒一支，可以和辨識同時進行。重新啟動時還在排隊或處理中的工作會消失；已完成的結果儲存在 `ASR_DATA_DIR/results`，到 `ASR_JOB_TTL_SECONDS` 才刪除。
 - 第一次準備模型需要連上 Hugging Face；之後權重都在本機快取，離線環境可設定 `HF_HUB_OFFLINE=1`。
 - `.env.example` 的上限是單檔 2 GB、3 小時。近 3 小時的錄音辨識加分辨說話者約需 1 小時以上、各行程記憶體峰值合計約 8 GB；記憶體較少的電腦可以調低 `ASR_MAX_AUDIO_SECONDS`。
 

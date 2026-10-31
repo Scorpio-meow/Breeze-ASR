@@ -1,5 +1,7 @@
 # 命令列工具與 MCP server
 
+[README](../README.md) · [部署](deployment.md) · [設定](configuration.md) · [運作方式](how-it-works.md) · [API](api.md) · **命令列與 MCP** · [效能實測](benchmarks.md)
+
 兩者都是呼叫執行中的服務（先用 `scripts\start.ps1` 或桌面捷徑啟動），檔案從這台電腦上傳到服務，不經過其他地方。服務網址取自 `.env` 的 `ASR_HOST` 與 `ASR_PORT`（`0.0.0.0` 會改連 `127.0.0.1`），所以要在專案資料夾用 `uv run --env-file .env` 執行；命令列工具也可以用 `--url` 指定。
 
 ## 命令列工具
@@ -44,4 +46,7 @@ claude mcp add breeze-asr -- uv run --directory C:/code/Breeze-ASR --no-sync --e
 | `get_transcript` | 取得結果：`md`、`txt`、`srt`、`vtt`、`ass` 或 `json` |
 | `list_jobs` | 服務裡保留中的工作 |
 
-逐字稿會進到 MCP 用戶端的對話裡；內容不能交給外部 AI 的錄音，只用網頁或命令列工具。MCP server 的日誌寫到標準錯誤，由 MCP 用戶端保存；服務本身的日誌見[部署](deployment.md#日誌)。
+> [!CAUTION]
+> 逐字稿會進到 MCP 用戶端的對話裡，可能因此送到外部 AI 服務。內容不能交給外部 AI 的錄音，只用網頁或命令列工具。
+
+MCP server 的日誌寫到標準錯誤，由 MCP 用戶端保留；服務本身的日誌見[部署](deployment.md#日誌)。

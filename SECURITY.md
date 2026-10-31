@@ -2,13 +2,36 @@
 
 ## 部署範圍
 
-本服務是給個人電腦或受信任的區網使用的工具：
+本服務是給個人電腦或受信任的區網使用的工具。
 
-- **沒有登入驗證**。任何連得到服務的電腦都能上傳音訊、讀取與修改辨識結果、修改詞彙表、燒錄字幕、取消工作、切換硬體設定，以及檢視和刪除語者庫。
+> [!WARNING]
+> **沒有登入驗證**。任何連得到服務的電腦都能上傳音訊、讀取與修改辨識結果、修改詞彙表、燒錄字幕、取消工作、切換硬體設定，以及檢視和刪除語者庫。
+
 - 不要把服務直接暴露到網際網路。需要從外部使用時，請放在有驗證機制的反向代理或 VPN 後面。
-- 預設只監聽 `127.0.0.1`（`ASR_HOST`、`ASR_PUBLISH_ADDRESS`）；改成 `0.0.0.0` 前請先確認哪些電腦連得到。
+- `.env.example` 設定為只監聽 `127.0.0.1`（`ASR_HOST`、`ASR_PUBLISH_ADDRESS`）；改成 `0.0.0.0` 前請先確認哪些電腦連得到。
 
 ## 資料
+
+```mermaid
+flowchart LR
+    subgraph local["這台電腦"]
+        direction TB
+        browser["瀏覽器"] <--> service["Breeze ASR 服務"]
+        folder["監看資料夾"] --> service
+        service <--> data[("資料目錄<br/>結果、詞彙表、語者庫、日誌")]
+    end
+    subgraph outside["這台電腦以外"]
+        direction TB
+        hf["Hugging Face"]
+        remote["既有的 Breeze ASR 服務"]
+        mcp["MCP 用戶端<br/>例如 Claude"]
+    end
+    hf -->|只在第一次下載模型| service
+    service -.->|只有設成 remote 的模型| remote
+    service -.->|只有使用 MCP server 時| mcp
+```
+
+圖的文字說明：瀏覽器、監看資料夾、Breeze ASR 服務與資料目錄都在同一台電腦上，錄音與結果不會離開這台電腦。對外連線只有三種：第一次啟動時從 Hugging Face 下載模型；`models.json` 設成 `remote` 的模型，會把音訊送到指定的 Breeze ASR 服務；使用 MCP server 時，逐字稿會交給 MCP 用戶端（例如 Claude）。
 
 - 上傳的音訊解碼後存在 `ASR_DATA_DIR`，辨識完成即刪除；結果在 `ASR_JOB_TTL_SECONDS` 到期後刪除。
 - 燒錄字幕時上傳的影片在燒完後刪除；燒好的影片放在 `ASR_DATA_DIR/renders`，到 `ASR_JOB_TTL_SECONDS` 或服務重新啟動時刪除。

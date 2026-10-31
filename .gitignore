@@ -6,4 +6,5 @@ __pycache__/
 private/
 .pytest_cache/
 Breeze-ASR-25/
+.codegraph/
 kernel.errors.txt

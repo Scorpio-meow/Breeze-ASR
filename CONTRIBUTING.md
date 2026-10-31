@@ -22,7 +22,7 @@ uv run --frozen ruff check app tests
 uv run --frozen pytest
 ```
 
-GitHub Actions 會在 Ubuntu 與 Windows 上跑同樣的檢查，三項都通過才會合併。
+GitHub Actions 會在 Ubuntu 跑 `ruff check` 與 `ruff format --check`、在 Ubuntu 與 Windows 跑 pytest，並檢查腳本語法、建置 CPU 版 Docker 映像檔，全部通過才會合併。
 
 ## 撰寫原則
 
@@ -32,6 +32,8 @@ GitHub Actions 會在 Ubuntu 與 Windows 上跑同樣的檢查，三項都通過
 - 介面維持字幕編輯軟體的風格：工具列、時間軸、字幕列表、右側面板、狀態列；狀態訊息放在狀態列，不在頁面上加說明文字。
 - 前端是純 HTML／CSS／JavaScript，不引入建置工具。
 - 檔案一律 UTF-8、LF 換行（`.gitattributes` 已設定）。
+- 文件用臺灣的用詞（例如檔案、程式碼、預設、記憶體、時間戳記）。流程與架構圖用 Mermaid 或表格，不用 ASCII 圖（中文字寬會讓 ASCII 圖對不齊），並在圖下方附文字說明，讓看不到圖的人也讀得懂。
+- 文件只寫現在的行為；已移除的功能從文件拿掉，不寫和舊版的比較，變更過程留給 `CHANGELOG.md`。
 
 ## 回報問題
 

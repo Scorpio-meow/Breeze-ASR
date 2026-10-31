@@ -32,6 +32,7 @@ _MEASURE_RUNS = 2
 _MAX_CER = 0.15
 _MAX_CER_INCREASE = 0.01
 _ACCELERATOR_MARGIN = 0.15
+_MEMORY_MARGIN = 0.05
 _FORMAT_TYPES = {"int4": ov.Type.i4, "int8": ov.Type.i8, "fp16": ov.Type.f16, "fp32": ov.Type.f32}
 _BASE_WEIGHT_FORMAT = "fp32"
 _DEVICE_PRECISIONS = {"FP32": ov.Type.f32, "FP16": ov.Type.f16, "BF16": ov.Type.bf16}
@@ -281,7 +282,7 @@ def _is_cpu(record: dict) -> bool:
     return record["engine"] == "openvino" and record["device"].startswith("CPU")
 
 
-def _choose(usable: list[dict]) -> tuple[dict, str]:
+def _choose_speed(usable: list[dict]) -> tuple[dict, str]:
     fastest = min(usable, key=lambda r: r["rtf"])
     reason = f"選擇 {fastest['label']}：實測處理時間為音訊長度的 {fastest['rtf']:.2f} 倍，是可用裝置中最快的"
     if not _is_cpu(fastest):
@@ -295,6 +296,26 @@ def _choose(usable: list[dict]) -> tuple[dict, str]:
         f"選擇 {chosen['label']}：實測為音訊長度的 {chosen['rtf']:.2f} 倍，只比 CPU 慢 {gap:.0%}"
         f"（{_ACCELERATOR_MARGIN:.0%} 以內），改用 GPU 讓 CPU 留給其他工作"
     )
+
+
+def _choose(usable: list[dict]) -> tuple[dict, list[str]]:
+    chosen, reason = _choose_speed(usable)
+    lighter = [
+        r
+        for r in usable
+        if (r["engine"], r["device"]) == (chosen["engine"], chosen["device"])
+        and r["rtf"] <= chosen["rtf"] * (1 + _MEMORY_MARGIN)
+        and r["memory_bytes"] < chosen["memory_bytes"]
+    ]
+    if not lighter:
+        return chosen, [reason]
+    leanest = min(lighter, key=lambda r: r["memory_bytes"])
+    return leanest, [
+        reason,
+        f"改用 {leanest['label']}：實測為音訊長度的 {leanest['rtf']:.3f} 倍，和上面的 {chosen['rtf']:.3f} 倍相差"
+        f" {_MEMORY_MARGIN:.0%} 以內，執行時記憶體 {gb(leanest['memory_bytes'])} GB，"
+        f"比它少 {gb(chosen['memory_bytes'] - leanest['memory_bytes'])} GB",
+    ]
 
 
 def _grade(records: list[dict]) -> None:
@@ -417,11 +438,11 @@ def run_tuning(settings: Settings, catalog: Catalog, report: Reporter) -> Hardwa
             f"{item['label']}：{item['reason']}" for item in skipped
         ]
         raise TuningError("所有裝置都無法正確執行：" + "；".join(problems))
-    best, choice_reason = _choose(usable)
+    best, choice_reasons = _choose(usable)
     chosen = next(c for c in candidates if c.label == best["label"])
     count, memory_reason = max_loaded(chosen.config, best["memory_bytes"], len(local_models))
     config = replace(chosen.config, max_loaded_models=count)
-    reasons = [choice_reason, memory_reason]
+    reasons = [*choice_reasons, memory_reason]
     log.info("自動調校結論：%s", "；".join(reasons))
     for model in local_models:
         _remove_unused(settings, model, config)
