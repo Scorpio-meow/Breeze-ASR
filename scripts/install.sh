@@ -33,6 +33,8 @@ uv sync --frozen --no-default-groups --group "$group"
 if [ ! -f .env ]; then
   cp .env.example .env
   echo "已建立 .env，可依需要修改"
+else
+  uv run --no-sync python -m app.envfile .env.example .env
 fi
 
 echo "安裝完成。執行 scripts/start.sh 啟動；第一次啟動會下載並轉換約 9 GB 的模型。"

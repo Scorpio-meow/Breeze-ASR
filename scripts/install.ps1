@@ -36,6 +36,11 @@ if ($LASTEXITCODE -ne 0) {
 if (-not (Test-Path .env)) {
     Copy-Item .env.example .env
     Write-Host "已建立 .env，可依需要修改"
+} else {
+    uv run --no-sync python -m app.envfile .env.example .env
+    if ($LASTEXITCODE -ne 0) {
+        throw "無法檢查 .env 是否缺少設定"
+    }
 }
 
 if (-not $NoShortcut) {

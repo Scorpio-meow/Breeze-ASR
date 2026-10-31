@@ -54,7 +54,7 @@ powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 | `-Device cpu`、`-Device cuda` | 指定 PyTorch 版本 |
 | `-NoShortcut` | 不建立桌面捷徑 |
 
-之後點桌面捷徑，或執行 `scripts\start.ps1` 啟動；服務就緒後會自動開啟瀏覽器（加 `-NoBrowser` 則不開），關閉視窗即停止服務。
+之後點桌面捷徑，或執行 `scripts\start.ps1` 啟動；服務就緒後會自動開啟瀏覽器（加 `-NoBrowser` 則不開），關閉視窗即停止服務。啟動失敗或服務異常結束時，視窗會停住並顯示原因，按 Enter 才關閉。
 
 不用腳本也可以手動執行：
 
@@ -89,9 +89,9 @@ uv sync --frozen
 NVIDIA、AMD 顯示卡的環境改用 `uv sync --frozen --no-default-groups --group cu130`（AMD 換成 `rocm72`），或重跑安裝腳本。
 
 > [!IMPORTANT]
-> 安裝腳本只在 `.env` 不存在時才從 `.env.example` 建立，已有的 `.env` 不會被改。新版本若新增了必填的變數，服務會拒絕啟動並說出缺少哪一個，照 `.env.example` 補上即可；每版新增了什麼見 [CHANGELOG](../CHANGELOG.md)。
+> 安裝腳本只在 `.env` 不存在時才從 `.env.example` 建立。已有 `.env` 時，安裝與啟動腳本會把新版本新增、`.env` 裡還沒有的變數依 `.env.example` 的預設值補在檔尾，並列出補了哪些；已經設定的值不會被改。每版新增了什麼見 [CHANGELOG](../CHANGELOG.md)。
 
-Docker：`git pull` 後 `docker compose up -d --build`，或用發布的映像檔 `docker compose pull`、`docker compose up -d --no-build`；`.env` 一樣要補上新的變數。
+Docker：`git pull` 後 `docker compose up -d --build`，或用發布的映像檔 `docker compose pull`、`docker compose up -d --no-build`。Docker 不經過啟動腳本，`.env` 缺少新的變數時服務會拒絕啟動並說出缺少哪一個，可以照 `.env.example` 手動補上，或在主機上執行 `uv run --no-sync python -m app.envfile .env.example .env`。
 
 ## 讓其他電腦連線
 

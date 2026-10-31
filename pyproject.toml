@@ -1,6 +1,6 @@
 [project]
 name = "breeze-asr-webapp"
-version = "0.2.2"
+version = "0.2.3"
 description = "Breeze ASR 25 / 26 語音辨識網頁 APP（OpenVINO 或 PyTorch 推論，可切換模型）"
 requires-python = ">=3.12,<3.13"
 readme = "README.md"

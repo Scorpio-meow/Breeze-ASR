@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-11-01
+
+### Added
+
+- 安裝與啟動腳本會把 `.env` 缺少的變數依 `.env.example` 的預設值補上，並列出補了哪些；已設定的值不會被改。從舊版更新時不必再手動對照 `.env.example`（Docker 版見部署文件）。
+
+### Changed
+
+- Windows 的 `scripts\start.ps1`（桌面捷徑）啟動失敗或服務異常結束時，視窗會停住並顯示原因，按 Enter 才關閉，不再一閃就消失。
+
 ## [0.2.2] - 2026-11-01
 
 ### Added
@@ -89,7 +99,8 @@
 - 在不能錄音的網址按「錄音」，狀態列說明原因與瀏覽器的設定方式。
 - 所有回應加上 `Cache-Control: no-cache`，更新版本後瀏覽器不會繼續使用舊的前端程式。
 
-[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.1.0...v0.2.0
