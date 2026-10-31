@@ -137,7 +137,7 @@
     "file": "3dspeaker_speech_eres2net_base_200k_sv_zh-cn_16k-common.onnx"
   },
   "num_threads": 4,
-  "cluster_threshold": 0.5,
+  "cluster_threshold": 0.65,
   "merge_threshold": 0.66,
   "min_speaker_factor": 0.7,
   "match_threshold": 0.7,

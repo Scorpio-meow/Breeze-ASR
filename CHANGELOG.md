@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-11-01
+
+### Changed
+
+- 分辨說話者第一輪分群的門檻 `cluster_threshold` 由 0.5 改為 0.65：遠距收音的多人會議錯誤率略降，自動判斷的人數也比較穩（實測見 `docs/benchmarks.md`）。自訂過 `models.json` 的話請自行改這一欄。
+
 ## [0.2.3] - 2026-11-01
 
 ### Added
@@ -99,7 +105,8 @@
 - 在不能錄音的網址按「錄音」，狀態列說明原因與瀏覽器的設定方式。
 - 所有回應加上 `Cache-Control: no-cache`，更新版本後瀏覽器不會繼續使用舊的前端程式。
 
-[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.0...v0.2.1
