@@ -36,6 +36,7 @@ sequenceDiagram
 | 方法 | 路徑 | 說明 |
 | --- | --- | --- |
 | `GET` | [`/api/health`](#get-apihealth) | 服務是否正常運作 |
+| `POST` | [`/api/client-errors`](#post-apiclient-errors) | 網頁回報錯誤到日誌 |
 | `GET` | [`/api/config`](#get-apiconfig) | 模型、硬體、分辨說話者、自動標點、監看資料夾的狀態，匯出格式與上限設定 |
 | `POST` | [`/api/hardware/retune`](#post-apihardwareretune) | 重新調校 |
 | `POST` | [`/api/hardware/settings`](#post-apihardwaresettings) | 改用另一個實測過的設定 |
@@ -61,6 +62,14 @@ sequenceDiagram
 ## GET /api/health
 
 **回應：** 200 `{"status": "ok"}`
+
+## POST /api/client-errors
+
+網頁遇到未處理的 JavaScript 錯誤或上傳時連線中斷，會用這個端點寫進 `breeze-asr.log`；同一則錯誤每次開啟網頁只回報一次，最多 20 則。
+
+**請求：** JSON `{"kind": "error", "message": "x is not defined", "source": "app.js:10:5"}`，三個欄位都必填。換行會併成一行，每欄只記前 1000 個字。
+
+**回應：** 204
 
 ## GET /api/config
 

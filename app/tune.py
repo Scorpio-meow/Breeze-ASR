@@ -22,6 +22,7 @@ from .benchmark import SAMPLE_META
 from .catalog import Catalog, ModelSpec
 from .config import Settings
 from .hardware import EngineConfig, HardwareProfile, gb, max_loaded
+from .logsetup import log_stderr, remove_tree
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +63,12 @@ def _nvidia_gpus() -> list[dict]:
         text=True,
         check=False,
     )
+    if proc.returncode != 0:
+        log.warning(
+            "nvidia-smi 執行失敗（結束代碼 %d），不使用 NVIDIA GPU：%s",
+            proc.returncode,
+            " ".join(proc.stderr.split())[-300:],
+        )
     gpus = []
     for line in proc.stdout.strip().splitlines() if proc.returncode == 0 else []:
         index, name, total, free = (part.strip() for part in line.split(","))
@@ -259,7 +266,7 @@ def _benchmark(candidate: _Candidate, model_dir: Path, spec: ModelSpec, settings
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     try:
         proc = subprocess.run(
-            [sys.executable, "-m", "app.benchmark", json.dumps(args)],
+            [sys.executable, "-X", "faulthandler", "-m", "app.benchmark", json.dumps(args)],
             cwd=_PACKAGE_ROOT,
             capture_output=True,
             text=True,
@@ -268,13 +275,25 @@ def _benchmark(candidate: _Candidate, model_dir: Path, spec: ModelSpec, settings
             env=env,
             timeout=_BENCHMARK_TIMEOUT_SECONDS,
         )
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
+        if exc.stderr:
+            stderr = exc.stderr.decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else exc.stderr
+            log.warning(
+                "實測 %s 超過 %d 秒，到目前為止的錯誤輸出：\n%s",
+                candidate.label,
+                _BENCHMARK_TIMEOUT_SECONDS,
+                stderr.strip(),
+            )
         return {"status": "failed", "reason": f"超過 {_BENCHMARK_TIMEOUT_SECONDS} 秒仍未完成"}
     if proc.returncode != 0:
+        log.warning(
+            "實測 %s 失敗（結束代碼 %d），完整錯誤輸出：\n%s", candidate.label, proc.returncode, proc.stderr.strip()
+        )
         tail = [line for line in proc.stderr.strip().splitlines() if line.strip()][-1:] or [
             f"結束代碼 {proc.returncode}"
         ]
         return {"status": "failed", "reason": f"執行失敗：{tail[0][:300]}"}
+    log_stderr(log, f"實測 {candidate.label}", proc.stderr)
     return {"status": "measured", **json.loads(proc.stdout.strip().splitlines()[-1])}
 
 
@@ -356,7 +375,7 @@ def _remove_unused(settings: Settings, spec: ModelSpec, config: EngineConfig) ->
             continue
         path = preparation.converted_dir(settings, spec, weight_format)
         if path.exists():
-            shutil.rmtree(path, ignore_errors=True)
+            remove_tree(path, log)
             log.info("刪除用不到的 %s", path.name)
 
 

@@ -55,5 +55,5 @@
 - 字幕編輯：網頁的修改（改說話者名字除外）都以 `PUT /api/jobs/{id}/transcript` 送出整份字幕與版本號；復原在瀏覽器端。
 - 原始檔：上傳的音訊辨識完就刪，舊結果要播放或燒錄字幕時再對應一次原始檔。
 - 監看資料夾：`ASR_WATCH_DIR` 裡的新錄音自動辨識，結果寫在原檔旁邊。
-- 日誌：同時寫到終端機與 `ASR_DATA_DIR/logs`（`breeze-asr.log`、`inference.log`），不記字幕內容與人名。
-- API：`GET /api/jobs` 列出工作、`POST /api/jobs` 建立工作、`GET /api/jobs/{id}` 輪詢、`DELETE /api/jobs/{id}` 取消、`PUT /api/jobs/{id}/transcript` 修改、`GET /api/jobs/{id}/export/{fmt}` 下載、`POST /api/jobs/{id}/renders` 燒錄字幕；`GET`／`PUT /api/glossary` 詞彙表；`POST /api/hardware/retune` 重新調校、`POST /api/hardware/settings` 改用實測過的設定。
+- 日誌：同時寫到終端機與 `ASR_DATA_DIR/logs`（`breeze-asr.log`、`inference.log`；原生程式碼當掉時的呼叫堆疊在 `breeze-asr-crash.log`、`inference-crash.log`，推論子行程裡原生函式庫的輸出在 `inference-native.log`），等級與換檔由 `ASR_LOG_LEVEL`、`ASR_LOG_FILE_MB`、`ASR_LOG_FILE_COUNT` 設定；不記字幕內容、熱詞內容與人名。
+- API：`GET /api/jobs` 列出工作、`POST /api/jobs` 建立工作、`GET /api/jobs/{id}` 輪詢、`DELETE /api/jobs/{id}` 取消、`PUT /api/jobs/{id}/transcript` 修改、`GET /api/jobs/{id}/export/{fmt}` 下載、`POST /api/jobs/{id}/renders` 燒錄字幕；`GET`／`PUT /api/glossary` 詞彙表；`POST /api/hardware/retune` 重新調校、`POST /api/hardware/settings` 改用實測過的設定；`POST /api/client-errors` 網頁回報錯誤到日誌。

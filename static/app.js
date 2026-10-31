@@ -109,6 +109,31 @@ function storageRemove(key) {
   }
 }
 
+const CLIENT_ERROR_LIMIT = 20;
+const reportedErrors = new Set();
+
+function reportClientError(kind, message, source) {
+  const key = `${kind}|${message}|${source}`;
+  if (reportedErrors.has(key) || reportedErrors.size >= CLIENT_ERROR_LIMIT) return;
+  reportedErrors.add(key);
+  fetch("/api/client-errors", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind, message: String(message), source: String(source) }),
+    keepalive: true,
+  }).catch(() => {});
+}
+
+function bindErrorReports() {
+  window.addEventListener("error", (event) => {
+    reportClientError("error", event.message, event.error?.stack ?? `${event.filename}:${event.lineno}:${event.colno}`);
+  });
+  window.addEventListener("unhandledrejection", (event) => {
+    const reason = event.reason;
+    reportClientError("unhandledrejection", reason instanceof Error ? reason.message : String(reason), reason?.stack ?? "");
+  });
+}
+
 function announce(message) {
   const node = $("announcer");
   node.textContent = "";
@@ -1257,7 +1282,10 @@ function upload(url, fields, file, name, onProgress) {
       if (xhr.status >= 200 && xhr.status < 300) resolve(data);
       else reject(new Error(typeof data.detail === "string" ? data.detail : `上傳失敗（HTTP ${xhr.status}）`));
     });
-    xhr.addEventListener("error", () => reject(new Error("網路連線中斷")));
+    xhr.addEventListener("error", () => {
+      reportClientError("upload", "網路連線中斷", url);
+      reject(new Error("網路連線中斷"));
+    });
     xhr.send(body);
   });
 }
@@ -2574,6 +2602,7 @@ function bindResultTools() {
   });
 }
 
+bindErrorReports();
 bindUpload();
 bindRecorder();
 bindForm();

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import secrets
-import shutil
 import subprocess
 import threading
 import time
@@ -13,6 +12,7 @@ from pathlib import Path
 import imageio_ffmpeg
 
 from .audio import DEMUXERS
+from .logsetup import log_stderr, remove_tree
 
 log = logging.getLogger(__name__)
 
@@ -67,7 +67,10 @@ class RenderQueue:
         self._cond = threading.Condition()
 
     def start(self) -> None:
-        shutil.rmtree(self._work_dir, ignore_errors=True)
+        leftover = sum(1 for _ in self._work_dir.iterdir()) if self._work_dir.is_dir() else 0
+        if leftover:
+            log.info("清除上次服務留下的 %d 個燒錄暫存資料夾", leftover)
+        remove_tree(self._work_dir, log)
         self._work_dir.mkdir(parents=True, exist_ok=True)
         threading.Thread(target=self._run, name="render-worker", daemon=True).start()
 
@@ -84,7 +87,7 @@ class RenderQueue:
         with self._cond:
             self._purge_expired()
             if len(self._pending) >= self._max_queue:
-                shutil.rmtree(directory, ignore_errors=True)
+                remove_tree(directory, log)
                 raise RenderQueueFull(f"排隊中的燒錄工作已達上限 {self._max_queue} 筆，請稍後再試")
             render = Render(render_id, job_id, download_name, directory, seconds)
             self._renders[render_id] = render
@@ -92,6 +95,12 @@ class RenderQueue:
             self._cond.notify()
         log.info("燒錄字幕 %s 排入佇列（工作 %s，%.1f 秒）", render_id, job_id, seconds)
         return render
+
+    def log_unfinished(self) -> None:
+        with self._cond:
+            unfinished = [(r.id, r.job_id, r.status) for r in self._renders.values() if not r.done]
+        for render_id, job_id, status in unfinished:
+            log.warning("服務關閉時燒錄字幕 %s（工作 %s）還沒完成：%s，不會保存影片", render_id, job_id, status)
 
     def get(self, render_id: str) -> Render | None:
         with self._cond:
@@ -118,10 +127,12 @@ class RenderQueue:
             if render.status == "queued":
                 self._pending.remove(render_id)
                 self._finish(render, "cancelled", None)
-                shutil.rmtree(render.directory, ignore_errors=True)
+                remove_tree(render.directory, log)
+                log.info("燒錄字幕 %s 已取消（還在排隊）", render_id)
                 return True
             render.status = "cancelling"
             process = render.process
+        log.info("燒錄字幕 %s 取消中", render_id)
         if process is not None and process.poll() is None:
             process.kill()
         return True
@@ -137,7 +148,9 @@ class RenderQueue:
         expired = [r for r in self._renders.values() if r.done and (r.finished_at or 0) < cutoff]
         for render in expired:
             del self._renders[render.id]
-            shutil.rmtree(render.directory, ignore_errors=True)
+            remove_tree(render.directory, log)
+        if expired:
+            log.info("已清除 %d 筆過期的燒錄字幕", len(expired))
 
     def _command(self) -> list[str]:
         return [
@@ -180,6 +193,7 @@ class RenderQueue:
         ]
 
     def _render(self, render: Render) -> None:
+        log.info("燒錄字幕 %s 開始，已排隊 %.1f 秒", render.id, time.time() - render.created_at)
         started = time.perf_counter()
         process = subprocess.Popen(
             self._command(),
@@ -196,13 +210,19 @@ class RenderQueue:
             render.status = "cancelling" if cancelled else "running"
         if cancelled:
             process.kill()
+        errors: list[str] = []
+        reader = threading.Thread(
+            target=lambda: errors.append(process.stderr.read()), name="render-stderr", daemon=True
+        )
+        reader.start()
         for line in process.stdout:
             key, _, value = line.strip().partition("=")
             if key == "out_time_us" and value.isdigit() and render.seconds > 0:
                 with self._cond:
                     render.progress = min(int(value) / 1_000_000 / render.seconds, 1.0)
-        stderr = process.stderr.read()
         code = process.wait()
+        reader.join()
+        stderr = "".join(errors)
         (render.directory / SOURCE_NAME).unlink(missing_ok=True)
         with self._cond:
             if render.status == "cancelling":
@@ -212,11 +232,12 @@ class RenderQueue:
             elif code != 0:
                 detail = "；".join(stderr.strip().splitlines()[-_STDERR_TAIL_LINES:]) or f"結束碼 {code}"
                 self._finish(render, "failed", f"燒錄字幕失敗：{detail}")
-                log.error("燒錄字幕 %s 失敗：%s", render.id, detail)
+                log.error("燒錄字幕 %s 失敗（結束代碼 %d），完整錯誤輸出：\n%s", render.id, code, stderr.strip())
             else:
                 render.progress = 1.0
                 self._finish(render, "succeeded", None)
                 log.info("燒錄字幕 %s 完成，耗時 %.1f 秒", render.id, time.perf_counter() - started)
+                log_stderr(log, f"燒錄字幕 {render.id} 的 ffmpeg", stderr)
 
     def _run(self) -> None:
         while True:
@@ -227,7 +248,7 @@ class RenderQueue:
                 render = self._renders[self._pending.popleft()]
             try:
                 self._render(render)
-            except OSError as exc:
+            except Exception as exc:
                 log.exception("燒錄字幕 %s 無法執行", render.id)
                 with self._cond:
                     self._finish(render, "failed", f"燒錄字幕無法執行：{exc}")

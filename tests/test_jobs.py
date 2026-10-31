@@ -110,3 +110,19 @@ def test_edited_segment_text_is_saved_and_exported(tmp_path):
     assert restored.text == "您好"
     with pytest.raises(SegmentNotFound):
         queue.edit_segment(job.id, 1, "多一段")
+
+
+class ProgressInference(FakeInference):
+    def transcribe(self, job_id, model_id, audio_path, hotwords, on_stage, on_progress) -> Transcript:
+        on_stage("transcribing")
+        for step in range(1, 21):
+            on_progress(step / 20)
+        return super().transcribe(job_id, model_id, audio_path, hotwords, lambda _stage: None, on_progress)
+
+
+def test_progress_is_logged_every_ten_percent(tmp_path, caplog):
+    with caplog.at_level("INFO", logger="app.jobs"):
+        job = _submit(_queue(tmp_path, ProgressInference(finish=True)), tmp_path)
+        _wait(lambda: job.status is JobStatus.SUCCEEDED)
+    progress = [r.getMessage() for r in caplog.records if "進度" in r.getMessage()]
+    assert [m.split("進度 ")[1].split("%")[0] for m in progress] == [str(p) for p in range(10, 100, 10)]

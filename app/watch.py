@@ -62,7 +62,15 @@ class FolderWatcher:
         return self._settings
 
     def start(self) -> None:
-        log.info("監看資料夾 %s，每 %d 秒檢查一次", self._settings.directory, self._settings.poll_seconds)
+        log.info(
+            "監看資料夾 %s，每 %d 秒檢查一次：模型 %s，說話者 %s，標點 %s，輸出 %s",
+            self._settings.directory,
+            self._settings.poll_seconds,
+            self._settings.model,
+            self._settings.speakers,
+            "開" if self._settings.punctuation else "關",
+            "、".join(self._settings.formats),
+        )
         threading.Thread(target=self._run, name="folder-watch", daemon=True).start()
 
     def status(self) -> dict:
@@ -109,6 +117,7 @@ class FolderWatcher:
         for source, job_id in list(self._active.items()):
             job = self._queue.get(job_id)
             if job is None:
+                log.warning("監看資料夾：%s 的工作 %s 已不在佇列裡，不會寫出結果", source.name, job_id)
                 with self._lock:
                     del self._active[source]
                 continue
@@ -148,13 +157,14 @@ class FolderWatcher:
         log.info("監看資料夾：%s 送出辨識，工作 %s", source.name, job.id)
 
     def scan(self) -> None:
-        self._check_active()
         try:
             candidates = self._candidates()
         except OSError as exc:
+            self._check_active()
             self._set_error(f"無法讀取監看資料夾：{exc}")
             return
         self._set_error(None)
+        self._check_active()
         current = {}
         for source in candidates:
             if source in self._active or self._done(source):

@@ -6,6 +6,7 @@ import logging
 import multiprocessing as mp
 import os
 import queue
+import signal
 import threading
 import time
 from collections.abc import Callable
@@ -18,14 +19,18 @@ import psutil
 
 from .catalog import Catalog, model_status
 from .config import ConfigError, Settings
-from .hardware import HardwareProfile, save_profile
-from .logsetup import log_to_file, setup_logging
+from .hardware import HardwareProfile, memory_usage, save_profile, system_memory
+from .logsetup import capture_native_stderr, log_crashes_to, log_to_file, set_level, setup_logging, versions
 from .transcript import Transcript
 
 log = logging.getLogger(__name__)
 
 _RESTART_DELAY_SECONDS = 5
 _PARENT_CHECK_SECONDS = 2
+_STOP_TIMEOUT_SECONDS = 10
+_CRASH_LOG = "inference-crash.log"
+_NATIVE_LOG = "inference-native.log"
+_PACKAGES = ("openvino", "openvino-genai", "optimum-intel", "transformers", "torch")
 
 
 class InferenceError(RuntimeError):
@@ -104,10 +109,24 @@ def _hardware_config(settings: Settings, catalog: Catalog, events: Queue):
 
 def _worker_main(settings: Settings, requests: Queue, events: Queue) -> None:
     setup_logging("推論")
-    log_to_file(settings.logs_dir / "inference.log", "推論")
+    set_level(settings.log_level)
+    log_to_file(settings.logs_dir / "inference.log", "推論", settings.log_file_bytes, settings.log_file_count)
+    log_crashes_to(settings.logs_dir / _CRASH_LOG, "推論行程", settings.log_file_bytes)
+    capture_native_stderr(settings.logs_dir / _NATIVE_LOG, "推論行程", settings.log_file_bytes)
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    if os.name == "nt":
+        signal.signal(signal.SIGBREAK, signal.SIG_IGN)
+    log.info("%s", versions(_PACKAGES))
     threading.Thread(target=_watch_parent, name="parent-watch", daemon=True).start()
+    try:
+        _serve(settings, requests, events)
+    except Exception:
+        log.exception("推論行程因未處理的例外而結束")
+        raise
 
-    from .audio import load_audio
+
+def _serve(settings: Settings, requests: Queue, events: Queue) -> None:
+    from .audio import SAMPLE_RATE, load_audio
     from .catalog import load_catalog
     from .engine import ModelManager
     from .hardware import tuned_speed
@@ -126,20 +145,32 @@ def _worker_main(settings: Settings, requests: Queue, events: Queue) -> None:
     )
     events.put(("models", manager.snapshot()))
     manager.start()
-    try:
-        while (request := requests.get()) is not None:
-            job_id, model_id, audio_path, hotwords = request
-            try:
-                audio = load_audio(Path(audio_path))
-                on_stage = functools.partial(_put_event, events, "stage", job_id)
-                on_progress = functools.partial(_put_event, events, "progress", job_id)
-                transcript = manager.transcribe(model_id, audio, hotwords, on_stage, on_progress)
-                events.put(("done", job_id, transcript.to_dict()))
-            except Exception as exc:
-                log.exception("工作 %s 辨識失敗", job_id)
-                events.put(("failed", job_id, str(exc)))
-    except KeyboardInterrupt:
-        pass
+    while (request := requests.get()) is not None:
+        job_id, model_id, audio_path, hotwords = request
+        try:
+            audio = load_audio(Path(audio_path))
+            log.info(
+                "工作 %s 開始辨識：%s，音訊 %.1f 秒，熱詞 %d 字；%s",
+                job_id,
+                model_id,
+                audio.size / SAMPLE_RATE,
+                len(hotwords),
+                memory_usage(),
+            )
+            on_stage = functools.partial(_put_event, events, "stage", job_id)
+            on_progress = functools.partial(_put_event, events, "progress", job_id)
+            transcript = manager.transcribe(model_id, audio, hotwords, on_stage, on_progress)
+            log.info(
+                "工作 %s 辨識完成：%d 段，耗時 %.1f 秒；%s",
+                job_id,
+                len(transcript.segments),
+                transcript.processing_seconds,
+                memory_usage(),
+            )
+            events.put(("done", job_id, transcript.to_dict()))
+        except Exception as exc:
+            log.exception("工作 %s 辨識失敗；%s", job_id, memory_usage())
+            events.put(("failed", job_id, str(exc)))
 
 
 @dataclass
@@ -181,13 +212,16 @@ class InferenceClient:
 
     def _shutdown_process(self) -> None:
         if self._process is not None and self._process.is_alive():
+            log.info("停止推論行程（pid %s）", self._process.pid)
             children = _children(self._process)
             self._requests.put(None)
-            self._process.join(timeout=10)
+            self._process.join(timeout=_STOP_TIMEOUT_SECONDS)
             if self._process.is_alive():
+                log.warning("推論行程 %d 秒內沒有結束，強制終止", _STOP_TIMEOUT_SECONDS)
                 self._process.terminate()
                 self._process.join()
             _kill(children)
+            log.info("推論行程已結束（exit code %s）", self._process.exitcode)
 
     def retune(self) -> None:
         log.info("重新調校：刪除 %s 並重新啟動推論行程", self._settings.hardware_profile)
@@ -210,11 +244,16 @@ class InferenceClient:
         self._restarting.set()
         try:
             self._shutdown_process()
-            change()
-            with self._lock:
-                self._models = self._initial_status()
-                self._hardware = hardware
-            self._spawn()
+            try:
+                change()
+            except Exception:
+                log.exception("變更硬體設定失敗，改用原本的設定重新啟動推論行程")
+                raise
+            finally:
+                with self._lock:
+                    self._models = self._initial_status()
+                    self._hardware = hardware
+                self._spawn()
         finally:
             self._restarting.clear()
 
@@ -293,42 +332,75 @@ class InferenceClient:
         return pending.transcript
 
     def _listen(self) -> None:
+        broken = False
         while not self._stopping.is_set():
             try:
                 event = self._events.get(timeout=1)
             except queue.Empty:
                 if not self._process.is_alive() and not self._stopping.is_set() and not self._restarting.is_set():
-                    self._restart_after_crash()
+                    try:
+                        self._restart_after_crash()
+                    except Exception:
+                        log.exception("重新啟動推論行程失敗，稍後再試")
                 continue
-            except (EOFError, OSError):
+            except (EOFError, OSError) as exc:
+                if not broken:
+                    log.warning("讀不到推論行程傳來的事件：%r", exc)
+                    broken = True
                 continue
-            kind = event[0]
-            if kind == "models":
-                with self._lock:
-                    self._models = event[1]
-                continue
-            if kind == "hardware":
-                with self._lock:
-                    self._hardware = event[1]
-                continue
+            if broken:
+                log.info("推論行程的事件恢復正常")
+                broken = False
+            try:
+                self._handle(event)
+            except Exception as exc:
+                log.exception("處理推論行程傳來的 %s 事件失敗", event[0])
+                self._fail(event, exc)
+
+    def _handle(self, event: tuple) -> None:
+        kind = event[0]
+        if kind == "models":
             with self._lock:
-                pending = self._pending.get(event[1])
-            if pending is None:
-                continue
-            if kind == "stage":
-                pending.started = True
-                pending.on_stage(event[2])
-            elif kind == "progress":
-                pending.on_progress(event[2])
-            elif kind == "done":
-                pending.transcript = Transcript.from_dict(event[2])
-                pending.done.set()
-            elif kind == "failed":
-                pending.error = event[2]
-                pending.done.set()
+                self._models = event[1]
+            return
+        if kind == "hardware":
+            with self._lock:
+                self._hardware = event[1]
+            return
+        with self._lock:
+            pending = self._pending.get(event[1])
+        if pending is None:
+            return
+        if kind == "stage":
+            pending.started = True
+            pending.on_stage(event[2])
+        elif kind == "progress":
+            pending.on_progress(event[2])
+        elif kind == "done":
+            pending.transcript = Transcript.from_dict(event[2])
+            pending.done.set()
+        elif kind == "failed":
+            pending.error = event[2]
+            pending.done.set()
+
+    def _fail(self, event: tuple, exc: Exception) -> None:
+        if event[0] not in ("done", "failed"):
+            return
+        with self._lock:
+            pending = self._pending.get(event[1])
+        if pending is not None:
+            pending.error = f"無法讀取推論行程傳回的結果：{exc}"
+            pending.done.set()
 
     def _restart_after_crash(self) -> None:
-        log.error("推論行程意外結束（exit code %s），%d 秒後重新啟動", self._process.exitcode, _RESTART_DELAY_SECONDS)
+        log.error(
+            "推論行程意外結束（exit code %s），%d 秒後重新啟動；%s；Python 例外的 traceback 在 inference.log，"
+            "原生程式碼當掉的呼叫堆疊在 %s",
+            self._process.exitcode,
+            _RESTART_DELAY_SECONDS,
+            system_memory(),
+            self._settings.logs_dir / _CRASH_LOG,
+        )
         with self._lock:
             pending = list(self._pending.values())
             self._models = self._initial_status()

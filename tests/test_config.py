@@ -20,6 +20,9 @@ ENV = {
     "ASR_JOB_TTL_SECONDS": "86400",
     "ASR_SUBTITLE_FONT": "Microsoft JhengHei",
     "ASR_SUBTITLE_FONTS_DIR": str(TESTS_DIR),
+    "ASR_LOG_LEVEL": "INFO",
+    "ASR_LOG_FILE_MB": "5",
+    "ASR_LOG_FILE_COUNT": "5",
     "ASR_WATCH_DIR": "off",
     "ASR_WATCH_MODEL": "MediaTek-Research/Breeze-ASR-25",
     "ASR_WATCH_SPEAKERS": "auto",
@@ -191,3 +194,11 @@ def test_unknown_fields_are_rejected(tmp_path):
     data["models"][0]["extra"] = 1
     with pytest.raises(ConfigError, match="extra"):
         load_catalog(_write(tmp_path, data))
+
+
+def test_log_level_is_validated(env):
+    env.setenv("ASR_LOG_LEVEL", "debug")
+    assert load_settings().log_level == "DEBUG"
+    env.setenv("ASR_LOG_LEVEL", "VERBOSE")
+    with pytest.raises(ConfigError, match="ASR_LOG_LEVEL"):
+        load_settings()

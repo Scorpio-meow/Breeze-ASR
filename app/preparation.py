@@ -17,6 +17,7 @@ from huggingface_hub import snapshot_download
 from .catalog import ModelSpec
 from .config import Settings, load_settings
 from .hardware import gb
+from .logsetup import log_stderr
 
 log = logging.getLogger(__name__)
 
@@ -109,6 +110,8 @@ def convert(spec: ModelSpec, snapshot: Path, target: Path, weight_format: str) -
         f"轉成 OpenVINO {weight_format}",
         lambda partial: [
             sys.executable,
+            "-X",
+            "faulthandler",
             "-m",
             "optimum.commands.optimum_cli",
             "export",
@@ -134,6 +137,8 @@ def compress(spec: ModelSpec, base: Path, target: Path, weight_format: str) -> N
         f"從 {base.name} 壓縮成 {weight_format}",
         lambda partial: [
             sys.executable,
+            "-X",
+            "faulthandler",
             "-m",
             "app.preparation",
             json.dumps({"base": str(base), "target": str(partial), "weight_format": weight_format}),
@@ -162,8 +167,12 @@ def _build(
     )
     if proc.returncode != 0:
         shutil.rmtree(partial, ignore_errors=True)
+        log.error(
+            "把 %s %s 失敗（結束代碼 %d），完整錯誤輸出：\n%s", spec.id, action, proc.returncode, proc.stderr.strip()
+        )
         tail = "\n".join(proc.stderr.strip().splitlines()[-5:])
         raise PreparationError(f"把 {spec.id} {action} 失敗：{tail}")
+    log_stderr(log, f"把 {spec.id} {action}", proc.stderr)
     marker = {"model": spec.id, "revision": spec.local.revision, "weight_format": weight_format}
     (partial / _MARKER).write_text(json.dumps(marker, ensure_ascii=False), encoding="utf-8")
     os.replace(partial, target)

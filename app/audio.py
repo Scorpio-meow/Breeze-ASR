@@ -67,7 +67,7 @@ def probe_media(path: Path) -> MediaInfo:
     return MediaInfo(seconds=seconds, has_video=re.search(r"Stream #\S+.*: Video:", output) is not None)
 
 
-def decode_to_file(path: Path, max_seconds: int, target: Path) -> float:
+def decode_to_file(path: Path, max_seconds: int, target: Path) -> tuple[float, list[str]]:
     cmd = [
         imageio_ffmpeg.get_ffmpeg_exe(),
         "-nostdin",
@@ -97,14 +97,14 @@ def decode_to_file(path: Path, max_seconds: int, target: Path) -> float:
     samples = target.stat().st_size // _SAMPLE_BYTES if target.exists() else 0
     if proc.returncode != 0 or samples == 0 or samples > max_seconds * SAMPLE_RATE:
         target.unlink(missing_ok=True)
+    problems = [line for line in proc.stderr.decode("utf-8", errors="replace").splitlines() if line.strip()]
     if proc.returncode != 0:
-        detail = proc.stderr.decode("utf-8", errors="replace").strip().splitlines()
-        raise AudioDecodeError("無法解析這個檔案的音訊" + (f"：{detail[-1]}" if detail else ""))
+        raise AudioDecodeError("無法解析這個檔案的音訊" + (f"：{problems[-1].strip()}" if problems else ""))
     if samples == 0:
         raise AudioDecodeError("檔案裡沒有可辨識的音訊")
     if samples > max_seconds * SAMPLE_RATE:
         raise AudioDecodeError(f"音訊長度超過上限 {max_seconds} 秒")
-    return samples / SAMPLE_RATE
+    return samples / SAMPLE_RATE, problems
 
 
 def waveform(path: Path, buckets: int) -> list[float]:

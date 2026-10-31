@@ -12,6 +12,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from .catalog import PunctuationConfig
+from .logsetup import log_stderr
 from .speakers import download_hub_file
 from .transcript import Transcript
 
@@ -22,6 +23,18 @@ _PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 
 class PunctuationError(RuntimeError):
     pass
+
+
+def _parse_output(stdout: str, count: int) -> list[str]:
+    try:
+        restored = json.loads(stdout)["texts"]
+    except (ValueError, KeyError, TypeError) as exc:
+        raise PunctuationError(f"自動標點的輸出無法解析（{type(exc).__name__}），保留原本沒有標點的文字") from exc
+    if restored is None:
+        raise PunctuationError("自動標點的結果和原文對不起來，保留原本沒有標點的文字")
+    if not isinstance(restored, list) or len(restored) != count:
+        raise PunctuationError("自動標點傳回的段數和原文不同，保留原本沒有標點的文字")
+    return restored
 
 
 class PunctuationService:
@@ -72,7 +85,7 @@ class PunctuationService:
         request = {"model": str(model), "num_threads": self._config.num_threads, "texts": texts}
         started = time.perf_counter()
         proc = subprocess.Popen(
-            [sys.executable, "-m", "app.punctuate"],
+            [sys.executable, "-X", "faulthandler", "-m", "app.punctuate"],
             cwd=_PACKAGE_ROOT,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
@@ -90,11 +103,12 @@ class PunctuationService:
             with self._lock:
                 self._proc = None
         if proc.returncode != 0:
+            if stderr.strip():
+                log.error("自動標點的子行程失敗（結束代碼 %d），完整錯誤輸出：\n%s", proc.returncode, stderr.strip())
             detail = "；".join(line for line in stderr.strip().splitlines()[-3:]) or f"結束碼 {proc.returncode}"
             raise PunctuationError(f"自動標點失敗：{detail}")
-        restored = json.loads(stdout)["texts"]
-        if restored is None:
-            raise PunctuationError("自動標點的結果和原文對不起來，保留原本沒有標點的文字")
+        log_stderr(log, "自動標點的子行程", stderr)
+        restored = _parse_output(stdout, len(texts))
         log.info("自動標點完成：%d 段，耗時 %.1f 秒", len(texts), time.perf_counter() - started)
         segments = [replace(s, text=t) for s, t in zip(transcript.segments, restored, strict=True)]
         return replace(transcript, segments=segments, text="\n".join(t for t in restored) or transcript.text)

@@ -1,6 +1,8 @@
 import asyncio
 
-from app.main import SecurityHeadersMiddleware
+from starlette.requests import Request
+
+from app.main import SecurityHeadersMiddleware, _log_rejection
 
 
 def _start(app_headers=(), method="GET", request_headers=()) -> dict:
@@ -45,3 +47,22 @@ def test_writes_from_other_sites_are_rejected():
     assert _status("POST", b"same-origin") == 200
     assert _status("POST", None) == 200
     assert _status("GET", b"cross-site") == 200
+
+
+def _request(method: str, path: str) -> Request:
+    return Request({"type": "http", "method": method, "path": path, "headers": [], "query_string": b""})
+
+
+def test_rejected_writes_are_logged_with_reason(caplog):
+    with caplog.at_level("WARNING", logger="app.main"):
+        _log_rejection(_request("POST", "/api/jobs"), 422, "檔案裡沒有可辨識的音訊")
+        _log_rejection(_request("GET", "/api/jobs/abc"), 404, "找不到這個工作")
+        _log_rejection(_request("POST", "/api/hotwords/count"), 422, "熱詞太長")
+    messages = [r.getMessage() for r in caplog.records]
+    assert messages == ["POST /api/jobs 被拒絕（422）：檔案裡沒有可辨識的音訊"]
+
+
+def test_cross_site_write_is_logged(caplog):
+    with caplog.at_level("WARNING", logger="app.main"):
+        _status("POST", b"cross-site")
+    assert any("被拒絕（403）" in r.getMessage() for r in caplog.records)

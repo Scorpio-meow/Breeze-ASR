@@ -38,6 +38,16 @@ def _require_switch(name: str) -> bool:
     return _SWITCH[raw]
 
 
+LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
+
+
+def _require_log_level(name: str) -> str:
+    raw = _require(name).upper()
+    if raw not in LOG_LEVELS:
+        raise ConfigError(f"{name} 只能是 {'、'.join(LOG_LEVELS)}，目前是 {raw!r}")
+    return raw
+
+
 def _require_dir(name: str) -> Path:
     path = Path(_require(name))
     if not path.is_dir():
@@ -68,11 +78,18 @@ class Settings:
     job_ttl_seconds: int
     subtitle_font: str
     subtitle_fonts_dir: Path
+    log_level: str
+    log_file_mb: int
+    log_file_count: int
     watch: WatchSettings | None
 
     @property
     def max_upload_bytes(self) -> int:
         return self.max_upload_mb * 1024 * 1024
+
+    @property
+    def log_file_bytes(self) -> int:
+        return self.log_file_mb * 1024 * 1024
 
     @property
     def openvino_dir(self) -> Path:
@@ -137,6 +154,9 @@ def load_settings() -> Settings:
         job_ttl_seconds=_require_int("ASR_JOB_TTL_SECONDS", 60),
         subtitle_font=_require("ASR_SUBTITLE_FONT"),
         subtitle_fonts_dir=_require_dir("ASR_SUBTITLE_FONTS_DIR"),
+        log_level=_require_log_level("ASR_LOG_LEVEL"),
+        log_file_mb=_require_int("ASR_LOG_FILE_MB", 1),
+        log_file_count=_require_int("ASR_LOG_FILE_COUNT", 1),
         watch=_load_watch(),
     )
     if not settings.models_file.is_file():

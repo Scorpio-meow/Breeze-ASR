@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import logging
 import time
 import wave
 from collections.abc import Callable
@@ -11,6 +12,8 @@ import numpy as np
 from .audio import SAMPLE_RATE
 from .catalog import RemoteBackend
 from .transcript import Segment
+
+log = logging.getLogger(__name__)
 
 _DONE = "done"
 _FAILED = frozenset({"error", "failed", "cancelled", "canceled"})
@@ -42,7 +45,12 @@ def _client(remote: RemoteBackend) -> httpx.Client:
 def _check(response: httpx.Response, action: str) -> dict:
     if response.status_code >= 400:
         raise RemoteError(f"遠端服務{action}失敗（HTTP {response.status_code}）：{response.text[:300]}")
-    return response.json()
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise RemoteError(
+            f"遠端服務{action}的回應不是 JSON（HTTP {response.status_code}）：{response.text[:300]}"
+        ) from exc
 
 
 def check_health(remote: RemoteBackend) -> None:
@@ -73,6 +81,7 @@ def transcribe(
                 "建立工作",
             )
             job_id = created["job_id"]
+            log.info("遠端服務 %s 建立工作 %s", remote.url, job_id)
             deadline = time.monotonic() + remote.job_timeout_seconds
             while True:
                 job = _check(

@@ -4,16 +4,22 @@ import logging
 import re
 import shutil
 import tempfile
+import threading
+import time
+from collections import deque
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import Body, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .audio import AudioDecodeError, decode_to_file, probe_media, waveform
@@ -36,6 +42,7 @@ from .jobs import (
     SpeakerNotFound,
     TranscriptInvalid,
 )
+from .logsetup import remove_tree
 from .punctuation import PunctuationService
 from .renders import SOURCE_NAME, RenderQueue, RenderQueueFull
 from .speakers import SpeakerService, default_speaker_name
@@ -51,8 +58,13 @@ _MAX_TEXT_LENGTH = 500
 _MAX_SEGMENTS = 20000
 _WAVEFORM_BUCKETS = 4000
 _DURATION_TOLERANCE_SECONDS = 2.0
+_DECODE_PROBLEM_LINES = 10
+_MAX_LOGGED_TEXT_LENGTH = 1000
+_CLIENT_ERRORS_PER_MINUTE = 30
+_CONTROL_CHARACTERS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 _UPLOAD_PATHS = re.compile(r"/api/jobs(/[^/]+/renders)?")
 _SWITCH = {"on": True, "off": False}
+_UNLOGGED_REJECTIONS = frozenset({"/api/hotwords/count"})
 _CSP = (
     "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
     "media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; "
@@ -70,10 +82,17 @@ class UploadLimitMiddleware:
         if scope["type"] == "http" and scope["method"] == "POST" and self.paths.fullmatch(scope["path"]):
             length = dict(scope["headers"]).get(b"content-length")
             if length is None:
+                log.warning("POST %s 被拒絕（411）：請求缺少 Content-Length", scope["path"])
                 await JSONResponse({"detail": "請求缺少 Content-Length"}, status_code=411)(scope, receive, send)
                 return
             if not length.isdigit() or int(length) > self.max_bytes:
                 limit_mb = (self.max_bytes - _MULTIPART_OVERHEAD) // (1024 * 1024)
+                log.warning(
+                    "POST %s 被拒絕（413）：Content-Length %s 超過上限 %d MB",
+                    scope["path"],
+                    _one_line(length.decode("latin-1")),
+                    limit_mb,
+                )
                 await JSONResponse({"detail": f"檔案超過上限 {limit_mb} MB"}, status_code=413)(scope, receive, send)
                 return
         await self.app(scope, receive, send)
@@ -101,6 +120,13 @@ class SecurityHeadersMiddleware:
 
         site = dict(scope["headers"]).get(b"sec-fetch-site")
         if scope["method"] not in ("GET", "HEAD") and site in (b"cross-site", b"same-site"):
+            log.warning(
+                "%s %s 被拒絕（403）：來自其他網站的請求（Sec-Fetch-Site %s，Origin %s）",
+                scope["method"],
+                scope["path"],
+                _one_line(site.decode("latin-1")),
+                _one_line(dict(scope["headers"]).get(b"origin", b"").decode("latin-1")) or "無",
+            )
             response = JSONResponse({"detail": "拒絕來自其他網站的請求"}, status_code=403)
             await response(scope, receive, send_with_headers)
             return
@@ -149,6 +175,12 @@ class HardwareChoice(BaseModel):
     label: str
 
 
+class ClientErrorReport(BaseModel):
+    kind: str
+    message: str
+    source: str
+
+
 def _clean_line(raw: str, what: str, limit: int) -> str:
     line = re.sub(r"[\x00-\x1f\x7f]", "", re.sub(r"\s+", " ", raw)).strip()
     if not line:
@@ -177,6 +209,40 @@ def _switch(raw: str, name: str) -> bool:
     return _SWITCH[raw]
 
 
+def _one_line(text: str | None) -> str:
+    return " ".join(_CONTROL_CHARACTERS.sub(" ", text or "").split())[:_MAX_LOGGED_TEXT_LENGTH]
+
+
+class _RateLimit:
+    def __init__(self, limit: int, window_seconds: float) -> None:
+        self.limit = limit
+        self._window = window_seconds
+        self._times: deque[float] = deque()
+        self._dropped = 0
+        self._lock = threading.Lock()
+
+    def acquire(self, now: float) -> bool:
+        with self._lock:
+            while self._times and now - self._times[0] >= self._window:
+                self._times.popleft()
+            if len(self._times) >= self.limit:
+                self._dropped += 1
+                return False
+            self._times.append(now)
+            return True
+
+    def take_dropped(self) -> int:
+        with self._lock:
+            dropped, self._dropped = self._dropped, 0
+            return dropped
+
+
+def _log_rejection(request: Request, status: int, detail: object) -> None:
+    if request.method in ("GET", "HEAD") or request.url.path in _UNLOGGED_REJECTIONS:
+        return
+    log.warning("%s %s 被拒絕（%d）：%s", request.method, _one_line(request.url.path), status, _one_line(str(detail)))
+
+
 def _save_upload(file: UploadFile, target: Path, limit_bytes: int, limit_mb: int) -> None:
     with target.open("wb") as out:
         shutil.copyfileobj(file.file, out)
@@ -191,6 +257,7 @@ def create_app(settings: Settings) -> FastAPI:
     punctuation_service = PunctuationService(catalog.punctuation) if catalog.punctuation is not None else None
     glossary = GlossaryStore(settings.glossary_file)
     counter = HotwordsCounter()
+    client_errors = _RateLimit(_CLIENT_ERRORS_PER_MINUTE, 60)
     queue = JobQueue(
         inference,
         speaker_service,
@@ -240,9 +307,18 @@ def create_app(settings: Settings) -> FastAPI:
     ) -> tuple[Job, list[float] | None]:
         model, mode, punctuation, hotwords = options
         decoded = workdir / "audio.f32"
-        seconds = decode_to_file(source, settings.max_audio_seconds, decoded)
+        seconds, problems = decode_to_file(source, settings.max_audio_seconds, decoded)
         peaks = waveform(decoded, _WAVEFORM_BUCKETS) if with_peaks else None
-        return queue.submit(model, filename, decoded, seconds, mode, punctuation, hotwords), peaks
+        job = queue.submit(model, filename, decoded, seconds, mode, punctuation, hotwords)
+        if problems:
+            log.warning(
+                "工作 %s（%s）解碼時 ffmpeg 回報 %d 行錯誤，音訊可能不完整，最後幾行：\n%s",
+                job.id,
+                filename,
+                len(problems),
+                "\n".join(problems[-_DECODE_PROBLEM_LINES:]),
+            )
+        return job, peaks
 
     watcher = None
     if settings.watch is not None:
@@ -270,6 +346,10 @@ def create_app(settings: Settings) -> FastAPI:
 
         watcher = FolderWatcher(watch, queue, enqueue, settings.subtitle_font)
 
+    def log_unfinished() -> None:
+        queue.log_unfinished()
+        renders.log_unfinished()
+
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         settings.compile_cache_dir.mkdir(parents=True, exist_ok=True)
@@ -292,6 +372,7 @@ def create_app(settings: Settings) -> FastAPI:
             settings.data_dir.resolve(),
         )
         yield
+        log_unfinished()
         inference.stop()
 
     app = FastAPI(
@@ -301,6 +382,19 @@ def create_app(settings: Settings) -> FastAPI:
         redoc_url=None,
         openapi_url="/api/openapi.json",
     )
+    app.state.log_unfinished = log_unfinished
+
+    @app.exception_handler(StarletteHTTPException)
+    async def log_http_rejection(request: Request, exc: StarletteHTTPException) -> Response:
+        _log_rejection(request, exc.status_code, exc.detail)
+        return await http_exception_handler(request, exc)
+
+    @app.exception_handler(RequestValidationError)
+    async def log_validation_rejection(request: Request, exc: RequestValidationError) -> Response:
+        fields = sorted({f"{'.'.join(str(part) for part in e['loc'])}（{e['type']}）" for e in exc.errors()})
+        _log_rejection(request, 422, f"欄位不符合格式：{'、'.join(fields)}")
+        return await request_validation_exception_handler(request, exc)
+
     app.add_middleware(
         UploadLimitMiddleware, paths=_UPLOAD_PATHS, max_bytes=settings.max_upload_bytes + _MULTIPART_OVERHEAD
     )
@@ -330,6 +424,22 @@ def create_app(settings: Settings) -> FastAPI:
     @app.get("/api/health")
     def health() -> dict:
         return {"status": "ok"}
+
+    @app.post("/api/client-errors", status_code=204)
+    def report_client_error(body: ClientErrorReport, request: Request) -> Response:
+        if not client_errors.acquire(time.monotonic()):
+            return Response(status_code=429)
+        dropped = client_errors.take_dropped()
+        if dropped:
+            log.warning("有 %d 則瀏覽器回報超過每分鐘 %d 則的上限，沒有記錄", dropped, client_errors.limit)
+        log.warning(
+            "瀏覽器回報 %s：%s（%s；%s）",
+            _one_line(body.kind),
+            _one_line(body.message),
+            _one_line(body.source),
+            _one_line(request.headers.get("user-agent")),
+        )
+        return Response(status_code=204)
 
     @app.get("/favicon.ico", include_in_schema=False)
     def favicon() -> RedirectResponse:
@@ -564,7 +674,7 @@ def create_app(settings: Settings) -> FastAPI:
         except RenderQueueFull as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except BaseException:
-            shutil.rmtree(directory, ignore_errors=True)
+            remove_tree(directory, log)
             raise
         return renders.describe(created)
 

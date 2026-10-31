@@ -16,7 +16,7 @@ from . import backend_remote
 from .audio import SAMPLE_RATE
 from .catalog import Catalog, ModelSpec, model_status
 from .config import Settings
-from .hardware import EngineConfig
+from .hardware import EngineConfig, memory_usage
 from .transcript import Transcript
 
 log = logging.getLogger(__name__)
@@ -122,15 +122,15 @@ class ModelManager:
                 try:
                     with self.use(entry.spec.id):
                         pass
-                except ModelUnavailable:
+                except Exception:
                     log.exception("預先載入 %s 失敗", entry.spec.id)
 
     def _check_remote(self, entry: _Entry) -> None:
         try:
             backend_remote.check_health(entry.spec.remote)
             self._set(entry, ModelState.READY)
-        except backend_remote.RemoteError as exc:
-            log.warning("%s", exc)
+        except Exception as exc:
+            log.warning("%s 的健康檢查失敗：%s", entry.spec.id, exc)
             self._set(entry, ModelState.FAILED, str(exc))
 
     def _prepare(self, model_id: str) -> None:
@@ -170,7 +170,7 @@ class ModelManager:
                 except Exception as exc:
                     self._set(entry, ModelState.PREPARED, f"載入失敗：{exc}")
                     raise ModelUnavailable(f"無法在 {self._config.device} 載入 {model_id}：{exc}") from exc
-                log.info("%s 載入完成，耗時 %.1f 秒", model_id, time.perf_counter() - started)
+                log.info("%s 載入完成，耗時 %.1f 秒；%s", model_id, time.perf_counter() - started, memory_usage())
                 self._set(entry, ModelState.READY)
             entry.last_used = time.monotonic()
             yield entry.handle

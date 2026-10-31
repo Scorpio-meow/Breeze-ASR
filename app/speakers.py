@@ -14,6 +14,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .catalog import HubFile, SpeakerConfig
+from .logsetup import log_stderr
 from .transcript import Segment, Speaker, Transcript
 from .voices import VoiceLibrary, Voiceprint
 
@@ -21,6 +22,7 @@ log = logging.getLogger(__name__)
 
 _PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 _STDERR_TAIL_LINES = 5
+_STDERR_KEEP_LINES = 200
 
 
 class DiarizationError(RuntimeError):
@@ -48,10 +50,11 @@ class DiarizationRun:
         self._on_progress = on_progress
         self._started = time.perf_counter()
         self.seconds: float | None = None
+        self.stats: dict | None = None
         self._result: list[RawSpeaker] | None = None
-        self._stderr: collections.deque[str] = collections.deque(maxlen=_STDERR_TAIL_LINES)
+        self._stderr: collections.deque[str] = collections.deque(maxlen=_STDERR_KEEP_LINES)
         self._proc = subprocess.Popen(
-            [sys.executable, "-m", "app.diarize", json.dumps(args, ensure_ascii=False)],
+            [sys.executable, "-X", "faulthandler", "-m", "app.diarize", json.dumps(args, ensure_ascii=False)],
             cwd=_PACKAGE_ROOT,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -72,11 +75,14 @@ class DiarizationRun:
             try:
                 message = json.loads(line)
             except json.JSONDecodeError:
+                if line.strip():
+                    log.info("分辨說話者的子行程輸出：%s", line.rstrip())
                 continue
             if "progress" in message:
                 self._on_progress(message["progress"])
             elif "result" in message:
                 self.seconds = time.perf_counter() - self._started
+                self.stats = message["result"]["stats"]
                 self._result = [
                     RawSpeaker(
                         turns=[(start, end) for start, end in item["turns"]],
@@ -95,8 +101,11 @@ class DiarizationRun:
         for reader in self._readers:
             reader.join()
         if code != 0 or self._result is None:
-            detail = "；".join(self._stderr) or f"結束碼 {code}"
+            if self._stderr:
+                log.error("分辨說話者的子行程失敗（結束代碼 %d），錯誤輸出：\n%s", code, "\n".join(self._stderr))
+            detail = "；".join(list(self._stderr)[-_STDERR_TAIL_LINES:]) or f"結束碼 {code}"
             raise DiarizationError(f"分辨說話者失敗：{detail}")
+        log_stderr(log, "分辨說話者的子行程", "\n".join(self._stderr))
         return self._result
 
     def kill(self) -> None:

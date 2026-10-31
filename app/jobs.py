@@ -7,7 +7,6 @@ import math
 import os
 import re
 import secrets
-import shutil
 import threading
 import time
 from collections import deque
@@ -17,6 +16,7 @@ from pathlib import Path
 
 from .glossary import GlossaryStore
 from .inference import InferenceClient, InferenceError
+from .logsetup import remove_tree
 from .punctuation import PunctuationError, PunctuationService
 from .speakers import DiarizationError, DiarizationRun, SpeakerService
 from .transcript import Segment, Speaker, Transcript
@@ -57,6 +57,8 @@ SPEAKERS_OFF = "off"
 SPEAKERS_AUTO = "auto"
 _SPEAKER_ID = re.compile(r"S[1-9][0-9]{0,3}")
 _TIME_SLACK_SECONDS = 0.01
+_PROGRESS_LOG_STEPS = 10
+_HEARTBEAT_SECONDS = 300
 
 
 @dataclass
@@ -72,9 +74,12 @@ class Job:
     created_at: float = field(default_factory=time.time)
     status: JobStatus = JobStatus.QUEUED
     stage: str | None = None
+    started_at: float | None = None
     stage_started_at: float | None = None
     progress: float | None = None
+    progress_step: int = 0
     speakers_progress: float | None = None
+    speakers_progress_step: int = 0
     finished_at: float | None = None
     transcript: Transcript | None = None
     speaker_voiceprints: dict[str, Voiceprint] = field(default_factory=dict)
@@ -114,7 +119,10 @@ class JobQueue:
         self._cond = threading.Condition()
 
     def start(self) -> None:
-        shutil.rmtree(self._work_dir, ignore_errors=True)
+        leftover = sum(1 for _ in self._work_dir.iterdir()) if self._work_dir.is_dir() else 0
+        if leftover:
+            log.info("清除上次服務留下的 %d 個工作暫存檔", leftover)
+        remove_tree(self._work_dir, log)
         self._work_dir.mkdir(parents=True, exist_ok=True)
         self._results_dir.mkdir(parents=True, exist_ok=True)
         self._restore_results()
@@ -147,11 +155,13 @@ class JobQueue:
     def _restore_results(self) -> None:
         cutoff = time.time() - self._ttl_seconds
         restored = 0
+        expired = 0
         for path in self._results_dir.glob("*.json"):
             try:
                 record = json.loads(path.read_text(encoding="utf-8"))
                 if record["finished_at"] < cutoff:
                     path.unlink(missing_ok=True)
+                    expired += 1
                     continue
                 self._jobs[record["id"]] = Job(
                     id=record["id"],
@@ -174,7 +184,15 @@ class JobQueue:
                 )
                 restored += 1
             except (OSError, ValueError, KeyError, TypeError):
-                log.exception("無法讀取保存的結果 %s，略過", path.name)
+                bad = path.with_suffix(".bad")
+                try:
+                    path.replace(bad)
+                except OSError as exc:
+                    log.exception("無法讀取保存的結果 %s，也無法改名（%s），下次啟動會再試一次", path.name, exc)
+                else:
+                    log.exception("無法讀取保存的結果 %s，已改名為 %s", path.name, bad.name)
+        if expired:
+            log.info("刪除 %d 筆過期的辨識結果", expired)
         if restored:
             log.info("已載入 %d 筆保存的辨識結果", restored)
 
@@ -220,6 +238,16 @@ class JobQueue:
             len(hotwords),
         )
         return job
+
+    def log_unfinished(self) -> None:
+        with self._cond:
+            unfinished = [
+                (j.id, j.filename, f"{j.status.value}・{j.stage}" if j.stage else j.status.value)
+                for j in self._jobs.values()
+                if not j.done
+            ]
+        for job_id, filename, state in unfinished:
+            log.warning("服務關閉時工作 %s（%s）還沒完成：%s，不會保存結果", job_id, filename, state)
 
     def busy(self) -> bool:
         with self._cond:
@@ -436,17 +464,39 @@ class JobQueue:
 
     def _set_stage(self, job: Job, stage: str) -> None:
         with self._cond:
+            if job.stage != stage:
+                log.info("工作 %s 進入 %s 階段", job.id, stage)
             job.stage = stage
             job.stage_started_at = time.time()
             job.progress = None
+            job.progress_step = 0
 
     def _set_progress(self, job: Job, progress: float) -> None:
         with self._cond:
             job.progress = progress
+            step = int(progress * _PROGRESS_LOG_STEPS)
+            if job.progress_step < step < _PROGRESS_LOG_STEPS:
+                job.progress_step = step
+                log.info(
+                    "工作 %s %s 進度 %d%%，這個階段已 %.0f 秒",
+                    job.id,
+                    job.stage,
+                    round(progress * 100),
+                    time.time() - job.stage_started_at,
+                )
 
     def _set_speakers_progress(self, job: Job, progress: float) -> None:
         with self._cond:
             job.speakers_progress = progress
+            step = int(progress * _PROGRESS_LOG_STEPS)
+            if job.speakers_progress_step < step < _PROGRESS_LOG_STEPS:
+                job.speakers_progress_step = step
+                log.info(
+                    "工作 %s 分辨說話者進度 %d%%，已 %.0f 秒",
+                    job.id,
+                    round(progress * 100),
+                    time.time() - job.started_at,
+                )
 
     def _start_diarization(self, job: Job) -> tuple[DiarizationRun | None, str | None]:
         if job.speakers_mode == SPEAKERS_OFF:
@@ -456,7 +506,7 @@ class JobQueue:
             job.speakers_progress = 0.0
         try:
             run = self._speakers.run(job.audio_path, num_speakers, functools.partial(self._set_speakers_progress, job))
-        except (DiarizationError, OSError) as exc:
+        except Exception as exc:
             log.exception("工作 %s 無法開始分辨說話者", job.id)
             with self._cond:
                 job.speakers_progress = None
@@ -473,12 +523,37 @@ class JobQueue:
         except DiarizationError as exc:
             log.error("工作 %s %s", job.id, exc)
             return replace(transcript, speakers_error=str(exc))
-        log.info("工作 %s 分辨說話者完成：%d 群，耗時 %.1f 秒", job.id, len(raw), run.seconds)
+        stats = run.stats
+        log.info(
+            "工作 %s 分辨說話者完成：%d 群（合併前 %d 群，講話共 %.1f 秒，少於 %.1f 秒的併入別人），耗時 %.1f 秒",
+            job.id,
+            len(raw),
+            stats["raw_clusters"],
+            stats["speech_seconds"],
+            stats["min_speaker_seconds"],
+            run.seconds,
+        )
+        if stats["skipped_clusters"]:
+            log.warning(
+                "工作 %s 有 %d 群算不出聲紋而略過，共 %.1f 秒的講話沒有歸給任何人",
+                job.id,
+                stats["skipped_clusters"],
+                stats["skipped_seconds"],
+            )
         try:
             labelled, voiceprints = self._speakers.label(transcript, raw)
         except Exception as exc:
             log.exception("工作 %s 標示說話者失敗", job.id)
             return replace(transcript, speakers_error=f"標示說話者失敗：{exc}")
+        for speaker in labelled.speakers or []:
+            if speaker.voice_id is not None:
+                log.info(
+                    "工作 %s 的說話者 %s 認出是語者庫的 %s（相似度 %.3f）",
+                    job.id,
+                    speaker.id,
+                    speaker.voice_id,
+                    speaker.similarity,
+                )
         with self._cond:
             job.speaker_voiceprints = voiceprints
         return labelled
@@ -492,6 +567,8 @@ class JobQueue:
         if changed:
             log.info("工作 %s 套用詞彙表的取代規則：改了 %d 段", job.id, changed)
         kept = [s for s in segments if s.text.strip()]
+        if len(kept) < len(segments):
+            log.info("工作 %s 套用取代規則後有 %d 段變成空白，已刪除", job.id, len(segments) - len(kept))
         return replace(transcript, segments=kept, text="\n".join(s.text for s in kept) or transcript.text)
 
     def _punctuate(self, job: Job, transcript: Transcript) -> Transcript:
@@ -512,6 +589,19 @@ class JobQueue:
                 job.punctuation_error = str(exc)
             return transcript
 
+    def _heartbeat(self, job: Job, stop: threading.Event) -> None:
+        while not stop.wait(_HEARTBEAT_SECONDS):
+            with self._cond:
+                now = time.time()
+                parts = [f"已 {now - job.started_at:.0f} 秒"]
+                if job.stage is not None:
+                    parts.append(f"{job.stage} 階段已 {now - job.stage_started_at:.0f} 秒")
+                if job.progress is not None:
+                    parts.append(f"進度 {round(job.progress * 100)}%")
+                if job.speakers_progress is not None:
+                    parts.append(f"分辨說話者 {round(job.speakers_progress * 100)}%")
+            log.info("工作 %s 仍在處理：%s", job.id, "，".join(parts))
+
     def _run(self) -> None:
         while True:
             with self._cond:
@@ -520,70 +610,93 @@ class JobQueue:
                     self._purge_expired()
                 job = self._jobs[self._pending.popleft()]
                 job.status = JobStatus.RUNNING
-            started = time.perf_counter()
-            log.info("工作 %s 開始處理，已排隊 %.1f 秒", job.id, time.time() - job.created_at)
-            run, speakers_error = self._start_diarization(job)
-            with self._cond:
-                self._active_run = run
+                job.started_at = time.time()
+            stop = threading.Event()
+            threading.Thread(target=self._heartbeat, args=(job, stop), name="job-heartbeat", daemon=True).start()
             try:
-                transcript = self._inference.transcribe(
-                    job.id,
-                    job.model_id,
-                    job.audio_path,
-                    job.hotwords,
-                    functools.partial(self._set_stage, job),
-                    functools.partial(self._set_progress, job),
-                )
-                transcript = self._apply_glossary(job, transcript)
-                if job.punctuation:
-                    transcript = self._punctuate(job, transcript)
-                if run is not None:
-                    transcript = self._finish_diarization(job, run, transcript)
-                    run = None
-                elif speakers_error is not None:
-                    transcript = replace(transcript, speakers_error=speakers_error)
-                with self._cond:
-                    if job.cancel_requested:
-                        job.status = JobStatus.CANCELLED
-                    else:
-                        job.transcript = transcript
-                        job.status = JobStatus.SUCCEEDED
-                if job.status is JobStatus.SUCCEEDED:
-                    log.info(
-                        "工作 %s 完成：%d 段，說話者 %s，音訊 %.1f 秒，辨識 %.1f 秒，整體 %.1f 秒",
-                        job.id,
-                        len(transcript.segments),
-                        f"{len(transcript.speakers)} 位" if transcript.speakers is not None else "未分辨",
-                        transcript.audio_seconds,
-                        transcript.processing_seconds,
-                        time.perf_counter() - started,
-                    )
+                self._process(job)
             except Exception as exc:
-                if job.cancel_requested:
-                    with self._cond:
-                        job.status = JobStatus.CANCELLED
-                else:
-                    log.error("工作 %s 失敗：%s", job.id, exc, exc_info=not isinstance(exc, InferenceError))
-                    with self._cond:
-                        job.status = JobStatus.FAILED
-                        job.error = str(exc)
-            finally:
-                if run is not None:
-                    run.kill()
-                job.audio_path.unlink(missing_ok=True)
+                log.exception("工作 %s 的處理流程發生未預期的錯誤", job.id)
                 with self._cond:
                     self._active_run = None
-                    job.finished_at = time.time()
+                    if not job.done:
+                        job.status = JobStatus.FAILED
+                        job.error = f"處理流程發生未預期的錯誤：{exc}"
+                    if job.finished_at is None:
+                        job.finished_at = time.time()
                     job.stage = None
                     job.speakers_progress = None
-            if job.status is JobStatus.CANCELLED:
-                log.info("工作 %s 已取消", job.id)
+            finally:
+                stop.set()
+
+    def _process(self, job: Job) -> None:
+        started = time.perf_counter()
+        log.info("工作 %s 開始處理，已排隊 %.1f 秒", job.id, time.time() - job.created_at)
+        run, speakers_error = self._start_diarization(job)
+        with self._cond:
+            self._active_run = run
+        try:
+            transcript = self._inference.transcribe(
+                job.id,
+                job.model_id,
+                job.audio_path,
+                job.hotwords,
+                functools.partial(self._set_stage, job),
+                functools.partial(self._set_progress, job),
+            )
+            transcript = self._apply_glossary(job, transcript)
+            if job.punctuation:
+                transcript = self._punctuate(job, transcript)
+            if run is not None:
+                transcript = self._finish_diarization(job, run, transcript)
+                run = None
+            elif speakers_error is not None:
+                transcript = replace(transcript, speakers_error=speakers_error)
+            with self._cond:
+                if job.cancel_requested:
+                    job.status = JobStatus.CANCELLED
+                else:
+                    job.transcript = transcript
+                    job.status = JobStatus.SUCCEEDED
             if job.status is JobStatus.SUCCEEDED:
-                try:
-                    with self._cond:
-                        self._persist(job)
-                except OSError:
-                    log.exception("工作 %s 的結果無法寫入磁碟，服務重新啟動後會遺失", job.id)
+                log.info(
+                    "工作 %s 完成：%d 段，說話者 %s，音訊 %.1f 秒，辨識 %.1f 秒，整體 %.1f 秒",
+                    job.id,
+                    len(transcript.segments),
+                    f"{len(transcript.speakers)} 位" if transcript.speakers is not None else "未分辨",
+                    transcript.audio_seconds,
+                    transcript.processing_seconds,
+                    time.perf_counter() - started,
+                )
+        except Exception as exc:
+            if job.cancel_requested:
+                with self._cond:
+                    job.status = JobStatus.CANCELLED
+            else:
+                log.error("工作 %s 失敗：%s", job.id, exc, exc_info=not isinstance(exc, InferenceError))
+                with self._cond:
+                    job.status = JobStatus.FAILED
+                    job.error = str(exc)
+        finally:
+            if run is not None:
+                run.kill()
+            try:
+                job.audio_path.unlink(missing_ok=True)
+            except OSError as exc:
+                log.warning("工作 %s 的暫存音訊 %s 刪不掉：%s", job.id, job.audio_path.name, exc)
+            with self._cond:
+                self._active_run = None
+                job.finished_at = time.time()
+                job.stage = None
+                job.speakers_progress = None
+        if job.status is JobStatus.CANCELLED:
+            log.info("工作 %s 已取消", job.id)
+        if job.status is JobStatus.SUCCEEDED:
+            try:
+                with self._cond:
+                    self._persist(job)
+            except Exception:
+                log.exception("工作 %s 的結果無法寫入磁碟，服務重新啟動後會遺失", job.id)
 
 
 def _check_transcript(

@@ -20,6 +20,9 @@ def _settings(data_dir) -> Settings:
         60,
         "Font",
         data_dir,
+        "INFO",
+        1,
+        1,
         None,
     )
 

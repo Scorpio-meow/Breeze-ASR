@@ -159,7 +159,7 @@ def _merge(
     return _merge_pairs(clusters, -np.inf, num_speakers)
 
 
-def diarize(audio: np.ndarray, args: dict, on_progress: Callable[[float], None]) -> list[_Cluster]:
+def diarize(audio: np.ndarray, args: dict, on_progress: Callable[[float], None]) -> tuple[list[_Cluster], dict]:
     import sherpa_onnx
 
     embedding = sherpa_onnx.SpeakerEmbeddingExtractorConfig(
@@ -183,6 +183,7 @@ def diarize(audio: np.ndarray, args: dict, on_progress: Callable[[float], None])
     samples = np.ascontiguousarray(audio, dtype=np.float32)
     block = _BLOCK_SECONDS * SAMPLE_RATE
     clusters: list[_Cluster] = []
+    skipped, skipped_seconds = 0, 0.0
     for begin in range(0, samples.size, block):
         piece = samples[begin : begin + block]
         offset = begin / SAMPLE_RATE
@@ -198,13 +199,22 @@ def diarize(audio: np.ndarray, args: dict, on_progress: Callable[[float], None])
         for turns in groups.values():
             found = _cluster(extractor, piece, turns, overlapped)
             if not np.all(np.isfinite(found.vector)):
+                skipped += 1
+                skipped_seconds += found.seconds
                 continue
             found.turns = [(start + offset, end + offset) for start, end in found.turns]
             clusters.append(found)
         on_progress((begin + piece.size) / samples.size)
     speech = sum(c.seconds for c in clusters)
     min_speaker_seconds = args["min_speaker_factor"] * math.sqrt(speech)
-    return _merge(clusters, args["merge_threshold"], min_speaker_seconds, args["num_speakers"])
+    stats = {
+        "raw_clusters": len(clusters),
+        "speech_seconds": round(speech, 1),
+        "min_speaker_seconds": round(min_speaker_seconds, 1),
+        "skipped_clusters": skipped,
+        "skipped_seconds": round(skipped_seconds, 1),
+    }
+    return _merge(clusters, args["merge_threshold"], min_speaker_seconds, args["num_speakers"]), stats
 
 
 def main() -> None:
@@ -214,7 +224,7 @@ def main() -> None:
     def progress(value: float) -> None:
         print(json.dumps({"progress": round(value, 3)}), flush=True)
 
-    clusters = diarize(audio, args, progress)
+    clusters, stats = diarize(audio, args, progress)
     result = {
         "speakers": [
             {
@@ -222,7 +232,8 @@ def main() -> None:
                 "voiceprint": _voiceprint(c).to_json(),
             }
             for c in clusters
-        ]
+        ],
+        "stats": stats,
     }
     print(json.dumps({"result": result}), flush=True)
 

@@ -4,6 +4,32 @@
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-11-01
+
+### Added
+
+- 必填的 `ASR_LOG_LEVEL`、`ASR_LOG_FILE_MB`、`ASR_LOG_FILE_COUNT`：日誌等級與換檔大小、保留份數（原本固定 INFO、5 MB、5 份）。升級時請把 `.env.example` 的這三行加進 `.env`。
+- 日誌補上：啟動時的版本與生效設定；工作每個階段的開始、處理中每 5 分鐘一行目前的階段與耗時、有回報進度時每跨過 10% 的進度、推論子行程的辨識開始與完成；載入模型、辨識開始與完成、推論子行程意外結束時的記憶體用量；分辨說話者合併前的群數、略過的講話秒數與語者庫比對結果；被拒絕的請求與原因（欄位格式不符時只記欄位名稱）；ffmpeg 解碼時回報的錯誤；燒錄字幕的開始、取消、清除與成功時的警告；服務關閉或終端機視窗被關閉時還沒完成的工作；子行程的錯誤輸出；執行緒與行程未處理的例外，包括推論子行程啟動時的例外；暫存資料夾刪不掉、nvidia-smi 執行失敗。
+- `breeze-asr-crash.log`、`inference-crash.log`：原生程式碼當掉時的呼叫堆疊；`inference-native.log`：推論子行程裡原生函式庫印出的訊息。
+- `POST /api/client-errors`：網頁把未處理的 JavaScript 錯誤與上傳時的連線中斷回報到日誌；移除控制字元，整個服務每分鐘最多記 30 則。
+
+### Changed
+
+- 日誌每行的時間改成含時區（`2026-10-31 23:36:35.503+08:00`），並加上行程編號（`[推論 24884]`）。
+- 啟動時先綁定連接埠再啟動服務；連接埠被占用時直接結束，不再先啟動推論子行程、載入模型。`ASR_HOST` 是主機名稱（例如 `localhost`）時，照樣同時聽 IPv4 與 IPv6。
+- 讀不出來的保存結果會改名為 `.bad`，不再每次啟動都重新讀一次。
+- `compose.yaml` 設定 `stop_grace_period: 15s`，停止容器時有足夠時間等辨識中的推論子行程結束，不會在關閉途中被強制結束。
+
+### Fixed
+
+- 切換硬體設定時若寫入設定檔失敗，推論子行程會改用原本的設定重新啟動，不再停著等到被當成意外結束。
+- 辨識佇列、燒錄佇列與推論事件的處理遇到未預期的錯誤時，不再整個停住、讓之後的工作永遠卡在處理中。
+- 遠端服務的回應不是 JSON 時，只讓那個模型標成無法使用，不再讓其他模型永遠停在準備中。
+- 燒錄字幕時 ffmpeg 輸出大量錯誤訊息不會再卡住（Linux／Docker）。
+- 按 Ctrl+C 關閉時，推論子行程不會先被中斷，不再誤記成「推論行程意外結束」。
+- 自動標點的輸出無法解析或段數不符時，只保留沒有標點的文字，不再讓整個工作失敗。
+- 監看資料夾寫出結果失敗時，錯誤不會在同一次檢查就被清掉。
+
 ## [0.2.1] - 2026-10-31
 
 ### Changed
@@ -63,7 +89,8 @@
 - 在不能錄音的網址按「錄音」，狀態列說明原因與瀏覽器的設定方式。
 - 所有回應加上 `Cache-Control: no-cache`，更新版本後瀏覽器不會繼續使用舊的前端程式。
 
-[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Scorpio-meow/Breeze-ASR/releases/tag/v0.1.0

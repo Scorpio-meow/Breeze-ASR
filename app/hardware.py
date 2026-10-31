@@ -95,6 +95,15 @@ def gb(value: float) -> float:
     return round(value / 1024**3, 1)
 
 
+def system_memory() -> str:
+    memory = psutil.virtual_memory()
+    return f"系統可用記憶體 {gb(memory.available)} / {gb(memory.total)} GB"
+
+
+def memory_usage() -> str:
+    return f"行程記憶體 {gb(psutil.Process().memory_info().rss)} GB，{system_memory()}"
+
+
 def max_loaded(config: EngineConfig, memory_bytes: int, local_models: int) -> tuple[int, str]:
     if local_models == 1:
         return 1, "只有 1 個本機模型"

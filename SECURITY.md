@@ -36,7 +36,7 @@ flowchart LR
 - 上傳的音訊解碼後存在 `ASR_DATA_DIR`，辨識完成即刪除；結果在 `ASR_JOB_TTL_SECONDS` 到期後刪除。
 - 燒錄字幕時上傳的影片在燒完後刪除；燒好的影片放在 `ASR_DATA_DIR/renders`，到 `ASR_JOB_TTL_SECONDS` 或服務重新啟動時刪除。
 - 詞彙表（熱詞與取代規則）存在 `ASR_DATA_DIR/glossary.json`，人名等內容只留在本機。
-- 日誌存在 `ASR_DATA_DIR/logs/`，會記上傳的檔名，不記字幕內容、熱詞內容與人名；每個檔案滿 5 MB 換新、保留最近 5 個。
+- 日誌存在 `ASR_DATA_DIR/logs/`，會記上傳的檔名，不記字幕內容、熱詞內容與人名；瀏覽器回報的 JavaScript 錯誤訊息會照原文記下。換檔大小與保留份數由 `ASR_LOG_FILE_MB`、`ASR_LOG_FILE_COUNT` 設定，詳見[部署的日誌](docs/deployment.md#日誌)。
 - 啟用監看資料夾時，服務會讀取 `ASR_WATCH_DIR` 裡的錄音，並在同一個資料夾寫出結果檔與 `.error.txt`；不會刪除或修改原檔。
 - 語者庫的聲紋屬於個人生物特徵，只存在 `ASR_DATA_DIR/voices/`，不會送到外部服務。請依所在地的個人資料法規取得說話者同意，並在不需要時從「語者庫」刪除。
 - 只有第一次下載模型時會連到 Hugging Face；轉呼叫遠端服務的模型會把音訊送到 `models.json` 指定的網址。
