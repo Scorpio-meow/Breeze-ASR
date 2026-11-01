@@ -36,6 +36,7 @@ flowchart TD
 | `app/config.py`、`app/catalog.py` | `.env` 設定與 `models.json` 的讀取與檢查 |
 | `app/jobs.py`、`app/transcript.py` | 工作佇列、結果儲存與過期清理、字幕編輯與版本號；逐字稿資料結構 |
 | `app/inference.py`、`app/engine.py`、`app/preparation.py` | 推論子行程；模型的下載、轉換、載入與卸載；編譯快取的清理 |
+| `app/telemetry.py` | 推論子行程啟動時關閉 OpenVINO 與 NNCF 的用量回報 |
 | `app/backend_openvino.py`、`app/backend_torch.py`、`app/backend_remote.py` | 三種推論方式 |
 | `app/tune.py`、`app/benchmark.py`、`app/hardware.py` | 自動調校、單一裝置實測、硬體設定檔 |
 | `app/segmentation.py` | 句子分段 |

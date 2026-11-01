@@ -21,6 +21,7 @@ from .catalog import Catalog, model_status
 from .config import ConfigError, Settings
 from .hardware import HardwareProfile, memory_usage, save_profile, system_memory
 from .logsetup import capture_native_stderr, log_crashes_to, log_to_file, set_level, setup_logging, versions
+from .telemetry import disable_openvino_telemetry
 from .transcript import Transcript
 
 log = logging.getLogger(__name__)
@@ -113,6 +114,7 @@ def _worker_main(settings: Settings, requests: Queue, events: Queue) -> None:
     log_to_file(settings.logs_dir / "inference.log", "推論", settings.log_file_bytes, settings.log_file_count)
     log_crashes_to(settings.logs_dir / _CRASH_LOG, "推論行程", settings.log_file_bytes)
     capture_native_stderr(settings.logs_dir / _NATIVE_LOG, "推論行程", settings.log_file_bytes)
+    disable_openvino_telemetry()
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     if os.name == "nt":
         signal.signal(signal.SIGBREAK, signal.SIG_IGN)

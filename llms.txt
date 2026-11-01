@@ -24,6 +24,7 @@
 - [app/catalog.py](app/catalog.py): 讀取並檢查 `models.json`
 - [app/jobs.py](app/jobs.py): 工作佇列、結果儲存與過期清理、字幕編輯與版本號
 - [app/inference.py](app/inference.py): 推論子行程、當掉後自動重新啟動，以及取消工作、切換設定時的重新啟動
+- [app/telemetry.py](app/telemetry.py): 推論子行程啟動時關閉 OpenVINO 與 NNCF 的用量回報
 - [app/engine.py](app/engine.py): 模型的準備、載入與卸載
 - [app/preparation.py](app/preparation.py): 下載權重、匯出 OpenVINO、壓縮成其他權重格式
 - [app/backend_openvino.py](app/backend_openvino.py), [app/backend_torch.py](app/backend_torch.py), [app/backend_remote.py](app/backend_remote.py): 三種推論方式

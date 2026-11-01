@@ -56,7 +56,7 @@ wheels = [
 
 [[package]]
 name = "breeze-asr-webapp"
-version = "0.2.4"
+version = "0.2.5"
 source = { virtual = "." }
 default-groups = ["cpu"]
 dependencies = [
@@ -68,6 +68,7 @@ dependencies = [
     { name = "numpy" },
     { name = "openvino" },
     { name = "openvino-genai" },
+    { name = "openvino-telemetry" },
     { name = "openvino-tokenizers" },
     { name = "optimum" },
     { name = "optimum-intel" },
@@ -110,6 +111,7 @@ requires-dist = [
     { name = "numpy", specifier = "==2.4.6" },
     { name = "openvino", specifier = "==2026.4.1" },
     { name = "openvino-genai", specifier = "==2026.4.1.0" },
+    { name = "openvino-telemetry", specifier = "==2025.2.0" },
     { name = "openvino-tokenizers", specifier = "==2026.4.1.0" },
     { name = "optimum", specifier = "==2.3.0" },
     { name = "optimum-intel", specifier = "==2.2.0" },

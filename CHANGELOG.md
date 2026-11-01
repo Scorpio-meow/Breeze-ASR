@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-11-01
+
+### Fixed
+
+- OpenVINO 與 NNCF 預設會把用量統計（套件版本、作業系統、權重壓縮參數與一組固定的識別碼，不含錄音與字幕）送到 Google Analytics，與 `SECURITY.md` 列出的對外連線不符。推論子行程啟動時改為先寫入 OpenVINO 的設定檔把它關閉，這台電腦上其他 OpenVINO 工具的用量回報也會一起關閉。
+
 ## [0.2.4] - 2026-11-01
 
 ### Changed
@@ -105,7 +111,8 @@
 - 在不能錄音的網址按「錄音」，狀態列說明原因與瀏覽器的設定方式。
 - 所有回應加上 `Cache-Control: no-cache`，更新版本後瀏覽器不會繼續使用舊的前端程式。
 
-[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.5...HEAD
+[0.2.5]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.1...v0.2.2

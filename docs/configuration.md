@@ -33,7 +33,7 @@
 | `ASR_WATCH_PUNCTUATION` | 監看資料夾是否自動加標點：`on` 或 `off` | `on` |
 | `ASR_WATCH_FORMATS` | 監看資料夾寫出的格式，以逗號分隔：`txt`、`srt`、`vtt`、`ass`、`md`、`docx`、`json` | `srt,md,json` |
 | `ASR_WATCH_POLL_SECONDS` | 監看資料夾多久檢查一次（秒） | `10` |
-| `HF_HUB_DISABLE_TELEMETRY` | 關閉 Hugging Face 用量回報 | `1` |
+| `HF_HUB_DISABLE_TELEMETRY` | 關閉 Hugging Face 用量回報；OpenVINO 與 NNCF 沒有對應的環境變數，由服務自動關閉，見 [SECURITY.md](../SECURITY.md#資料) | `1` |
 | `HF_HUB_DISABLE_SYMLINKS_WARNING` | 關閉 Windows 無法建立符號連結時的快取警告（快取改用複製檔案，每個模型只固定一個版本，不會多佔空間） | `1` |
 
 只有 Docker 版會用到：

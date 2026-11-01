@@ -40,6 +40,7 @@ flowchart LR
 - 啟用監看資料夾時，服務會讀取 `ASR_WATCH_DIR` 裡的錄音，並在同一個資料夾寫出結果檔與 `.error.txt`；不會刪除或修改原檔。
 - 語者庫的聲紋屬於個人生物特徵，只存在 `ASR_DATA_DIR/voices/`，不會送到外部服務。請依所在地的個人資料法規取得說話者同意，並在不需要時從「語者庫」刪除。
 - 只有第一次下載模型時會連到 Hugging Face；轉呼叫遠端服務的模型會把音訊送到 `models.json` 指定的網址。
+- OpenVINO 與 NNCF 預設會把用量統計（套件版本、作業系統、權重壓縮參數與一組固定的識別碼，不含錄音與字幕）送到 Google Analytics。推論子行程每次啟動、載入 OpenVINO 之前會把它關閉：寫入 OpenVINO 自己的設定檔（Windows 是 `%LOCALAPPDATA%\Intel Corporation\openvino_telemetry`，Linux、macOS 是 `~/intel/openvino_telemetry`），所以這台電腦上其他 OpenVINO 工具的用量回報也會一起關閉。Hugging Face 的用量回報由 `.env` 的 `HF_HUB_DISABLE_TELEMETRY=1` 關閉。
 - 命令列工具與 MCP server 只把檔案送到 `.env` 指定的服務；但 MCP server 會把逐字稿交給呼叫它的 MCP 用戶端（例如 Claude），內容可能因此送到外部 AI 服務。
 - `.env` 可能含遠端服務的 API 金鑰，已列在 `.gitignore`，不要提交。
 
