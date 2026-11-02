@@ -7,6 +7,7 @@
 - [docs/configuration.md](docs/configuration.md): `.env`、`models.json`、硬體設定檔
 - [docs/how-it-works.md](docs/how-it-works.md): 架構、自動調校、句子分段、分辨說話者與語者庫、熱詞、詞彙表、自動標點、編輯與復原、燒錄字幕
 - [docs/api.md](docs/api.md): API 各端點的參數與回應
+- [docs/openapi.yaml](docs/openapi.yaml): OpenAPI 3.2 規格，含每個欄位的型別、狀態碼與範例
 - [docs/benchmarks.md](docs/benchmarks.md): 效能實測：辨識速度與自動調校、句子分段、分辨說話者、熱詞
 - [docs/cli.md](docs/cli.md): 命令列工具與 MCP server
 - [CHANGELOG.md](CHANGELOG.md): 更新紀錄

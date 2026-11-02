@@ -2,7 +2,7 @@
 
 [README](../README.md) · [部署](deployment.md) · [設定](configuration.md) · [運作方式](how-it-works.md) · **API** · [命令列與 MCP](cli.md) · [效能實測](benchmarks.md)
 
-網頁用的就是這組 API。所有路徑都在 `/api` 底下，錯誤回應是 `{"detail": "原因"}`；欄位缺少或型別錯誤時回 422，`detail` 是陣列。OpenAPI 規格在 `/api/openapi.json`。
+網頁用的就是這組 API。所有路徑都在 `/api` 底下，錯誤回應是 `{"detail": "原因"}`；欄位缺少或型別錯誤時回 422，`detail` 是陣列。完整的 OpenAPI 3.2 規格在 [`openapi.yaml`](openapi.yaml)，列出每個欄位、狀態碼與範例，可以匯入 Postman、Insomnia 等工具；服務執行時 `/api/openapi.json` 另有 FastAPI 自動產生的簡略版。
 
 > [!NOTE]
 > 瀏覽器從其他網站送來的 `POST`、`PUT`、`PATCH`、`DELETE`（`Sec-Fetch-Site` 是 `cross-site` 或 `same-site`）一律回 403；curl 等不帶這個標頭的程式不受影響。
@@ -123,7 +123,7 @@ sequenceDiagram
 `application/json`：`{"model": "MediaTek-Research/Breeze-ASR-25", "text": "與會者有王小明、陳美玲。"}`
 
 **回應：**
-- 200：`{"tokens": 18, "limit": 223}`。`tokens` 是熱詞的 token 數，`limit` 是這個模型能接受的上限（`max_target_positions` 的一半減一）
+- 200：`{"tokens": 15, "limit": 223}`。`tokens` 是熱詞的 token 數，`limit` 是這個模型能接受的上限（`max_target_positions` 的一半減一）
 - 400：不支援的模型
 - 422：這個模型轉呼叫外部服務，不支援熱詞
 

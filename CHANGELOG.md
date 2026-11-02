@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- `docs/openapi.yaml`：以 OpenAPI 3.2 撰寫的完整 API 規格，涵蓋全部 23 個端點的請求欄位、每個狀態碼的回應格式、錯誤訊息範例，以及工作、燒錄之間的連結關係。`tests/test_openapi.py` 會檢查規格列的端點、成功狀態碼與匯出格式和程式一致。
+
+### Fixed
+
+- `docs/api.md` 熱詞計數範例的 token 數改為實際值 15。
+
 ## [0.2.5] - 2026-11-01
 
 ### Fixed

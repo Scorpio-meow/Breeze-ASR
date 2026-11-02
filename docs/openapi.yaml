@@ -1,0 +1,2801 @@
+openapi: 3.2.1
+$self: https://raw.githubusercontent.com/Scorpio-meow/Breeze-ASR/main/docs/openapi.yaml
+info:
+  title: Breeze ASR
+  summary: 本機語音辨識服務的 HTTP API：上傳錄音、取得逐字稿、編輯字幕、匯出檔案與燒錄字幕。
+  version: 0.2.5
+  license:
+    name: MIT
+    identifier: MIT
+  contact:
+    name: Breeze ASR
+    url: https://github.com/Scorpio-meow/Breeze-ASR
+  description: |
+    Breeze ASR 的網頁介面用的就是這組 API。服務跑在自己的電腦上，沒有帳號或金鑰；預設只聽 `127.0.0.1`，要讓其他電腦連線請見部署文件。
+
+    ## 一次完整的辨識
+
+    1. `POST /api/jobs` 以 `multipart/form-data` 送出音訊檔與選項，服務回 202 與工作編號 `id`。
+    2. 反覆呼叫 `GET /api/jobs/{job_id}`（網頁每秒一次），直到 `status` 是 `succeeded`、`failed` 或 `cancelled`。
+    3. 成功時用 `GET /api/jobs/{job_id}/export/{fmt}` 下載需要的格式，或用 `POST /api/jobs/{job_id}/renders` 把字幕燒進影片。
+
+    ## 錯誤格式
+
+    | 情況 | 狀態碼 | 內容 |
+    | --- | --- | --- |
+    | 服務判斷的錯誤 | 4xx、503 | `{"detail": "原因"}`，原因是中文句子 |
+    | 欄位缺少或型別錯誤 | 422 | `{"detail": [{"loc": [...], "msg": "...", "type": "..."}]}`，`detail` 是陣列 |
+    | 路徑不存在 | 404 | `{"detail": "Not Found"}` |
+    | 方法不對 | 405 | `{"detail": "Method Not Allowed"}` |
+    | 未預期的錯誤 | 500 | 純文字 `Internal Server Error`，原因寫在 `breeze-asr.log` |
+
+    同一個 422 可能是兩種格式其中之一：欄位本身不合格式時 `detail` 是陣列，欄位格式正確但內容不被接受（例如熱詞太長）時 `detail` 是字串。
+
+    ## 拒絕來自其他網站的寫入
+
+    瀏覽器從其他網站送來的 `POST`、`PUT`、`PATCH`、`DELETE`（請求標頭 `Sec-Fetch-Site` 是 `cross-site` 或 `same-site`）一律回 403。curl、Python 等不帶這個標頭的程式不受影響。
+
+    ## 上傳上限
+
+    - `POST /api/jobs` 與 `POST /api/jobs/{job_id}/renders` 必須帶 `Content-Length`，沒有就回 411。
+    - `Content-Length` 超過 `ASR_MAX_UPLOAD_MB` 再加 64 KiB（multipart 的欄位與分隔線）時，還沒讀檔就回 413；檔案本身超過 `ASR_MAX_UPLOAD_MB` 也回 413。
+    - 音訊長度超過 `ASR_MAX_AUDIO_SECONDS` 回 422；排隊中的工作達到 `ASR_MAX_QUEUE` 回 503。
+
+    目前的上限值可從 `GET /api/config` 的 `max_upload_mb`、`max_audio_seconds` 取得。
+
+    ## 保留期限
+
+    - 辨識成功的結果寫在 `ASR_DATA_DIR/results`，服務重新啟動後仍在；結束超過 `ASR_JOB_TTL_SECONDS` 秒的工作會被清掉，之後查詢回 404。
+    - 排隊中或處理中的工作、失敗與取消的工作只在記憶體裡，服務重新啟動就沒有了。
+    - 燒好字幕的影片保留同樣的秒數，但服務重新啟動時會清掉。
+
+    ## 每個回應都有的標頭
+
+    | 標頭 | 值 |
+    | --- | --- |
+    | `Content-Security-Policy` | `default-src 'self'`，只允許同源的程式、樣式與連線 |
+    | `X-Content-Type-Options` | `nosniff` |
+    | `Referrer-Policy` | `no-referrer` |
+    | `Permissions-Policy` | `microphone=(self), camera=(), geolocation=()` |
+    | `Cache-Control` | `no-cache`（回應本身沒有指定時） |
+
+    ## 時間與數字
+
+    秒數都是浮點數；`created_at`、`finished_at` 等時間是 Unix 時間（秒）。進度是 0 到 1 的小數。
+externalDocs:
+  description: API 說明（中文）
+  url: https://github.com/Scorpio-meow/Breeze-ASR/blob/main/docs/api.md
+servers:
+  - name: local
+    url: http://{host}:{port}
+    description: 執行中的 Breeze ASR 服務，位址與連接埠來自 `.env` 的 `ASR_HOST`、`ASR_PORT`（Docker 版是 `ASR_PUBLISH_ADDRESS`、`ASR_PUBLISH_PORT`）。
+    variables:
+      host:
+        default: 127.0.0.1
+        description: 服務的主機名稱或 IP
+      port:
+        default: "7860"
+        description: 服務的連接埠
+security: []
+tags:
+  - name: service
+    summary: 服務
+    description: 服務狀態、設定與網頁錯誤回報。
+    kind: nav
+  - name: hardware
+    summary: 硬體與調校
+    description: 自動調校實測推論裝置與權重格式，並可改用其他實測過的設定。
+    kind: nav
+  - name: glossary
+    summary: 詞彙表與熱詞
+    description: 熱詞讓模型更容易辨識出人名與專有名詞；取代規則在辨識後把固定的錯字改掉。
+    kind: nav
+  - name: jobs
+    summary: 辨識工作
+    description: 建立、查詢與取消辨識工作。工作依序處理，一次一個。
+    kind: nav
+  - name: transcript
+    summary: 編輯字幕
+    parent: jobs
+    description: |
+      修改已完成的辨識結果。每次修改都會讓 `result.revision` 加一並寫回磁碟；整份取代時要帶上目前的 `revision`，避免覆蓋別的分頁做的修改。
+    kind: nav
+  - name: exports
+    summary: 匯出
+    parent: jobs
+    description: 把辨識結果下載成文字、字幕或 Word 檔。
+    kind: nav
+  - name: renders
+    summary: 燒錄字幕
+    parent: jobs
+    description: 把字幕燒進原始影片，輸出 H.264／AAC 的 MP4。一次燒一支，其他排隊。
+    kind: nav
+  - name: voices
+    summary: 語者庫
+    description: |
+      記住說話者的聲音，之後的辨識結果遇到相似的聲音會自動帶入名字。只有提供分辨說話者（`models.json` 的 `speakers` 不是 `null`）時才能使用；否則這一組端點都回 404。
+    kind: nav
+
+paths:
+  /api/health:
+    get:
+      operationId: getHealth
+      tags: [service]
+      summary: 服務是否正常運作
+      description: 只要網頁服務在跑就回 200，不代表模型已經載入；模型與硬體狀態請看 `GET /api/config`。
+      responses:
+        "200":
+          summary: 服務正常
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+              examples:
+                ok:
+                  dataValue:
+                    status: ok
+
+  /api/client-errors:
+    post:
+      operationId: reportClientError
+      tags: [service]
+      summary: 網頁回報錯誤到日誌
+      description: |
+        網頁遇到未處理的 JavaScript 錯誤或上傳時連線中斷，會用這個端點寫進 `breeze-asr.log`。每個欄位的換行與控制字元會併成一行空白，只記前 1000 個字。
+
+        整個服務每分鐘最多記 30 則，超過的回 429 且不記錄；之後第一則被記錄時，會另外記一行說明有幾則被略過。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientErrorReport"
+            examples:
+              scriptError:
+                summary: 未處理的例外
+                dataValue:
+                  kind: error
+                  message: x is not defined
+                  source: app.js:10:5
+      responses:
+        "204":
+          summary: 已寫入日誌
+        "403":
+          $ref: "#/components/responses/CrossSite"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "429":
+          summary: 超過每分鐘 30 則的上限
+          description: 沒有內容。這則錯誤沒有被記錄。
+
+  /api/config:
+    get:
+      operationId: getConfig
+      tags: [service]
+      summary: 模型、硬體與各項功能的狀態
+      description: |
+        網頁開啟時與等待模型、調校期間會反覆讀取這個端點。包含：
+
+        - 每個模型的準備狀態與實測速度
+        - 硬體調校的狀態與實測紀錄
+        - 分辨說話者、自動標點、監看資料夾是否提供及其狀態（沒有提供時是 `null`）
+        - 可匯出的格式與各項上限
+      responses:
+        "200":
+          summary: 目前的設定與狀態
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Config"
+              examples:
+                ready:
+                  $ref: "#/components/examples/ConfigReady"
+
+  /api/hardware/retune:
+    post:
+      operationId: retuneHardware
+      tags: [hardware]
+      summary: 重新調校
+      description: |
+        刪除硬體設定檔並重新啟動推論子行程：重新偵測硬體，把預設模型轉成要實測的權重格式並逐一實測（Core i7-9700 上約 7–9 分鐘，Core Ultra 7 155U 上約 7 分鐘），期間無法辨識。進度從 `GET /api/config` 的 `hardware` 讀取。
+      responses:
+        "202":
+          summary: 已開始重新調校
+          description: '回傳新的調校狀態，也就是 `{"state": "tuning", "step": "重新啟動推論行程"}`。'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Hardware"
+              examples:
+                tuning:
+                  dataValue:
+                    state: tuning
+                    step: 重新啟動推論行程
+        "403":
+          $ref: "#/components/responses/CrossSite"
+        "409":
+          summary: 還有工作在排隊或處理中，或正在調校中
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                busy:
+                  dataValue:
+                    detail: 還有工作在排隊或處理中，請等全部完成後再重新調校
+                tuning:
+                  dataValue:
+                    detail: 正在調校中
+
+  /api/hardware/settings:
+    post:
+      operationId: chooseHardware
+      tags: [hardware]
+      summary: 改用另一個實測過的設定
+      description: |
+        改用實測紀錄裡的另一個設定。`label` 取自 `GET /api/config` 的 `hardware.tuning.candidates[].label`，只能選實測時跑得起來的項目（`status` 是 `ok` 或 `rejected`，錯誤率不合格的也可以選）。
+
+        服務會依該項目量到的記憶體重新決定可以同時常駐幾個模型，寫回硬體設定檔，再重新啟動推論子行程。該權重格式已被調校清掉時，第一次使用會重新轉換。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HardwareChoice"
+            examples:
+              igpu:
+                dataValue:
+                  label: Intel(R) Graphics (iGPU)（OpenVINO GPU・int8）
+      responses:
+        "202":
+          summary: 已改用這個設定，推論子行程重新啟動中
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Hardware"
+              examples:
+                starting:
+                  dataValue:
+                    state: starting
+        "403":
+          $ref: "#/components/responses/CrossSite"
+        "409":
+          summary: 還有工作在排隊或處理中，或推論設定還沒就緒
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                busy:
+                  dataValue:
+                    detail: 還有工作在排隊或處理中，請等全部完成後再切換
+                notReady:
+                  dataValue:
+                    detail: 推論設定還沒就緒，請稍後再試
+        "422":
+          summary: 設定檔沒有實測紀錄、找不到這個設定，或它實測時無法執行
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnyError"
+              examples:
+                unknown:
+                  dataValue:
+                    detail: 實測紀錄裡沒有這個設定
+                failed:
+                  dataValue:
+                    detail: 這個設定實測時無法執行，不能選用
+                handWritten:
+                  dataValue:
+                    detail: 手寫的硬體設定檔沒有實測紀錄，請直接修改設定檔
+
+  /api/glossary:
+    get:
+      operationId: getGlossary
+      tags: [glossary]
+      summary: 讀取詞彙表
+      description: 還沒存過時熱詞是空字串、取代規則是空陣列。
+      responses:
+        "200":
+          summary: 目前的詞彙表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Glossary"
+              examples:
+                saved:
+                  $ref: "#/components/examples/Glossary"
+                empty:
+                  summary: 還沒存過
+                  dataValue:
+                    hotwords: ""
+                    replacements: []
+    put:
+      operationId: saveGlossary
+      tags: [glossary]
+      summary: 儲存詞彙表
+      description: |
+        整份取代詞彙表。熱詞與每條規則的連續空白、換行會先合併成一個空格再檢查長度；`find` 與 `replace` 相同的規則會略過。
+
+        取代規則會套用到之後完成的辨識結果（在加標點之前），依清單順序逐條取代；某段字幕取代後變成空白就會被刪掉。已有的結果不受影響。熱詞是網頁建立工作時預先帶入的值，監看資料夾也會用它。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Glossary"
+            examples:
+              names:
+                $ref: "#/components/examples/Glossary"
+      responses:
+        "200":
+          summary: 儲存後的詞彙表
+          description: 空白已合併，與 `find` 相同的規則已移除。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Glossary"
+              examples:
+                saved:
+                  $ref: "#/components/examples/Glossary"
+        "403":
+          $ref: "#/components/responses/CrossSite"
+        "422":
+          summary: 格式不對或超過上限
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnyError"
+              examples:
+                fields:
+                  dataValue:
+                    detail: 詞彙表必須剛好有 hotwords 與 replacements 兩個欄位
+                emptyFind:
+                  dataValue:
+                    detail: 第 2 條的原文不可空白
+                tooLong:
+                  dataValue:
+                    detail: 熱詞最多 1000 個字
+
+  /api/hotwords/count:
+    post:
+      operationId: countHotwords
+      tags: [glossary]
+      summary: 計算熱詞的 token 數
+      description: |
+        用模型的 tokenizer 計算熱詞會佔用多少 token，以及這個模型能接受的上限（`max_target_positions` 的一半減一）。第一次查詢某個模型時會從 Hugging Face 讀取它的 tokenizer。
+
+        超過上限不會回錯誤，由呼叫端比較 `tokens` 與 `limit`；用超過上限的熱詞建立工作才會回 422。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HotwordsCountRequest"
+            examples:
+              attendees:
+                dataValue:
+                  model: MediaTek-Research/Breeze-ASR-25
+                  text: 與會者有王小明、陳美玲。
+      responses:
+        "200":
+          summary: token 數與上限
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HotwordsCount"
+              examples:
+                attendees:
+                  dataValue:
+                    tokens: 15
+                    limit: 223
+        "400":
+          summary: 不支援的模型
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                unknownModel:
+                  dataValue:
+                    detail: 不支援的模型：openai/whisper-large-v3
+        "403":
+          $ref: "#/components/responses/CrossSite"
+        "422":
+          summary: 熱詞超過 1000 字，或這個模型轉呼叫外部服務、不支援熱詞
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnyError"
+              examples:
+                tooLong:
+                  dataValue:
+                    detail: 熱詞最多 1000 個字
+                remote:
+                  dataValue:
+                    detail: 外部辨識服務 轉呼叫外部服務，不支援熱詞
+
+  /api/jobs:
+    get:
+      operationId: listJobs
+      tags: [jobs]
+      summary: 列出保留中的工作
+      description: 包含排隊中、處理中與還沒過期的已結束工作，最新建立的在前。只有摘要，完整結果用 `GET /api/jobs/{job_id}`。
+      responses:
+        "200":
+          summary: 工作清單
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobList"
+              examples:
+                two:
+                  dataValue:
+                    jobs:
+                      - id: q3Zt0k8yJmQe2LxW
+                        model: MediaTek-Research/Breeze-ASR-25
+                        filename: 週會.m4a
+                        audio_seconds: 1824.5
+                        status: running
+                        stage: transcribing
+                        created_at: 1793583123.41
+                        finished_at: null
+                        segments: null
+                      - id: Hn4cV7pLs0aR1uYb
+                        model: MediaTek-Research/Breeze-ASR-25
+                        filename: lecture.mp4
+                        audio_seconds: 29.11
+                        status: succeeded
+                        stage: null
+                        created_at: 1793579011.02
+                        finished_at: 1793579030.77
+                        segments: 7
+    post:
+      operationId: createJob
+      tags: [jobs]
+      summary: 建立辨識工作
+      description: |
+        上傳音訊或影片檔並排入佇列。檔案先在服務端用 ffmpeg 轉成 16 kHz 單聲道，轉不出音訊、長度超過上限或熱詞太長時立即回錯誤，不會排入佇列。
+
+        回應除了工作狀態，還多一個 `waveform`：把整段音訊等分成 4000 格、每格的峰值，網頁在瀏覽器無法自行解碼時用它畫波形。
+
+        必填欄位缺少時先回 422（`detail` 是陣列）；接著依序檢查 `punctuation`、`model`、`speakers`、自動標點是否提供、熱詞長度與 token 數，再存檔與解碼。
+      parameters:
+        - $ref: "#/components/parameters/ContentLength"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/CreateJobForm"
+            encoding:
+              file:
+                contentType: audio/*, video/*, application/octet-stream
+            examples:
+              meeting:
+                summary: 自動判斷說話者人數並加標點
+                serializedValue: |
+                  --boundary
+                  Content-Disposition: form-data; name="model"
+
+                  MediaTek-Research/Breeze-ASR-25
+                  --boundary
+                  Content-Disposition: form-data; name="speakers"
+
+                  auto
+                  --boundary
+                  Content-Disposition: form-data; name="punctuation"
+
+                  on
+                  --boundary
+                  Content-Disposition: form-data; name="hotwords"
+
+                  與會者有王小明、陳美玲，會中提到 Kubernetes。
+                  --boundary
+                  Content-Disposition: form-data; name="file"; filename="meeting.m4a"
+                  Content-Type: audio/mp4
+
+                  （檔案內容）
+                  --boundary--
+      responses:
+        "202":
+          summary: 已排入佇列
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedJob"
+              examples:
+                queued:
+                  summary: 前面還有一個工作在處理
+                  description: "`waveform` 實際有 4000 個數字，這裡只列出開頭幾個。"
+                  dataValue:
+                    id: q3Zt0k8yJmQe2LxW
+                    model: MediaTek-Research/Breeze-ASR-25
+                    filename: meeting.m4a
+                    audio_seconds: 1824.5
+                    status: queued
+                    stage: null
+                    speakers_mode: auto
+                    created_at: 1793583123.41
+                    finished_at: null
+                    error: null
+                    queue_position: 1
+                    jobs_ahead: 1
+                    punctuation: true
+                    hotwords: 與會者有王小明、陳美玲，會中提到 Kubernetes。
+                    waveform: [0.0, 0.012, 0.348, 0.512, 1.0, 0.761]
+          links:
+            getJob:
+              operationId: getJob
+              parameters:
+                job_id: $response.body#/id
+              description: 查詢這個工作的狀態與結果
+            cancelJob:
+              operationId: cancelJob
+              parameters:
+                job_id: $response.body#/id
+              description: 取消這個工作
+        "400":
+          summary: 不支援的模型，選項不合法，或這個服務沒有提供要求的功能
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                unknownModel:
+                  dataValue:
+                    detail: 不支援的模型：openai/whisper-large-v3
+                speakers:
+                  dataValue:
+                    detail: speakers 只能是 off、auto 或 2–8 的人數
+                punctuation:
+                  dataValue:
+                    detail: punctuation 只能是 on 或 off
+                noDiarization:
+                  dataValue:
+                    detail: 這個服務沒有提供分辨說話者，speakers 只能是 off
+                noPunctuation:
+                  dataValue:
+                    detail: 這個服務沒有提供自動標點，punctuation 只能是 off
+        "403":
+          $ref: "#/components/responses/CrossSite"
+        "411":
+          $ref: "#/components/responses/LengthRequired"
+        "413":
+          $ref: "#/components/responses/UploadTooLarge"
+        "422":
+          summary: 欄位缺少、無法解碼、音訊太長、熱詞太長，或外部服務模型給了熱詞
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnyError"
+              examples:
+                noAudio:
+                  dataValue:
+                    detail: 檔案裡沒有可辨識的音訊
+                cannotDecode:
+                  dataValue:
+                    detail: '無法解析這個檔案的音訊：Error opening input files: Invalid data found when processing input'
+                tooLong:
+                  dataValue:
+                    detail: 音訊長度超過上限 10800 秒
+                hotwordsLength:
+                  dataValue:
+                    detail: 熱詞最多 1000 個字
+                hotwordsTokens:
+                  dataValue:
+                    detail: 熱詞太長：240 個 token，Breeze ASR 25 最多 223 個
+                missingField:
+                  dataValue:
+                    detail:
+                      - type: missing
+                        loc: [body, file]
+                        msg: Field required
+                        input: null
+        "503":
+          summary: 排隊的工作已達上限
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                full:
+                  dataValue:
+                    detail: 目前排隊中的工作已達上限 20 筆，請稍後再試
+
+  /api/jobs/{job_id}:
+    parameters:
+      - $ref: "#/components/parameters/JobId"
+    get:
+      operationId: getJob
+      tags: [jobs]
+      summary: 查詢工作狀態與結果
+      description: |
+        依 `status` 與 `stage` 會多出不同的欄位：
+
+        | 時機 | 多出的欄位 |
+        | --- | --- |
+        | `status` 是 `queued` | `queue_position`、`jobs_ahead` |
+        | `stage` 是 `transcribing` 或 `diarizing` | `stage_elapsed_seconds` |
+        | `stage` 是 `transcribing` | `progress`、`estimated_seconds`（無法得知時是 `null`） |
+        | 正在分辨說話者 | `speakers_progress` |
+        | `status` 是 `succeeded` | `result` |
+
+        辨識與分辨說話者同時進行：`stage` 是 `transcribing` 時可能已經有 `speakers_progress`。
+      responses:
+        "200":
+          summary: 工作狀態
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+              examples:
+                transcribing:
+                  $ref: "#/components/examples/JobTranscribing"
+                succeeded:
+                  $ref: "#/components/examples/JobSucceeded"
+                failed:
+                  summary: 失敗
+                  dataValue:
+                    id: q3Zt0k8yJmQe2LxW
+                    model: MediaTek-Research/Breeze-ASR-25
+                    filename: 週會.m4a
+                    audio_seconds: 1824.5
+                    status: failed
+                    stage: null
+                    speakers_mode: "off"
+                    created_at: 1793583123.41
+                    finished_at: 1793583188.02
+                    error: 推論行程意外結束（可能是驅動程式錯誤或記憶體不足），已自動重新啟動，請再送出一次
+                    punctuation: false
+                    hotwords: ""
+          links:
+            exportJob:
+              operationId: exportJob
+              parameters:
+                job_id: $request.path.job_id
+              description: 成功後下載結果
+        "404":
+          $ref: "#/components/responses/JobNotFound"
+    delete:
+      operationId: cancelJob
+      tags: [jobs]
+      summary: 取消工作
+      description: 排隊中的工作立即變成 `cancelled`。處理中的工作會結束推論子行程（與分辨說話者、自動標點的子行程）再重新啟動，`status` 稍後才變成 `cancelled`，回應裡仍是 `running`。
+      responses:
+        "200":
+          summary: 已取消或取消中
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+              examples:
+                transcribing:
+                  $ref: "#/components/examples/JobTranscribing"
+        "403":
+          $ref: "#/components/responses/CrossSite"
+        "404":
+          $ref: "#/components/responses/JobNotFound"
+        "409":
+          summary: 工作已經結束
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                done:
+                  dataValue:
+                    detail: 這個工作已經結束，無法取消
+
+  /api/jobs/{job_id}/transcript:
+    parameters:
+      - $ref: "#/components/parameters/JobId"
+    put:
+      operationId: replaceTranscript
+      tags: [transcript]
+      summary: 用整份字幕取代結果
+      description: |
+        網頁的改文字、改時間、分割、合併、刪除、改說話者、合併說話者、尋找取代與復原都是送這個請求（只有在「說話者」面板改名字用 `PATCH …/speakers/{speaker_id}`）。
+
+        - `revision` 必須等於目前 `result.revision`，否則回 409。
+        - 字幕依開始時間排序；每段的結束時間要晚於開始時間，而且在 0 到音訊長度之間（容許 0.01 秒誤差）；時間四捨五入到 0.01 秒。最多 20000 段。
+        - 每段文字的連續空白與換行會合併成一個空格，不可空白，最多 500 字。
+        - 沒有分辨說話者的結果，`speakers` 與每段的 `speaker` 都必須是 `null`；有分辨說話者時，`speakers` 是陣列，每段的 `speaker` 都要在裡面。
+        - 說話者 `id` 是 S 加 1–4 位數字（例如 `S5`），可以新增；新增的人沒有聲紋，不能記住聲音。新的編號不要用 `voiceprint_speakers` 裡的編號，否則會沿用那位說話者原本的聲紋。
+        - 沒有任何字幕的說話者會被移除（合併說話者就是把字幕都改給另一人）；每人的 `seconds` 依字幕重新計算，送來的值不會用到。
+        - `voice_id` 必須是語者庫裡的人或 `null`；`voice_id` 是 `null` 時 `similarity` 一律存成 `null`。
+        - 全文 `text` 會改成各段文字以換行相接。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TranscriptUpdate"
+            examples:
+              rename:
+                summary: 改說話者名字與一段文字
+                dataValue:
+                  revision: 3
+                  segments:
+                    - start: 0.0
+                      end: 4.24
+                      text: 那顯然這樣子的 attention 是有問題的
+                      speaker: S1
+                    - start: 4.24
+                      end: 9.8
+                      text: 所以我們要換一個方法來做
+                      speaker: S2
+                  speakers:
+                    - id: S1
+                      name: 王小明
+                      voice_id: null
+                      similarity: null
+                    - id: S2
+                      name: 陳美玲
+                      voice_id: Xk2pQ9rT_aE
+                      similarity: 0.82
+              noSpeakers:
+                summary: 沒有分辨說話者的結果
+                dataValue:
+                  revision: 0
+                  segments:
+                    - start: 0.0
+                      end: 4.24
+                      text: 那顯然這樣子的 attention 是有問題的
+                      speaker: null
+                  speakers: null
+      responses:
+        "200":
+          summary: 更新後的工作狀態
+          description: "`result.revision` 加一。"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+              examples:
+                succeeded:
+                  $ref: "#/components/examples/JobSucceeded"
+        "403":
+          $ref: "#/components/responses/CrossSite"
+        "404":
+          $ref: "#/components/responses/ResultNotFound"
+        "409":
+          summary: "`revision` 不符"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                conflict:
+                  dataValue:
+                    detail: 這份字幕已經在別的地方改過，請重新載入後再編輯
+        "422":
+          summary: 內容不合法
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnyError"
+              examples:
+                order:
+                  dataValue:
+                    detail: 第 3 段的開始時間早於上一段，字幕必須依開始時間排序
+                range:
+                  dataValue:
+                    detail: 第 7 段的時間超出音訊範圍（0–29.11 秒）
+                speaker:
+                  dataValue:
+                    detail: 第 2 段的說話者 'S9' 不在說話者清單裡
+                speakerId:
+                  dataValue:
+                    detail: 說話者編號必須是 S 加數字，例如 S1，不能是 'A'
+                speakersNull:
+                  dataValue:
+                    detail: 這份結果沒有分辨說話者，speakers 必須是 null
+                voice:
+                  dataValue:
+                    detail: 語者庫裡沒有 Xk2pQ9rT_aE
+                emptyText:
+                  dataValue:
+                    detail: 第 4 段文字不可空白
+                tooMany:
+                  dataValue:
+                    detail: 字幕最多 20000 段
+
+  /api/jobs/{job_id}/speakers/{speaker_id}:
+    parameters:
+      - $ref: "#/components/parameters/JobId"
+      - $ref: "#/components/parameters/SpeakerId"
+    patch:
+      operationId: renameSpeaker
+      tags: [transcript]
+      summary: 替說話者改名
+      description: |
+        名字的連續空白與換行會合併成一個空格，不可空白，最多 40 字。
+
+        名字有變時，這位說話者與語者庫的對應（`voice_id`、`similarity`）會清成 `null`，`result.revision` 加一；名字沒變則什麼都不改。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpeakerNameUpdate"
+            examples:
+              name:
+                dataValue:
+                  name: 王小明
+      responses:
+        "200":
+          summary: 更新後的工作狀態
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+              examples:
+                succeeded:
+                  $ref: "#/components/examples/JobSucceeded"
+        "403":
+          $ref: "#/components/responses/CrossSite"
+        "404":
+          summary: 找不到工作、還沒有辨識結果，或沒有這位說話者
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                job:
+                  dataValue:
+                    detail: 找不到這個工作的辨識結果，可能已過期
+                speaker:
+                  dataValue:
+                    detail: 這個工作沒有說話者 S9
+        "422":
+          summary: 名字空白或超過 40 字
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnyError"
+              examples:
+                empty:
+                  dataValue:
+                    detail: 名字不可空白
+                tooLong:
+                  dataValue:
+                    detail: 名字最多 40 個字
+
+  /api/jobs/{job_id}/segments/{index}:
+    parameters:
+      - $ref: "#/components/parameters/JobId"
+      - $ref: "#/components/parameters/SegmentIndex"
+    patch:
+      operationId: editSegment
+      tags: [transcript]
+      summary: 修改一段字幕的文字
+      description: |
+        修改第 `index` 段（從 0 起算）的文字。連續空白與換行會合併成一個空格，不可空白，最多 500 字。文字有變時 `result.revision` 加一，全文 `text` 一起更新。
+
+        時間不能用這個端點改；要改時間、分割或合併，用 `PUT /api/jobs/{job_id}/transcript`。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SegmentTextUpdate"
+            examples:
+              fix:
+                dataValue:
+                  text: 那顯然這樣子的 attention 是有問題的
+      responses:
+        "200":
+          summary: 更新後的工作狀態
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+              examples:
+                succeeded:
+                  $ref: "#/components/examples/JobSucceeded"
+        "403":
+          $ref: "#/components/responses/CrossSite"
+        "404":
+          summary: 找不到工作、還沒有辨識結果，或沒有這一段
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                job:
+                  dataValue:
+                    detail: 找不到這個工作的辨識結果，可能已過期
+                segment:
+                  dataValue:
+                    detail: 這個工作沒有第 120 段字幕
+        "422":
+          summary: "`index` 不是整數，或文字空白、超過 500 字"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnyError"
+              examples:
+                empty:
+                  dataValue:
+                    detail: 字幕文字不可空白
+                tooLong:
+                  dataValue:
+                    detail: 字幕文字最多 500 個字
+
+  /api/jobs/{job_id}/export/{fmt}:
+    parameters:
+      - $ref: "#/components/parameters/JobId"
+      - $ref: "#/components/parameters/ExportFormat"
+    get:
+      operationId: exportJob
+      tags: [exports]
+      summary: 下載結果
+      description: |
+        以附件下載目前已儲存的字幕（包含所有修改）。檔名沿用上傳的檔名、換成對應的副檔名。
+
+        | `fmt` | 內容 |
+        | --- | --- |
+        | `txt` | 純文字；有說話者時同一人連續說的話併成一段，前面加「名字：」 |
+        | `srt`、`vtt` | 字幕；說話者以「名字：」或 VTT 的 `<v 名字>` 標示 |
+        | `ass` | 字幕，1920×1080，字型取自 `ASR_SUBTITLE_FONT`；說話者名字放在 `Name` 欄位與文字前 |
+        | `md` | 逐字稿：檔名、長度、說話者清單，內文是 `[時:分:秒] **說話者**：…`，同一人連續的話併成一段、每段最長約 2 分鐘 |
+        | `docx` | Word 逐字稿，內容同 `md` |
+        | `json` | 每段的起訖秒數、文字、說話者 |
+      responses:
+        "200":
+          summary: 檔案內容
+          headers:
+            Content-Disposition:
+              $ref: "#/components/headers/ContentDisposition"
+          content:
+            "text/plain; charset=utf-8":
+              schema:
+                type: string
+              examples:
+                txt:
+                  serializedValue: |
+                    王小明：那顯然這樣子的 attention 是有問題的
+
+                    陳美玲：所以我們要換一個方法來做
+            "application/x-subrip; charset=utf-8":
+              schema:
+                type: string
+              examples:
+                srt:
+                  serializedValue: |
+                    1
+                    00:00:00,000 --> 00:00:04,240
+                    王小明：那顯然這樣子的 attention 是有問題的
+
+                    2
+                    00:00:04,240 --> 00:00:09,800
+                    陳美玲：所以我們要換一個方法來做
+            "text/vtt; charset=utf-8":
+              schema:
+                type: string
+              examples:
+                vtt:
+                  serializedValue: |
+                    WEBVTT
+
+                    00:00:00.000 --> 00:00:04.240
+                    <v 王小明>那顯然這樣子的 attention 是有問題的
+
+                    00:00:04.240 --> 00:00:09.800
+                    <v 陳美玲>所以我們要換一個方法來做
+            "text/x-ssa; charset=utf-8":
+              schema:
+                type: string
+            "text/markdown; charset=utf-8":
+              schema:
+                type: string
+              examples:
+                md:
+                  serializedValue: |
+                    # lecture.mp4
+
+                    - 長度：00:00:29
+                    - 說話者：王小明（00:00:04）、陳美玲（00:00:05）
+
+                    [00:00:00] **王小明**：那顯然這樣子的 attention 是有問題的
+
+                    [00:00:04] **陳美玲**：所以我們要換一個方法來做
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema:
+                contentMediaType: application/vnd.openxmlformats-officedocument.wordprocessingml.document
+            "application/json; charset=utf-8":
+              schema:
+                $ref: "#/components/schemas/ExportJson"
+              examples:
+                json:
+                  dataValue:
+                    text: |-
+                      那顯然這樣子的 attention 是有問題的
+                      所以我們要換一個方法來做
+                    segments:
+                      - start: 0.0
+                        end: 4.24
+                        text: 那顯然這樣子的 attention 是有問題的
+                        speaker: S1
+                        speaker_name: 王小明
+                      - start: 4.24
+                        end: 9.8
+                        text: 所以我們要換一個方法來做
+                        speaker: S2
+                        speaker_name: 陳美玲
+                    audio_seconds: 29.11
+                    processing_seconds: 18.4
+                    speakers:
+                      - id: S1
+                        name: 王小明
+                        seconds: 4.2
+                      - id: S2
+                        name: 陳美玲
+                        seconds: 5.6
+        "404":
+          summary: 找不到工作，或不支援的格式
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                job:
+                  dataValue:
+                    detail: 找不到這個工作，可能已過期
+                format:
+                  dataValue:
+                    detail: 不支援的格式：pdf
+        "409":
+          $ref: "#/components/responses/NoResult"
+
+  /api/jobs/{job_id}/renders:
+    parameters:
+      - $ref: "#/components/parameters/JobId"
+    post:
+      operationId: createRender
+      tags: [renders]
+      summary: 把字幕燒進原始影片
+      description: |
+        上傳這份字幕的原始影片，服務把目前已儲存的字幕（樣式同 ASS 匯出）燒進畫面，輸出 H.264／AAC 的 MP4。影片長度必須和辨識時的音訊相差 2 秒以內。
+
+        一次燒一支，其他排隊；進度用 `GET /api/renders/{render_id}` 查詢。
+      parameters:
+        - $ref: "#/components/parameters/ContentLength"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/CreateRenderForm"
+            encoding:
+              file:
+                contentType: video/*, application/octet-stream
+      responses:
+        "202":
+          summary: 已排入燒錄佇列
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Render"
+              examples:
+                queued:
+                  dataValue:
+                    id: b8Wm2TqZ0rKc4NvE
+                    job_id: Hn4cV7pLs0aR1uYb
+                    status: queued
+                    progress: 0.0
+                    error: null
+                    filename: lecture-字幕.mp4
+                    created_at: 1793579120.55
+                    finished_at: null
+          links:
+            getRender:
+              operationId: getRender
+              parameters:
+                render_id: $response.body#/id
+              description: 查詢燒錄進度
+            cancelRender:
+              operationId: cancelRender
+              parameters:
+                render_id: $response.body#/id
+              description: 取消燒錄
+            downloadRender:
+              operationId: downloadRender
+              parameters:
+                render_id: $response.body#/id
+              description: 完成後下載影片
+        "403":
+          $ref: "#/components/responses/CrossSite"
+        "404":
+          $ref: "#/components/responses/JobNotFound"
+        "409":
+          $ref: "#/components/responses/NoResult"
+        "411":
+          $ref: "#/components/responses/LengthRequired"
+        "413":
+          $ref: "#/components/responses/UploadTooLarge"
+        "422":
+          summary: 欄位缺少，檔案沒有影像、讀不到長度，或長度不符
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnyError"
+              examples:
+                noVideo:
+                  dataValue:
+                    detail: 這個檔案沒有影像，請選擇影片檔
+                noDuration:
+                  dataValue:
+                    detail: 無法讀取這個影片的長度
+                mismatch:
+                  dataValue:
+                    detail: 影片長度 1830.2 秒和這份字幕的 1824.5 秒不符，請選擇原始影片
+        "503":
+          summary: 排隊的燒錄工作已達上限
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                full:
+                  dataValue:
+                    detail: 排隊中的燒錄工作已達上限 20 筆，請稍後再試
+
+  /api/renders/{render_id}:
+    parameters:
+      - $ref: "#/components/parameters/RenderId"
+    get:
+      operationId: getRender
+      tags: [renders]
+      summary: 查詢燒錄進度
+      description: 燒好的影片和辨識結果一樣保留 `ASR_JOB_TTL_SECONDS` 秒；服務重新啟動時會清掉。
+      responses:
+        "200":
+          summary: 燒錄狀態
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Render"
+              examples:
+                running:
+                  dataValue:
+                    id: b8Wm2TqZ0rKc4NvE
+                    job_id: Hn4cV7pLs0aR1uYb
+                    status: running
+                    progress: 0.415
+                    error: null
+                    filename: lecture-字幕.mp4
+                    created_at: 1793579120.55
+                    finished_at: null
+                failed:
+                  dataValue:
+                    id: b8Wm2TqZ0rKc4NvE
+                    job_id: Hn4cV7pLs0aR1uYb
+                    status: failed
+                    progress: 0.12
+                    error: 燒錄字幕失敗：Error opening output files：No space left on device
+                    filename: lecture-字幕.mp4
+                    created_at: 1793579120.55
+                    finished_at: 1793579133.9
+        "404":
+          $ref: "#/components/responses/RenderNotFound"
+    delete:
+      operationId: cancelRender
+      tags: [renders]
+      summary: 取消燒錄
+      description: 排隊中的立即變成 `cancelled`；燒錄中的會先變成 `cancelling`，ffmpeg 結束後才變成 `cancelled`。
+      responses:
+        "200":
+          summary: 已取消或取消中
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Render"
+        "403":
+          $ref: "#/components/responses/CrossSite"
+        "404":
+          $ref: "#/components/responses/RenderNotFound"
+        "409":
+          summary: 燒錄已經結束
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                done:
+                  dataValue:
+                    detail: 這個燒錄工作已經結束，無法取消
+
+  /api/renders/{render_id}/file:
+    parameters:
+      - $ref: "#/components/parameters/RenderId"
+    get:
+      operationId: downloadRender
+      tags: [renders]
+      summary: 下載燒好字幕的影片
+      description: 以附件下載，檔名是「原檔名-字幕.mp4」。支援 `Range` 請求，可以續傳或直接在播放器裡拖曳。
+      parameters:
+        - name: Range
+          in: header
+          required: false
+          description: 只取影片的一部分，例如 `bytes=0-1048575`。
+          schema:
+            type: string
+          example: bytes=0-1048575
+      responses:
+        "200":
+          summary: 完整影片
+          headers:
+            Content-Disposition:
+              $ref: "#/components/headers/ContentDisposition"
+            Accept-Ranges:
+              $ref: "#/components/headers/AcceptRanges"
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Last-Modified:
+              $ref: "#/components/headers/LastModified"
+          content:
+            video/mp4:
+              schema:
+                contentMediaType: video/mp4
+        "206":
+          summary: 影片的一部分
+          headers:
+            Content-Range:
+              description: 這次回傳的位元組範圍與檔案總大小
+              schema:
+                type: string
+              example: bytes 0-1048575/52428800
+            Content-Disposition:
+              $ref: "#/components/headers/ContentDisposition"
+            Accept-Ranges:
+              $ref: "#/components/headers/AcceptRanges"
+          content:
+            video/mp4:
+              schema:
+                contentMediaType: video/mp4
+        "404":
+          $ref: "#/components/responses/RenderNotFound"
+        "409":
+          summary: 燒錄還沒完成
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                notDone:
+                  dataValue:
+                    detail: 燒錄還沒有完成
+        "416":
+          summary: "`Range` 超出檔案大小"
+
+  /api/voices:
+    get:
+      operationId: listVoices
+      tags: [voices]
+      summary: 語者庫清單
+      description: 依加入的先後排列，不含聲紋本身。
+      responses:
+        "200":
+          summary: 語者庫裡的人
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoiceList"
+              examples:
+                voices:
+                  $ref: "#/components/examples/VoiceList"
+        "404":
+          $ref: "#/components/responses/SpeakersUnavailable"
+    post:
+      operationId: rememberVoice
+      tags: [voices]
+      summary: 記住說話者的聲音
+      description: |
+        把某個結果裡的說話者，以目前的名字記進語者庫；語者庫已有同名的人時累加聲紋（每人最多保留最近的 128 個聲紋向量）。之後辨識遇到相似的聲音（相似度達 `models.json` 的 `speakers.match_threshold`）會自動帶入這個名字。
+
+        說話者必須先改掉預設名字（「說話者 1」這類），而且要有聲紋（見 `result.voiceprint_speakers`；手動新增的說話者沒有）。成功後這位說話者的 `voice_id` 會指向語者庫的這個人，`result.revision` 加一。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RememberVoiceRequest"
+            examples:
+              s1:
+                dataValue:
+                  job_id: Hn4cV7pLs0aR1uYb
+                  speaker_id: S1
+      responses:
+        "201":
+          summary: 已記住
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RememberVoiceResult"
+          links:
+            forgetVoice:
+              operationId: forgetVoice
+              parameters:
+                voice_id: $response.body#/voice/id
+              description: 從語者庫刪除這個人
+        "403":
+          $ref: "#/components/responses/CrossSite"
+        "404":
+          summary: 沒有提供分辨說話者、找不到工作或說話者，或這位說話者沒有聲紋
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                unavailable:
+                  dataValue:
+                    detail: 這個服務沒有提供分辨說話者
+                job:
+                  dataValue:
+                    detail: 找不到這個工作的辨識結果，可能已過期
+                speaker:
+                  dataValue:
+                    detail: 這個工作沒有說話者 S9
+                noVoiceprint:
+                  dataValue:
+                    detail: 這位說話者沒有聲紋（手動新增的說話者，或改版前產生的結果），無法記住聲音
+        "422":
+          summary: 欄位缺少，或說話者還是預設名字
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnyError"
+              examples:
+                defaultName:
+                  dataValue:
+                    detail: 請先替這位說話者取名，再記住聲音
+
+  /api/voices/{voice_id}:
+    parameters:
+      - $ref: "#/components/parameters/VoiceId"
+    delete:
+      operationId: forgetVoice
+      tags: [voices]
+      summary: 從語者庫刪除
+      description: 刪除這個人與他的聲紋。保留中的結果裡對應到他的說話者，`voice_id` 與 `similarity` 會清成 `null`，名字不變；那些結果的 `revision` 也會增加。
+      responses:
+        "200":
+          summary: 刪除後的清單
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoiceList"
+              examples:
+                voices:
+                  $ref: "#/components/examples/VoiceList"
+        "403":
+          $ref: "#/components/responses/CrossSite"
+        "404":
+          summary: 沒有提供分辨說話者，或語者庫裡沒有這個人
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                unavailable:
+                  dataValue:
+                    detail: 這個服務沒有提供分辨說話者
+                missing:
+                  dataValue:
+                    detail: 語者庫裡沒有這個人
+
+components:
+  parameters:
+    JobId:
+      name: job_id
+      in: path
+      required: true
+      description: 工作編號，`POST /api/jobs` 回傳的 `id`（16 個字元，URL-safe Base64）。
+      schema:
+        type: string
+      example: Hn4cV7pLs0aR1uYb
+    RenderId:
+      name: render_id
+      in: path
+      required: true
+      description: 燒錄工作編號，`POST /api/jobs/{job_id}/renders` 回傳的 `id`。
+      schema:
+        type: string
+      example: b8Wm2TqZ0rKc4NvE
+    VoiceId:
+      name: voice_id
+      in: path
+      required: true
+      description: 語者庫裡的人的編號（`GET /api/voices` 的 `id`）。
+      schema:
+        type: string
+      example: Xk2pQ9rT_aE
+    SpeakerId:
+      name: speaker_id
+      in: path
+      required: true
+      description: 說話者編號，`result.speakers[].id`。
+      schema:
+        type: string
+      example: S1
+    SegmentIndex:
+      name: index
+      in: path
+      required: true
+      description: 第幾段字幕，從 0 起算。負數或超出範圍回 404。
+      schema:
+        type: integer
+      example: 0
+    ExportFormat:
+      name: fmt
+      in: path
+      required: true
+      description: 匯出格式。不在清單裡的格式回 404。
+      schema:
+        $ref: "#/components/schemas/ExportFormat"
+      example: srt
+    ContentLength:
+      name: Content-Length
+      in: header
+      required: true
+      description: 整個請求本文的位元組數。缺少時回 411；超過 `ASR_MAX_UPLOAD_MB` 加 64 KiB 時回 413。瀏覽器、curl 上傳檔案時會自動帶上。
+      schema:
+        type: integer
+        minimum: 0
+
+  headers:
+    ContentDisposition:
+      description: 以附件下載；檔名以 RFC 5987 編碼，支援中文。
+      schema:
+        type: string
+      example: attachment; filename*=UTF-8''lecture.srt
+    AcceptRanges:
+      description: 支援以位元組為單位的部分下載
+      schema:
+        type: string
+        const: bytes
+    ETag:
+      description: 檔案版本，依修改時間與大小產生
+      schema:
+        type: string
+    LastModified:
+      description: 檔案的修改時間（HTTP 日期）
+      schema:
+        type: string
+
+  responses:
+    CrossSite:
+      summary: 來自其他網站的請求
+      description: 瀏覽器帶來的 `Sec-Fetch-Site` 是 `cross-site` 或 `same-site`。
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            crossSite:
+              dataValue:
+                detail: 拒絕來自其他網站的請求
+    ValidationFailed:
+      summary: 欄位缺少或型別錯誤
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationError"
+          examples:
+            missing:
+              dataValue:
+                detail:
+                  - type: missing
+                    loc: [body, message]
+                    msg: Field required
+                    input:
+                      kind: error
+                      source: app.js:10:5
+    JobNotFound:
+      summary: 找不到工作，或已過期
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            missing:
+              dataValue:
+                detail: 找不到這個工作，可能已過期
+    ResultNotFound:
+      summary: 找不到工作，或還沒有辨識結果
+      description: 工作不存在、已過期，或還沒成功完成（排隊中、處理中、失敗、取消）都回 404。
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            missing:
+              dataValue:
+                detail: 找不到這個工作的辨識結果，可能已過期
+    NoResult:
+      summary: 工作還沒有辨識結果
+      description: 工作還在排隊、處理中，或已經失敗、取消。
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            notYet:
+              dataValue:
+                detail: 這個工作還沒有辨識結果
+    RenderNotFound:
+      summary: 找不到燒錄工作，或已過期
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            missing:
+              dataValue:
+                detail: 找不到這個燒錄工作，可能已過期
+    SpeakersUnavailable:
+      summary: 這個服務沒有提供分辨說話者
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            unavailable:
+              dataValue:
+                detail: 這個服務沒有提供分辨說話者
+    LengthRequired:
+      summary: 請求缺少 Content-Length
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            missing:
+              dataValue:
+                detail: 請求缺少 Content-Length
+    UploadTooLarge:
+      summary: 檔案超過 ASR_MAX_UPLOAD_MB
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            tooLarge:
+              dataValue:
+                detail: 檔案超過上限 2048 MB
+
+  examples:
+    Glossary:
+      summary: 人名熱詞與兩條取代規則
+      dataValue:
+        hotwords: 與會者有王小明、陳美玲，會中提到 Kubernetes。
+        replacements:
+          - find: 鍾雲浩
+            replace: 鍾昀澔
+          - find: 嗯，
+            replace: ""
+    VoiceList:
+      summary: 兩個人
+      dataValue:
+        voices:
+          - id: Xk2pQ9rT_aE
+            name: 陳美玲
+            samples: 3
+            outdated: false
+            created_at: 1793401220.6
+            updated_at: 1793579201.3
+          - id: 7fLh0QwZcYs
+            name: 王小明
+            samples: 1
+            outdated: false
+            created_at: 1793579188.9
+            updated_at: 1793579188.9
+    JobTranscribing:
+      summary: 辨識中，同時分辨說話者
+      dataValue:
+        id: q3Zt0k8yJmQe2LxW
+        model: MediaTek-Research/Breeze-ASR-25
+        filename: 週會.m4a
+        audio_seconds: 1824.5
+        status: running
+        stage: transcribing
+        speakers_mode: auto
+        created_at: 1793583123.41
+        finished_at: null
+        error: null
+        stage_elapsed_seconds: 312.4
+        progress: 0.418
+        estimated_seconds: 738.9
+        speakers_progress: 0.655
+        punctuation: true
+        hotwords: 與會者有王小明、陳美玲，會中提到 Kubernetes。
+    JobSucceeded:
+      summary: 完成，有分辨說話者
+      dataValue:
+        id: Hn4cV7pLs0aR1uYb
+        model: MediaTek-Research/Breeze-ASR-25
+        filename: lecture.mp4
+        audio_seconds: 29.11
+        status: succeeded
+        stage: null
+        speakers_mode: auto
+        created_at: 1793579011.02
+        finished_at: 1793579030.77
+        error: null
+        punctuation: true
+        hotwords: ""
+        result:
+          revision: 4
+          punctuation_error: null
+          text: |-
+            那顯然這樣子的 attention 是有問題的
+            所以我們要換一個方法來做
+          segments:
+            - start: 0.0
+              end: 4.24
+              text: 那顯然這樣子的 attention 是有問題的
+              speaker: S1
+            - start: 4.24
+              end: 9.8
+              text: 所以我們要換一個方法來做
+              speaker: S2
+          speakers:
+            - id: S1
+              name: 王小明
+              seconds: 4.2
+              voice_id: null
+              similarity: null
+            - id: S2
+              name: 陳美玲
+              seconds: 5.6
+              voice_id: Xk2pQ9rT_aE
+              similarity: 0.82
+          voiceprint_speakers: [S1, S2]
+          speakers_error: null
+          audio_seconds: 29.11
+          processing_seconds: 18.4
+    ConfigReady:
+      summary: 調校完成，兩個模型都已就緒
+      dataValue:
+        default_model: MediaTek-Research/Breeze-ASR-25
+        models:
+          - id: MediaTek-Research/Breeze-ASR-25
+            name: Breeze ASR 25
+            tagline: 華語・中英夾雜
+            description: 強化台灣華語與中英混用（句內、句間切換）辨識，時間戳對齊佳，適合產生字幕。
+            backend: local
+            hotwords: true
+            state: ready
+            error: null
+            seconds_per_audio_second: 0.405
+          - id: MediaTek-Research/Breeze-ASR-26
+            name: Breeze ASR 26
+            tagline: 台語 → 華語漢字
+            description: 台語（台灣閩南語）語音辨識，以約一萬小時台語語音微調；輸出為華語漢字，不是台語正字。
+            backend: local
+            hotwords: true
+            state: prepared
+            error: null
+            seconds_per_audio_second: null
+        hardware:
+          state: ready
+          settings:
+            engine: openvino
+            device: GPU
+            weight_format: int8
+            torch_dtype: null
+            torch_num_beams: null
+            max_loaded_models: 2
+          summary: OpenVINO・GPU・int8
+          path: data/hardware-profile.json
+          tuning:
+            generated_at: "2026-10-31T20:31:52+08:00"
+            hardware:
+              os: Windows 11
+              cpu: Intel(R) Core(TM) Ultra 7 155U
+              physical_cores: 12
+              usable_threads: 14
+              memory_total_gb: 31.7
+              memory_available_gb: 18.6
+              openvino_devices:
+                CPU:
+                  name: Intel(R) Core(TM) Ultra 7 155U
+                  precisions: [FP32, INT8, BIN, EXPORT_IMPORT]
+                  type: integrated
+                GPU:
+                  name: Intel(R) Graphics (iGPU)
+                  precisions: [FP32, BIN, FP16, INT8, GPU_USM_MEMORY, EXPORT_IMPORT]
+                  type: integrated
+                  memory_bytes: 17754488832
+              nvidia_gpus: []
+              amd_gpu_tools: false
+              torch_gpus: []
+            sample:
+              model: MediaTek-Research/Breeze-ASR-25
+              seconds: 29.11
+              source: https://huggingface.co/datasets/ky552/ML2021_ASR_ST
+            candidates:
+              - label: Intel(R) Core(TM) Ultra 7 155U（OpenVINO CPU・int4）
+                engine: openvino
+                device: CPU
+                weight_format: int4
+                torch_dtype: null
+                torch_num_beams: null
+                status: rejected
+                load_seconds: 6.06
+                transcribe_seconds: 11.14
+                memory_bytes: 1766014976
+                rtf: 0.383
+                cer: 0.0281
+                reason: 錯誤率 2.8% 比最準的設定（1.7%）高出超過 1 個百分點，精度損失太大
+              - label: Intel(R) Graphics (iGPU)（OpenVINO GPU・int8）
+                engine: openvino
+                device: GPU
+                weight_format: int8
+                torch_dtype: null
+                torch_num_beams: null
+                status: ok
+                load_seconds: 3.92
+                transcribe_seconds: 11.13
+                memory_bytes: 3042095104
+                rtf: 0.382
+                cer: 0.0169
+            skipped:
+              - label: Intel(R) AI Boost（NPU）
+                reason: 實測時驅動回報 DEVICE_LOST、裝置被重置，不支援 NPU
+            reasons:
+              - 選擇 Intel(R) Graphics (iGPU)（OpenVINO GPU・int8）：實測處理時間為音訊長度的 0.38 倍，是可用裝置中最快的
+              - 每個模型約 2.8 GB，目前可用記憶體 18.7 GB，最多用其中 50%，同時常駐 2 個
+        speakers:
+          state: ready
+          error: null
+          max_speakers: 8
+          max_name_length: 40
+        punctuation:
+          state: ready
+          error: null
+        watch: null
+        formats: [txt, srt, vtt, ass, md, docx, json]
+        max_upload_mb: 2048
+        max_audio_seconds: 10800
+        max_text_length: 500
+        max_hotwords_length: 1000
+
+  schemas:
+    Error:
+      type: object
+      description: 服務判斷的錯誤。
+      required: [detail]
+      properties:
+        detail:
+          type: string
+          description: 錯誤原因（中文）
+    ValidationError:
+      type: object
+      description: 欄位缺少或型別錯誤（由 FastAPI 檢查）。
+      required: [detail]
+      properties:
+        detail:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationIssue"
+    ValidationIssue:
+      type: object
+      required: [type, loc, msg]
+      properties:
+        type:
+          type: string
+          description: 錯誤種類，例如 `missing`、`int_parsing`、`string_type`
+        loc:
+          type: array
+          description: 出錯的位置，例如 `["body", "segments", 0, "start"]`
+          items:
+            type: [string, integer]
+        msg:
+          type: string
+          description: 英文說明
+        input:
+          description: 收到的值
+        ctx:
+          type: object
+          description: 補充資訊，例如型別限制
+    AnyError:
+      description: 422 的兩種格式：欄位格式不對時是 `ValidationError`，內容不被接受時是 `Error`。
+      anyOf:
+        - $ref: "#/components/schemas/Error"
+        - $ref: "#/components/schemas/ValidationError"
+
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          const: ok
+
+    ClientErrorReport:
+      type: object
+      required: [kind, message, source]
+      properties:
+        kind:
+          type: string
+          description: 錯誤種類，網頁送 `error`（未處理的例外）、`unhandledrejection`（未處理的 Promise 拒絕）或 `upload`（上傳中斷）
+          examples: [error]
+        message:
+          type: string
+          description: 錯誤訊息
+        source:
+          type: string
+          description: 發生的位置，例如 `app.js:10:5`
+
+    Config:
+      type: object
+      required:
+        - default_model
+        - models
+        - hardware
+        - speakers
+        - punctuation
+        - watch
+        - formats
+        - max_upload_mb
+        - max_audio_seconds
+        - max_text_length
+        - max_hotwords_length
+      properties:
+        default_model:
+          type: string
+          description: 預設模型的 `id`
+        models:
+          type: array
+          description: "`models.json` 裡的每個模型，順序相同"
+          items:
+            $ref: "#/components/schemas/ModelStatus"
+        hardware:
+          $ref: "#/components/schemas/Hardware"
+        speakers:
+          description: 分辨說話者的狀態；沒有提供這個功能時是 `null`
+          anyOf:
+            - $ref: "#/components/schemas/SpeakersFeature"
+            - type: "null"
+        punctuation:
+          description: 自動標點的狀態；沒有提供這個功能時是 `null`
+          anyOf:
+            - $ref: "#/components/schemas/FeatureStatus"
+            - type: "null"
+        watch:
+          description: 監看資料夾的設定與狀態；沒有監看（`ASR_WATCH_DIR=off`）時是 `null`
+          anyOf:
+            - $ref: "#/components/schemas/WatchStatus"
+            - type: "null"
+        formats:
+          type: array
+          description: 可匯出的格式
+          items:
+            $ref: "#/components/schemas/ExportFormat"
+        max_upload_mb:
+          type: integer
+          description: 上傳檔案的上限（MB），`ASR_MAX_UPLOAD_MB`
+        max_audio_seconds:
+          type: integer
+          description: 音訊長度上限（秒），`ASR_MAX_AUDIO_SECONDS`
+        max_text_length:
+          type: integer
+          description: 一段字幕的字數上限
+        max_hotwords_length:
+          type: integer
+          description: 熱詞的字數上限
+
+    ModelStatus:
+      type: object
+      required: [id, name, tagline, description, backend, hotwords, state, error, seconds_per_audio_second]
+      properties:
+        id:
+          type: string
+          description: 模型 id，建立工作時填在 `model`
+          examples: [MediaTek-Research/Breeze-ASR-25]
+        name:
+          type: string
+          description: 顯示名稱
+        tagline:
+          type: string
+          description: 一句話的適用情境
+        description:
+          type: string
+          description: 說明
+        backend:
+          type: string
+          enum: [local, remote]
+          description: "`local` 在這台電腦推論；`remote` 轉呼叫外部辨識服務"
+        hotwords:
+          type: boolean
+          description: 是否支援熱詞（只有本機模型支援）
+        state:
+          $ref: "#/components/schemas/ModelState"
+        error:
+          type: [string, "null"]
+          description: 準備或載入失敗的原因
+        seconds_per_audio_second:
+          type: [number, "null"]
+          description: 每秒音訊要處理幾秒，是累計處理秒數除以累計音訊秒數：自動調校實測的模型從實測值起算，之後每完成一個工作就加進去；推論子行程重新啟動後重新累計，還沒有任何紀錄時是 `null`
+    ModelState:
+      type: string
+      enum: [waiting, downloading, converting, prepared, loading, ready, failed]
+      description: |
+        | 值 | 意思 |
+        | --- | --- |
+        | `waiting` | 推論子行程還沒啟動，或正在等硬體調校 |
+        | `downloading` | 從 Hugging Face 下載權重 |
+        | `converting` | 轉成 OpenVINO 格式或壓縮權重 |
+        | `prepared` | 權重已就緒，還沒載入記憶體（或為了騰出記憶體被卸載） |
+        | `loading` | 載入記憶體中 |
+        | `ready` | 已載入，可以立即辨識 |
+        | `failed` | 準備失敗，原因在 `error` |
+
+    Hardware:
+      description: 推論設定的狀態，依 `state` 分成五種。
+      oneOf:
+        - $ref: "#/components/schemas/HardwareStarting"
+        - $ref: "#/components/schemas/HardwareTuning"
+        - $ref: "#/components/schemas/HardwareReady"
+        - $ref: "#/components/schemas/HardwareFailed"
+        - $ref: "#/components/schemas/HardwareNotNeeded"
+      discriminator:
+        propertyName: state
+        mapping:
+          starting: "#/components/schemas/HardwareStarting"
+          tuning: "#/components/schemas/HardwareTuning"
+          ready: "#/components/schemas/HardwareReady"
+          failed: "#/components/schemas/HardwareFailed"
+          not_needed: "#/components/schemas/HardwareNotNeeded"
+    HardwareStarting:
+      type: object
+      description: 推論子行程啟動中（服務剛啟動、取消處理中的工作，或改用其他設定之後）
+      required: [state]
+      properties:
+        state:
+          const: starting
+    HardwareTuning:
+      type: object
+      description: 自動調校中
+      required: [state, step]
+      properties:
+        state:
+          const: tuning
+        step:
+          type: string
+          description: 目前的步驟
+          examples: [實測 Intel(R) Graphics (iGPU)（OpenVINO GPU・int8）]
+        done:
+          type: integer
+          minimum: 0
+          description: 已實測的設定數（實測階段才有）
+        total:
+          type: integer
+          minimum: 1
+          description: 預計實測的設定總數（實測階段才有）
+    HardwareReady:
+      type: object
+      description: 推論設定已就緒
+      required: [state, settings, summary, tuning, path]
+      properties:
+        state:
+          const: ready
+        settings:
+          $ref: "#/components/schemas/EngineSettings"
+        summary:
+          type: string
+          description: 一行摘要
+          examples: [OpenVINO・GPU・int8]
+        tuning:
+          description: 自動調校的實測紀錄；手寫的硬體設定檔是 `null`
+          anyOf:
+            - $ref: "#/components/schemas/TuningRecord"
+            - type: "null"
+        path:
+          type: string
+          description: 硬體設定檔的路徑（`ASR_HARDWARE_PROFILE`）
+    HardwareFailed:
+      type: object
+      description: 讀取硬體設定檔或自動調校失敗，本機模型無法使用
+      required: [state, error, path]
+      properties:
+        state:
+          const: failed
+        error:
+          type: string
+          description: 失敗原因
+        path:
+          type: string
+          description: 硬體設定檔的路徑
+    HardwareNotNeeded:
+      type: object
+      description: "`models.json` 只有轉呼叫外部服務的模型，不需要調校"
+      required: [state]
+      properties:
+        state:
+          const: not_needed
+
+    EngineSettings:
+      type: object
+      description: 使用中的推論設定，與硬體設定檔的 `settings` 相同。
+      required: [engine, device, weight_format, torch_dtype, torch_num_beams, max_loaded_models]
+      properties:
+        engine:
+          type: string
+          enum: [openvino, torch]
+        device:
+          type: string
+          description: OpenVINO 的裝置名稱（`CPU`、`GPU`、`GPU.1`…）或 PyTorch 的 `cuda:0` 等
+        weight_format:
+          type: [string, "null"]
+          enum: [fp32, fp16, int8, int4, null]
+          description: OpenVINO 的權重格式；PyTorch 是 `null`
+        torch_dtype:
+          type: [string, "null"]
+          enum: [float16, bfloat16, float32, null]
+          description: PyTorch 的運算精度；OpenVINO 是 `null`
+        torch_num_beams:
+          type: [integer, "null"]
+          minimum: 1
+          description: PyTorch 的 beam search 寬度；OpenVINO 是 `null`
+        max_loaded_models:
+          type: integer
+          minimum: 1
+          description: 同時常駐記憶體的模型數
+
+    TuningRecord:
+      type: object
+      required: [generated_at, hardware, sample, candidates, skipped, reasons]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+          description: 調校完成的時間
+        hardware:
+          $ref: "#/components/schemas/DetectedHardware"
+        sample:
+          type: object
+          description: 實測用的音訊
+          required: [model, seconds, source]
+          properties:
+            model:
+              type: string
+              description: 實測的模型
+            seconds:
+              type: number
+              description: 音訊長度
+            source:
+              type: string
+              format: uri
+              description: 音訊出處
+        candidates:
+          type: array
+          description: 實際實測過的設定
+          items:
+            $ref: "#/components/schemas/TuningCandidate"
+        skipped:
+          type: array
+          description: 沒有實測的設定與原因
+          items:
+            type: object
+            required: [label, reason]
+            properties:
+              label:
+                type: string
+              reason:
+                type: string
+        reasons:
+          type: array
+          description: 選擇目前設定的理由；手動改用其他設定後是手動選擇的說明
+          items:
+            type: string
+    TuningCandidate:
+      type: object
+      required: [label, engine, device, weight_format, torch_dtype, torch_num_beams, status]
+      properties:
+        label:
+          type: string
+          description: 顯示名稱，也是 `POST /api/hardware/settings` 的 `label`
+        engine:
+          type: string
+          enum: [openvino, torch]
+        device:
+          type: string
+        weight_format:
+          type: [string, "null"]
+          enum: [fp32, fp16, int8, int4, null]
+        torch_dtype:
+          type: [string, "null"]
+          enum: [float16, bfloat16, float32, null]
+        torch_num_beams:
+          type: [integer, "null"]
+        status:
+          type: string
+          enum: [ok, rejected, failed]
+          description: "`ok` 可用；`rejected` 跑得起來但錯誤率不合格；`failed` 無法執行"
+        reason:
+          type: string
+          description: "`rejected` 或 `failed` 的原因"
+        load_seconds:
+          type: number
+          description: 載入模型的秒數
+        transcribe_seconds:
+          type: number
+          description: 辨識實測音訊的秒數（取多次中最快的一次）
+        memory_bytes:
+          type: integer
+          description: 執行時的記憶體用量；PyTorch CPU 量不到時是 0
+        rtf:
+          type: number
+          description: 處理時間除以音訊長度，越小越快
+        cer:
+          type: number
+          description: 與參考逐字稿相比的字元錯誤率
+    DetectedHardware:
+      type: object
+      required:
+        - os
+        - cpu
+        - physical_cores
+        - usable_threads
+        - memory_total_gb
+        - memory_available_gb
+        - openvino_devices
+        - nvidia_gpus
+        - amd_gpu_tools
+        - torch_gpus
+      properties:
+        os:
+          type: string
+        cpu:
+          type: string
+        physical_cores:
+          type: [integer, "null"]
+        usable_threads:
+          type: integer
+          description: 這個行程可用的執行緒數（受 CPU 親和性限制）
+        memory_total_gb:
+          type: number
+        memory_available_gb:
+          type: number
+        openvino_devices:
+          type: object
+          description: OpenVINO 偵測到的裝置，鍵是裝置名稱
+          additionalProperties:
+            type: object
+            required: [name, precisions]
+            properties:
+              name:
+                type: string
+              precisions:
+                type: array
+                items:
+                  type: string
+              type:
+                type: string
+                description: "`integrated` 或 `discrete`"
+              memory_bytes:
+                type: integer
+                description: GPU 的記憶體大小
+        nvidia_gpus:
+          type: array
+          items:
+            type: object
+            required: [index, name, memory_total_gb, memory_free_gb]
+            properties:
+              index:
+                type: integer
+              name:
+                type: string
+              memory_total_gb:
+                type: number
+              memory_free_gb:
+                type: number
+        amd_gpu_tools:
+          type: boolean
+          description: 是否找得到 `rocm-smi` 或 `amd-smi`
+        torch_gpus:
+          type: array
+          items:
+            type: object
+            required: [index, name, backend]
+            properties:
+              index:
+                type: integer
+              name:
+                type: string
+              backend:
+                type: string
+                enum: [CUDA, ROCm]
+
+    FeatureStatus:
+      type: object
+      description: 選用模型的準備狀態。服務啟動時就開始下載。
+      required: [state, error]
+      properties:
+        state:
+          type: string
+          enum: [downloading, ready, failed]
+        error:
+          type: [string, "null"]
+          description: 下載失敗的原因
+    SpeakersFeature:
+      allOf:
+        - $ref: "#/components/schemas/FeatureStatus"
+      type: object
+      required: [max_speakers, max_name_length]
+      properties:
+        max_speakers:
+          type: integer
+          minimum: 2
+          description: 指定人數時的上限
+        max_name_length:
+          type: integer
+          description: 說話者名字的字數上限
+
+    WatchStatus:
+      type: object
+      required: [directory, model, speakers, punctuation, formats, active, processed, error]
+      properties:
+        directory:
+          type: string
+          description: 監看的資料夾
+        model:
+          type: string
+        speakers:
+          $ref: "#/components/schemas/SpeakersMode"
+        punctuation:
+          type: boolean
+        formats:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExportFormat"
+        active:
+          type: integer
+          minimum: 0
+          description: 處理中的檔案數
+        processed:
+          type: integer
+          minimum: 0
+          description: 這次啟動後已處理完的檔案數
+        error:
+          type: [string, "null"]
+          description: 最近一次讀取資料夾或處理失敗的原因
+
+    ExportFormat:
+      type: string
+      enum: [txt, srt, vtt, ass, md, docx, json]
+
+    Glossary:
+      type: object
+      additionalProperties: false
+      required: [hotwords, replacements]
+      properties:
+        hotwords:
+          type: string
+          maxLength: 1000
+          description: 熱詞，空字串表示不用
+        replacements:
+          type: array
+          maxItems: 500
+          items:
+            $ref: "#/components/schemas/Replacement"
+    Replacement:
+      type: object
+      additionalProperties: false
+      required: [find, replace]
+      properties:
+        find:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: 要找的文字，不可空白
+        replace:
+          type: string
+          maxLength: 100
+          description: 換成的文字；空字串表示刪掉
+
+    HotwordsCountRequest:
+      type: object
+      required: [model, text]
+      properties:
+        model:
+          type: string
+          description: 模型 id
+        text:
+          type: string
+          maxLength: 1000
+          description: 熱詞
+    HotwordsCount:
+      type: object
+      required: [tokens, limit]
+      properties:
+        tokens:
+          type: integer
+          minimum: 0
+          description: 熱詞的 token 數；空白時是 0
+        limit:
+          type: integer
+          description: 這個模型能接受的上限
+
+    HardwareChoice:
+      type: object
+      required: [label]
+      properties:
+        label:
+          type: string
+          description: "`hardware.tuning.candidates[].label`"
+
+    JobStatus:
+      type: string
+      enum: [queued, running, succeeded, failed, cancelled]
+    JobStage:
+      type: [string, "null"]
+      enum: [preparing, loading, transcribing, punctuating, diarizing, null]
+      description: |
+        處理中的階段；不在處理中時是 `null`。
+
+        | 值 | 意思 |
+        | --- | --- |
+        | `preparing` | 等模型下載或轉換 |
+        | `loading` | 把模型載入記憶體 |
+        | `transcribing` | 辨識中（分辨說話者同時在背景進行） |
+        | `punctuating` | 加標點 |
+        | `diarizing` | 等分辨說話者完成 |
+    SpeakersMode:
+      type: string
+      pattern: ^(off|auto|[1-9][0-9]*)$
+      description: "`off` 不分辨；`auto` 自動判斷人數；數字是指定人數（2 到 `max_speakers`）"
+      examples: [auto]
+
+    JobSummary:
+      type: object
+      required: [id, model, filename, audio_seconds, status, stage, created_at, finished_at, segments]
+      properties:
+        id:
+          type: string
+        model:
+          type: string
+        filename:
+          type: string
+        audio_seconds:
+          type: number
+        status:
+          $ref: "#/components/schemas/JobStatus"
+        stage:
+          $ref: "#/components/schemas/JobStage"
+        created_at:
+          type: number
+        finished_at:
+          type: [number, "null"]
+        segments:
+          type: [integer, "null"]
+          description: 完成後的字幕段數；還沒完成是 `null`
+    JobList:
+      type: object
+      required: [jobs]
+      properties:
+        jobs:
+          type: array
+          items:
+            $ref: "#/components/schemas/JobSummary"
+
+    Job:
+      type: object
+      required:
+        - id
+        - model
+        - filename
+        - audio_seconds
+        - status
+        - stage
+        - speakers_mode
+        - created_at
+        - finished_at
+        - error
+        - punctuation
+        - hotwords
+      properties:
+        id:
+          type: string
+          description: 工作編號
+        model:
+          type: string
+          description: 模型 id
+        filename:
+          type: string
+          description: 上傳的檔名（去掉路徑與控制字元，最多 200 字）
+        audio_seconds:
+          type: number
+          description: 音訊長度
+        status:
+          $ref: "#/components/schemas/JobStatus"
+        stage:
+          $ref: "#/components/schemas/JobStage"
+        speakers_mode:
+          $ref: "#/components/schemas/SpeakersMode"
+        created_at:
+          type: number
+          description: 建立時間（Unix 秒）
+        finished_at:
+          type: [number, "null"]
+          description: 結束時間（成功、失敗或取消）
+        error:
+          type: [string, "null"]
+          description: 失敗原因
+        queue_position:
+          type: integer
+          minimum: 1
+          description: 在排隊中的工作裡排第幾（只在排隊中出現）
+        jobs_ahead:
+          type: integer
+          minimum: 0
+          description: 前面還有幾個工作，包括處理中的那個（只在排隊中出現）
+        stage_elapsed_seconds:
+          type: number
+          description: 目前階段已經過的秒數（只在 `transcribing`、`diarizing` 出現）
+        progress:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+          description: 辨識進度（只在 `transcribing` 出現）；OpenVINO 不回報進度，是 `null`
+        estimated_seconds:
+          type: [number, "null"]
+          description: 預估辨識總秒數（只在 `transcribing` 出現），依 `seconds_per_audio_second` 計算；無法得知時是 `null`
+        speakers_progress:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: 分辨說話者的進度（處理中且有分辨說話者時出現）
+        punctuation:
+          type: boolean
+          description: 建立時是否要求自動加標點
+        hotwords:
+          type: string
+          description: 使用的熱詞
+        result:
+          $ref: "#/components/schemas/TranscriptResult"
+      allOf:
+        - if:
+            required: [status]
+            properties:
+              status:
+                const: queued
+          then:
+            required: [queue_position, jobs_ahead]
+        - if:
+            required: [status]
+            properties:
+              status:
+                const: succeeded
+          then:
+            required: [result]
+          else:
+            not:
+              required: [result]
+    CreatedJob:
+      allOf:
+        - $ref: "#/components/schemas/Job"
+      type: object
+      required: [waveform]
+      properties:
+        waveform:
+          type: array
+          description: 把整段音訊等分成 4000 格，每格的峰值，固定 4000 個數字；最大的一格是 1，整段無聲時全是 0
+          items:
+            type: number
+            minimum: 0
+            maximum: 1
+
+    TranscriptResult:
+      type: object
+      required:
+        - revision
+        - punctuation_error
+        - text
+        - segments
+        - speakers
+        - voiceprint_speakers
+        - speakers_error
+        - audio_seconds
+        - processing_seconds
+      properties:
+        revision:
+          type: integer
+          minimum: 0
+          description: 結果的版本號，每次修改加一；`PUT …/transcript` 要帶上目前的值
+        punctuation_error:
+          type: [string, "null"]
+          description: 自動標點失敗的原因；失敗時字幕保留沒有標點的版本
+        text:
+          type: string
+          description: 全文；修改過後是各段文字以換行相接
+        segments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Segment"
+        speakers:
+          description: 說話者清單；不分辨說話者或分辨失敗時是 `null`
+          anyOf:
+            - type: array
+              items:
+                $ref: "#/components/schemas/Speaker"
+            - type: "null"
+        voiceprint_speakers:
+          type: array
+          description: 有聲紋、可以記住聲音的說話者編號，包括已被合併掉的（復原時會用到）；手動新增的說話者不在裡面
+          items:
+            type: string
+        speakers_error:
+          type: [string, "null"]
+          description: 分辨說話者失敗的原因；字幕照常產生
+        audio_seconds:
+          type: number
+        processing_seconds:
+          type: number
+          description: 辨識花的秒數（不含排隊）
+    Segment:
+      type: object
+      required: [start, end, text, speaker]
+      properties:
+        start:
+          type: number
+          minimum: 0
+          description: 開始時間（秒）
+        end:
+          type: number
+          description: 結束時間（秒）
+        text:
+          type: string
+        speaker:
+          type: [string, "null"]
+          description: 說話者編號；不分辨說話者時是 `null`
+    Speaker:
+      type: object
+      required: [id, name, seconds, voice_id, similarity]
+      properties:
+        id:
+          type: string
+          pattern: ^S[1-9][0-9]{0,3}$
+          description: 說話者編號，依第一次開口的順序是 S1、S2…
+        name:
+          type: string
+          maxLength: 40
+          description: 名字；預設是「說話者 1」這類，認出語者庫的人時是他的名字
+        seconds:
+          type: number
+          description: 講話的總秒數
+        voice_id:
+          type: [string, "null"]
+          description: 對應到語者庫的哪個人
+        similarity:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+          description: 自動認出時的聲紋相似度；手動對應或沒有對應時是 `null`
+
+    TranscriptUpdate:
+      type: object
+      required: [revision, segments, speakers]
+      properties:
+        revision:
+          type: integer
+          description: 目前的 `result.revision`
+        segments:
+          type: array
+          maxItems: 20000
+          items:
+            $ref: "#/components/schemas/SegmentInput"
+        speakers:
+          description: 有分辨說話者時必須是陣列，否則必須是 `null`
+          anyOf:
+            - type: array
+              items:
+                $ref: "#/components/schemas/SpeakerInput"
+            - type: "null"
+    SegmentInput:
+      type: object
+      required: [start, end, text, speaker]
+      properties:
+        start:
+          type: number
+          minimum: 0
+        end:
+          type: number
+        text:
+          type: string
+          minLength: 1
+          maxLength: 500
+        speaker:
+          type: [string, "null"]
+    SpeakerInput:
+      type: object
+      required: [id, name, voice_id, similarity]
+      properties:
+        id:
+          type: string
+          pattern: ^S[1-9][0-9]{0,3}$
+        name:
+          type: string
+          minLength: 1
+          maxLength: 40
+        voice_id:
+          type: [string, "null"]
+        similarity:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+    SpeakerNameUpdate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 40
+    SegmentTextUpdate:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 500
+
+    ExportJson:
+      type: object
+      required: [text, segments, audio_seconds, processing_seconds]
+      properties:
+        text:
+          type: string
+        segments:
+          type: array
+          items:
+            type: object
+            required: [start, end, text]
+            properties:
+              start:
+                type: number
+              end:
+                type: number
+              text:
+                type: string
+              speaker:
+                type: string
+                description: 說話者編號（有分辨說話者時才有）
+              speaker_name:
+                type: string
+                description: 說話者名字（有分辨說話者時才有）
+        audio_seconds:
+          type: number
+        processing_seconds:
+          type: number
+        speakers:
+          type: array
+          description: 有分辨說話者時才有
+          items:
+            type: object
+            required: [id, name, seconds]
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              seconds:
+                type: number
+
+    CreateJobForm:
+      type: object
+      required: [model, speakers, punctuation, file]
+      properties:
+        model:
+          type: string
+          description: "`GET /api/config` 的 `models[].id`"
+        speakers:
+          type: string
+          pattern: ^(off|auto|[0-9]+)$
+          description: "`off`（不分辨）、`auto`（自動判斷人數）或 2 到 `max_speakers` 的人數；沒有提供分辨說話者時只能是 `off`"
+        punctuation:
+          type: string
+          enum: ["on", "off"]
+          description: 辨識後自動加標點；沒有提供自動標點時只能是 `off`
+        hotwords:
+          type: string
+          default: ""
+          maxLength: 1000
+          description: 熱詞，例如「與會者有王小明、陳美玲，會中提到 Kubernetes。」；不給或空字串表示不用。連續空白合併後最多 1000 字，且不可超過模型的 token 上限（見 `POST /api/hotwords/count`）。轉呼叫外部服務的模型不能給。
+        file:
+          description: 音訊或影片檔，ffmpeg 讀得到的格式都可以（m4a、mp3、wav、flac、ogg、opus、webm、mp4、mov、mkv…）
+          contentMediaType: application/octet-stream
+    CreateRenderForm:
+      type: object
+      required: [file]
+      properties:
+        file:
+          description: 這份字幕的原始影片
+          contentMediaType: application/octet-stream
+
+    Render:
+      type: object
+      required: [id, job_id, status, progress, error, filename, created_at, finished_at]
+      properties:
+        id:
+          type: string
+          description: 燒錄工作編號
+        job_id:
+          type: string
+          description: 字幕來源的工作
+        status:
+          type: string
+          enum: [queued, running, cancelling, succeeded, failed, cancelled]
+        progress:
+          type: number
+          minimum: 0
+          maximum: 1
+        error:
+          type: [string, "null"]
+          description: 失敗原因（ffmpeg 錯誤輸出的最後幾行）
+        filename:
+          type: string
+          description: 下載時的檔名
+          examples: [lecture-字幕.mp4]
+        created_at:
+          type: number
+        finished_at:
+          type: [number, "null"]
+
+    Voice:
+      type: object
+      required: [id, name, samples, outdated, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        samples:
+          type: integer
+          minimum: 0
+          description: 記住過幾次
+        outdated:
+          type: boolean
+          description: 舊版留下、聲紋格式不相容的紀錄；不會被自動認出，再記住一次就會更新，`samples` 從 0 起算
+        created_at:
+          type: number
+        updated_at:
+          type: number
+    VoiceList:
+      type: object
+      required: [voices]
+      properties:
+        voices:
+          type: array
+          items:
+            $ref: "#/components/schemas/Voice"
+    RememberVoiceRequest:
+      type: object
+      required: [job_id, speaker_id]
+      properties:
+        job_id:
+          type: string
+        speaker_id:
+          type: string
+          examples: [S1]
+    RememberVoiceResult:
+      type: object
+      required: [voice, job]
+      properties:
+        voice:
+          type: object
+          required: [id, name, samples]
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            samples:
+              type: integer
+              minimum: 1
+        job:
+          $ref: "#/components/schemas/Job"
