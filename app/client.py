@@ -9,12 +9,16 @@ import httpx
 
 _CONNECT_SECONDS = 10.0
 _REQUEST_SECONDS = 60.0
-_POLL_SECONDS = 2.0
+POLL_SECONDS = 2.0
 _LOCAL_ALIASES = {"0.0.0.0": "127.0.0.1", "::": "::1"}
 FINISHED = ("succeeded", "failed", "cancelled")
 
 
 class ServiceError(RuntimeError):
+    pass
+
+
+class NotFoundError(ServiceError):
     pass
 
 
@@ -49,7 +53,8 @@ class AsrClient:
                 detail = response.json().get("detail")
             except ValueError:
                 detail = None
-            raise ServiceError(detail if isinstance(detail, str) else f"HTTP {response.status_code}")
+            error = NotFoundError if response.status_code == 404 else ServiceError
+            raise error(detail if isinstance(detail, str) else f"HTTP {response.status_code}")
         return response
 
     def config(self) -> dict:
@@ -67,6 +72,12 @@ class AsrClient:
     def export(self, job_id: str, fmt: str) -> bytes:
         return self._send("GET", f"/api/jobs/{job_id}/export/{fmt}").content
 
+    def cancel(self, job_id: str) -> dict:
+        return self._send("DELETE", f"/api/jobs/{job_id}").json()
+
+    def rename_speaker(self, job_id: str, speaker_id: str, name: str) -> dict:
+        return self._send("PATCH", f"/api/jobs/{job_id}/speakers/{speaker_id}", json={"name": name}).json()
+
     def submit(self, path: Path, model: str, speakers: str, punctuation: bool, hotwords: str) -> dict:
         data = {
             "model": model,
@@ -83,7 +94,7 @@ class AsrClient:
             on_update(job)
             if job["status"] in FINISHED:
                 return job
-            time.sleep(_POLL_SECONDS)
+            time.sleep(POLL_SECONDS)
 
 
 def describe_progress(job: dict) -> str:

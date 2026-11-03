@@ -1,3 +1,4 @@
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -59,6 +60,11 @@ def test_spec_documents_each_success_status(routes):
         key for key, route in routes.items() if str(route.status_code or 200) not in operations[key]["responses"]
     ]
     assert missing == []
+
+
+def test_spec_version_matches_the_project():
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    assert SPEC["info"]["version"] == project["version"]
 
 
 def test_spec_lists_every_export_format():

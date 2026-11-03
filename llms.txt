@@ -59,3 +59,4 @@
 - 監看資料夾：`ASR_WATCH_DIR` 裡的新錄音自動辨識，結果寫在原檔旁邊。
 - 日誌：同時寫到終端機與 `ASR_DATA_DIR/logs`（`breeze-asr.log`、`inference.log`；原生程式碼當掉時的呼叫堆疊在 `breeze-asr-crash.log`、`inference-crash.log`，推論子行程裡原生函式庫的輸出在 `inference-native.log`），等級與換檔由 `ASR_LOG_LEVEL`、`ASR_LOG_FILE_MB`、`ASR_LOG_FILE_COUNT` 設定；不記字幕內容、熱詞內容與人名。
 - API：`GET /api/jobs` 列出工作、`POST /api/jobs` 建立工作、`GET /api/jobs/{id}` 輪詢、`DELETE /api/jobs/{id}` 取消、`PUT /api/jobs/{id}/transcript` 修改、`GET /api/jobs/{id}/export/{fmt}` 下載、`POST /api/jobs/{id}/renders` 燒錄字幕；`GET`／`PUT /api/glossary` 詞彙表；`POST /api/hardware/retune` 重新調校、`POST /api/hardware/settings` 改用實測過的設定；`POST /api/client-errors` 網頁回報錯誤到日誌。
+- MCP server：依 MCP `2026-07-28` 規格、只走 stdio；工具 `list_models`、`transcribe`、`job_status`、`get_transcript`、`list_jobs`、`cancel_job`、`rename_speaker`，資源 `breeze-asr://glossary` 與 `breeze-asr://jobs/{job_id}/transcript.{格式}`，提示 `meeting_minutes`、`proofread_transcript`。

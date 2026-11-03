@@ -4,13 +4,26 @@
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-11-03
+
 ### Added
 
-- `docs/openapi.yaml`：以 OpenAPI 3.2 撰寫的完整 API 規格，涵蓋全部 23 個端點的請求欄位、每個狀態碼的回應格式、錯誤訊息範例，以及工作、燒錄之間的連結關係。`tests/test_openapi.py` 會檢查規格列的端點、成功狀態碼與匯出格式和程式一致。
+- `docs/openapi.yaml`：以 OpenAPI 3.2 撰寫的完整 API 規格，涵蓋全部 23 個端點的請求欄位、每個狀態碼的回應格式、錯誤訊息範例，以及工作、燒錄之間的連結關係。`tests/test_openapi.py` 會檢查規格列的端點、成功狀態碼、匯出格式與版本號和程式一致。
+- MCP server 依照 MCP `2026-07-28` 規格補齊，仍相容以 `initialize` 握手的舊版用戶端，並回報標題、版本、網址與圖示。
+- MCP 新增 `cancel_job`、`rename_speaker` 兩個工具。`transcribe` 可以用 `use_glossary` 套用網頁詞彙表的熱詞；`wait` 為 `true` 時會送出進度通知。
+- 每個 MCP 工具都有標題、參數說明與 annotations（`readOnlyHint`、`destructiveHint`、`idempotentHint`、`openWorldHint`），用戶端可以據此決定呼叫前要不要先問使用者。除了 `get_transcript`，每個工具也都有 `outputSchema`。
+- MCP 資源：詞彙表 `breeze-asr://glossary`，以及每種文字格式的逐字稿 `breeze-asr://jobs/{job_id}/transcript.md` 等。
+- MCP 提示：`meeting_minutes` 整理會議紀錄、`proofread_transcript` 校對逐字稿；提示與資源的 `job_id` 可以自動補全。
+- `tests/test_mcp_server.py` 測試每個工具、資源、提示與補全，並檢查列舉值與 `docs/openapi.yaml` 一致。
+
+### Changed
+
+- MCP 的 `job_status`、`transcribe` 多回傳檔名、模型、音訊長度、說話者清單與逐字稿的資源 URI。`list_jobs` 改為回傳 `{"jobs": [...]}`，工作編號的欄位名稱和其他工具一樣是 `job_id`。
 
 ### Fixed
 
 - `docs/api.md` 熱詞計數範例的 token 數改為實際值 15。
+- MCP 工具出錯時（找不到檔案、格式不支援、連不上服務），用戶端只收到「Error executing tool …」，看不到原因，現在會連原因一起回傳。
 
 ## [0.2.5] - 2026-11-01
 
@@ -119,7 +132,8 @@
 - 在不能錄音的網址按「錄音」，狀態列說明原因與瀏覽器的設定方式。
 - 所有回應加上 `Cache-Control: no-cache`，更新版本後瀏覽器不會繼續使用舊的前端程式。
 
-[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.5...HEAD
+[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.6...HEAD
+[0.2.6]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.2...v0.2.3
