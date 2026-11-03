@@ -9,6 +9,7 @@
 [![OpenVINO](https://img.shields.io/badge/OpenVINO-0071C5?logo=intel&logoColor=white)](https://github.com/openvinotoolkit/openvino)
 [![Docker](https://img.shields.io/badge/Docker-CPU%20%C2%B7%20CUDA%20%C2%B7%20ROCm-2496ED?logo=docker&logoColor=white)](docs/deployment.md#docker)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+[![M8ven Score](https://m8ven.ai/badge/mcp/scorpio-meow/breeze-asr)](https://m8ven.ai/mcp/scorpio-meow/breeze-asr?s=readme)
 
 [快速開始](#快速開始) · [功能](#功能) · [系統需求](#系統需求) · [文件](#文件) · [更新紀錄](CHANGELOG.md)
 
