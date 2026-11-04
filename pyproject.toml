@@ -10,7 +10,7 @@ authors = [{ name = "Scorpio-meow" }]
 dependencies = [
     "fastapi==0.162.0",
     "uvicorn==0.54.0",
-    "python-multipart==0.0.32",
+    "python-multipart==0.0.33",
     "httpx==0.28.1",
     "imageio-ffmpeg==0.7.0",
     "numpy==2.4.6",
