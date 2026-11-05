@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [0.2.7] - 2026-11-05
+
+### Changed
+
+- `python-multipart` 由 0.0.32 升級到 0.0.33。上游修正了沒有檔名的上傳寫入磁碟時出錯，以及兩種解碼的邊界狀況；新增的表單欄位上限預設不開，上傳行為不變。
+
 ## [0.2.6] - 2026-11-03
 
 ### Added
@@ -132,7 +138,8 @@
 - 在不能錄音的網址按「錄音」，狀態列說明原因與瀏覽器的設定方式。
 - 所有回應加上 `Cache-Control: no-cache`，更新版本後瀏覽器不會繼續使用舊的前端程式。
 
-[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.6...HEAD
+[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.7...HEAD
+[0.2.7]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.6...v0.2.7
 [0.2.6]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.3...v0.2.4
