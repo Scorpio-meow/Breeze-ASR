@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
@@ -14,6 +16,31 @@ ENGINES = ("openvino", "torch")
 WEIGHT_FORMATS = ("fp32", "fp16", "int8", "int4")
 TORCH_DTYPES = ("float16", "bfloat16", "float32")
 _SETTINGS_KEYS = {"engine", "device", "weight_format", "torch_dtype", "torch_num_beams", "max_loaded_models"}
+_GPU_FREE_SCRIPT = "import sys, torch; print(torch.cuda.mem_get_info(int(sys.argv[1]))[0])"
+_TORCH_ALLOCATOR_CONF = "expandable_segments:True"
+
+
+class GpuQueryError(RuntimeError):
+    pass
+
+
+def configure_torch_allocator() -> None:
+    os.environ["PYTORCH_ALLOC_CONF"] = _TORCH_ALLOCATOR_CONF
+
+
+def gpu_free_bytes(device: str) -> int:
+    proc = subprocess.run(
+        [sys.executable, "-c", _GPU_FREE_SCRIPT, device.split(":")[1]],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if proc.returncode != 0:
+        tail = [line for line in proc.stderr.splitlines() if line.strip()][-1:] or [f"結束代碼 {proc.returncode}"]
+        raise GpuQueryError(f"無法讀取 {device} 的剩餘顯示記憶體：{tail[0][:300]}")
+    return int(proc.stdout.strip().splitlines()[-1])
 
 
 @dataclass(frozen=True)
@@ -110,9 +137,10 @@ def max_loaded(config: EngineConfig, memory_bytes: int, local_models: int) -> tu
     if memory_bytes <= 0:
         return 1, "無法量到單一模型的記憶體用量，保守只常駐 1 個"
     if config.engine == "torch":
-        import torch
-
-        free, _total = torch.cuda.mem_get_info(int(config.device.split(":")[1]))
+        try:
+            free = gpu_free_bytes(config.device)
+        except GpuQueryError as exc:
+            return 1, f"{exc}，保守只常駐 1 個"
         where = "顯示記憶體"
     else:
         free = psutil.virtual_memory().available

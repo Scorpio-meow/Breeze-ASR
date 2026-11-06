@@ -19,7 +19,7 @@ import psutil
 
 from .catalog import Catalog, model_status
 from .config import ConfigError, Settings
-from .hardware import HardwareProfile, memory_usage, save_profile, system_memory
+from .hardware import HardwareProfile, configure_torch_allocator, memory_usage, save_profile, system_memory
 from .logsetup import capture_native_stderr, log_crashes_to, log_to_file, set_level, setup_logging, versions
 from .telemetry import disable_openvino_telemetry
 from .transcript import Transcript
@@ -109,6 +109,7 @@ def _hardware_config(settings: Settings, catalog: Catalog, events: Queue):
 
 
 def _worker_main(settings: Settings, requests: Queue, events: Queue) -> None:
+    configure_torch_allocator()
     setup_logging("推論")
     set_level(settings.log_level)
     log_to_file(settings.logs_dir / "inference.log", "推論", settings.log_file_bytes, settings.log_file_count)

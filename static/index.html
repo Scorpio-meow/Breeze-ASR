@@ -337,6 +337,22 @@
     </div>
   </dialog>
 
+  <dialog class="dialog narrow" id="login-dialog" aria-labelledby="login-title" aria-describedby="login-note">
+    <div class="dialog-head">
+      <h2 id="login-title">存取權杖</h2>
+    </div>
+    <form class="dialog-body login-form" id="login-form" novalidate>
+      <p class="dialog-note" id="login-note">這個服務需要存取權杖，請輸入服務 <code>.env</code> 裡 <code>ASR_ACCESS_TOKEN</code> 的值。這個瀏覽器會記住登入，權杖改掉後才需要重新輸入。</p>
+      <label class="cue-field" for="login-token">權杖</label>
+      <input type="password" class="tb-input" id="login-token" name="token" autocomplete="current-password" autocapitalize="off" spellcheck="false" required>
+      <p class="dialog-note login-status" id="login-status" role="status"></p>
+      <div class="dialog-foot">
+        <span class="tb-spacer"></span>
+        <button type="submit" class="tb-btn primary" id="login-submit">登入</button>
+      </div>
+    </form>
+  </dialog>
+
   <div class="visually-hidden" aria-live="polite" id="announcer"></div>
 </body>
 </html>

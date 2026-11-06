@@ -31,6 +31,24 @@ def test_short_piece_is_merged_into_neighbour():
     assert [s.text for s in segments] == ["嗯。今天天氣很好"]
 
 
+def test_word_that_absorbed_a_pause_keeps_one_typical_length():
+    words = _chars("今天天氣很好", 0.0, 0.2) + [Word(" 我", 1.2, 2.6)] + _chars("們去公園吧", 2.6, 0.2)
+    segments = split_sentences(words, "今天天氣很好 我們去公園吧", max_seconds=10, min_seconds=0.5, audio_seconds=5)
+    assert [(s.text, s.start, s.end) for s in segments] == [("今天天氣很好", 0.0, 1.2), ("我們去公園吧", 2.4, 3.6)]
+
+
+def test_first_word_of_a_new_window_is_trimmed_like_after_a_pause():
+    words = _chars("今天天氣很好", 0.0, 0.2) + [Word("我", 2.0, 3.4)] + _chars("們去公園吧", 3.4, 0.2)
+    segments = split_sentences(words, "今天天氣很好我們去公園吧", max_seconds=10, min_seconds=0.5, audio_seconds=5)
+    assert [(s.text, s.start, s.end) for s in segments] == [("今天天氣很好", 0.0, 1.2), ("我們去公園吧", 3.2, 4.4)]
+
+
+def test_word_after_a_pause_within_twice_typical_length_is_kept():
+    words = _chars("今天天氣很好", 0.0, 0.2) + [Word(" 我", 1.2, 1.55)] + _chars("們去公園吧", 1.55, 0.2)
+    segments = split_sentences(words, "今天天氣很好 我們去公園吧", max_seconds=10, min_seconds=0.5, audio_seconds=5)
+    assert [(s.text, s.start, s.end) for s in segments] == [("今天天氣很好", 0.0, 1.2), ("我們去公園吧", 1.2, 2.55)]
+
+
 def test_long_piece_is_split_under_max_seconds():
     text = "一二三四五六七八九十甲乙丙丁戊己庚辛壬癸"
     segments = split_sentences(_chars(text, 0.0, 1.0), text, max_seconds=8, min_seconds=1, audio_seconds=30)

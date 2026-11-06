@@ -3,7 +3,7 @@ $self: https://raw.githubusercontent.com/Scorpio-meow/Breeze-ASR/main/docs/opena
 info:
   title: Breeze ASR
   summary: 本機語音辨識服務的 HTTP API：上傳錄音、取得逐字稿、編輯字幕、匯出檔案與燒錄字幕。
-  version: 0.2.7
+  version: 0.3.0
   license:
     name: MIT
     identifier: MIT
@@ -11,7 +11,16 @@ info:
     name: Breeze ASR
     url: https://github.com/Scorpio-meow/Breeze-ASR
   description: |
-    Breeze ASR 的網頁介面用的就是這組 API。服務跑在自己的電腦上，沒有帳號或金鑰；預設只聽 `127.0.0.1`，要讓其他電腦連線請見部署文件。
+    Breeze ASR 的網頁介面用的就是這組 API。服務跑在自己的電腦上，沒有帳號；預設只聽 `127.0.0.1`，要讓其他電腦連線請見部署文件。
+
+    ## 存取權杖
+
+    `.env` 的 `ASR_ACCESS_TOKEN` 設定了權杖時（`ASR_HOST` 不是本機位址就一定要設），除了 `GET /api/health`、`POST /api/session` 與網頁本身的靜態檔案，每個請求都要帶權杖，否則回 401 與 `WWW-Authenticate: Bearer`：
+
+    - 程式：`Authorization: Bearer <權杖>`。
+    - 瀏覽器：先用 `POST /api/session` 登入，之後靠 `breeze_asr_session` cookie。
+
+    `ASR_ACCESS_TOKEN` 是 `off` 時不檢查，兩種都不用帶。
 
     ## 一次完整的辨識
 
@@ -34,6 +43,10 @@ info:
     ## 拒絕來自其他網站的寫入
 
     瀏覽器從其他網站送來的 `POST`、`PUT`、`PATCH`、`DELETE`（請求標頭 `Sec-Fetch-Site` 是 `cross-site` 或 `same-site`）一律回 403。curl、Python 等不帶這個標頭的程式不受影響。
+
+    ## 只接受允許的主機名稱
+
+    請求標頭 `Host` 的主機名稱不在服務 `.env` 的 `ASR_ALLOWED_HOSTS` 裡時，任何路徑、任何方法都回 400，`detail` 說明要把哪個名稱加進清單。比對時不看埠號、不分大小寫。
 
     ## 上傳上限
 
@@ -76,7 +89,10 @@ servers:
       port:
         default: "7860"
         description: 服務的連接埠
-security: []
+security:
+  - {}
+  - accessToken: []
+  - session: []
 tags:
   - name: service
     summary: 服務
@@ -123,6 +139,7 @@ paths:
       tags: [service]
       summary: 服務是否正常運作
       description: 只要網頁服務在跑就回 200，不代表模型已經載入；模型與硬體狀態請看 `GET /api/config`。
+      security: []
       responses:
         "200":
           summary: 服務正常
@@ -134,6 +151,70 @@ paths:
                 ok:
                   dataValue:
                     status: ok
+
+  /api/session:
+    post:
+      operationId: createSession
+      tags: [service]
+      summary: 用存取權杖登入網頁
+      description: |
+        只在 `.env` 設定了 `ASR_ACCESS_TOKEN` 時使用。權杖正確就設定 `breeze_asr_session` cookie，之後同一個瀏覽器的請求不必再帶權杖。cookie 是 `HttpOnly`、`SameSite=Strict`、保留 400 天，網頁以 HTTPS 開啟時再加上 `Secure`；值由權杖導出，不是權杖本身，改掉權杖後所有瀏覽器都要重新登入。
+
+        權杖前後的空白與換行會先去掉。一分鐘內錯了 10 次之後，這一分鐘內的登入一律回 429，連正確的權杖也一樣。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionLogin"
+            examples:
+              login:
+                dataValue:
+                  token: k3Jq9V_x2mL8tR4wZ0pN6sYb
+      responses:
+        "204":
+          summary: 已登入
+          headers:
+            Set-Cookie:
+              description: 網頁用的登入狀態
+              schema:
+                type: string
+              example: breeze_asr_session=3f1c…; HttpOnly; Max-Age=34560000; Path=/; SameSite=strict; Secure
+        "401":
+          summary: 權杖不正確
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                wrong:
+                  dataValue:
+                    detail: 存取權杖不正確
+        "403":
+          $ref: "#/components/responses/CrossSite"
+        "404":
+          summary: 服務沒有設定存取權杖
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                off:
+                  dataValue:
+                    detail: 這個服務沒有設定存取權杖
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "429":
+          summary: 錯誤次數太多
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                locked:
+                  dataValue:
+                    detail: 嘗試太多次，請一分鐘後再試
 
   /api/client-errors:
     post:
@@ -160,6 +241,8 @@ paths:
       responses:
         "204":
           summary: 已寫入日誌
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/CrossSite"
         "422":
@@ -190,6 +273,8 @@ paths:
               examples:
                 ready:
                   $ref: "#/components/examples/ConfigReady"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
   /api/hardware/retune:
     post:
@@ -211,6 +296,8 @@ paths:
                   dataValue:
                     state: tuning
                     step: 重新啟動推論行程
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/CrossSite"
         "409":
@@ -257,6 +344,8 @@ paths:
                 starting:
                   dataValue:
                     state: starting
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/CrossSite"
         "409":
@@ -310,6 +399,8 @@ paths:
                   dataValue:
                     hotwords: ""
                     replacements: []
+        "401":
+          $ref: "#/components/responses/Unauthorized"
     put:
       operationId: saveGlossary
       tags: [glossary]
@@ -338,6 +429,8 @@ paths:
               examples:
                 saved:
                   $ref: "#/components/examples/Glossary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/CrossSite"
         "422":
@@ -399,6 +492,8 @@ paths:
                 unknownModel:
                   dataValue:
                     detail: 不支援的模型：openai/whisper-large-v3
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/CrossSite"
         "422":
@@ -450,6 +545,8 @@ paths:
                         created_at: 1793579011.02
                         finished_at: 1793579030.77
                         segments: 7
+        "401":
+          $ref: "#/components/responses/Unauthorized"
     post:
       operationId: createJob
       tags: [jobs]
@@ -557,6 +654,8 @@ paths:
                 noPunctuation:
                   dataValue:
                     detail: 這個服務沒有提供自動標點，punctuation 只能是 off
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/CrossSite"
         "411":
@@ -655,6 +754,8 @@ paths:
               parameters:
                 job_id: $request.path.job_id
               description: 成功後下載結果
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/JobNotFound"
     delete:
@@ -672,6 +773,8 @@ paths:
               examples:
                 transcribing:
                   $ref: "#/components/examples/JobTranscribing"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/CrossSite"
         "404":
@@ -755,6 +858,8 @@ paths:
               examples:
                 succeeded:
                   $ref: "#/components/examples/JobSucceeded"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/CrossSite"
         "404":
@@ -833,6 +938,8 @@ paths:
               examples:
                 succeeded:
                   $ref: "#/components/examples/JobSucceeded"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/CrossSite"
         "404":
@@ -894,6 +1001,8 @@ paths:
               examples:
                 succeeded:
                   $ref: "#/components/examples/JobSucceeded"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/CrossSite"
         "404":
@@ -1033,6 +1142,8 @@ paths:
                       - id: S2
                         name: 陳美玲
                         seconds: 5.6
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           summary: 找不到工作，或不支援的格式
           content:
@@ -1105,6 +1216,8 @@ paths:
               parameters:
                 render_id: $response.body#/id
               description: 完成後下載影片
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/CrossSite"
         "404":
@@ -1178,6 +1291,8 @@ paths:
                     filename: lecture-字幕.mp4
                     created_at: 1793579120.55
                     finished_at: 1793579133.9
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/RenderNotFound"
     delete:
@@ -1192,6 +1307,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Render"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/CrossSite"
         "404":
@@ -1255,6 +1372,8 @@ paths:
             video/mp4:
               schema:
                 contentMediaType: video/mp4
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/RenderNotFound"
         "409":
@@ -1286,6 +1405,8 @@ paths:
               examples:
                 voices:
                   $ref: "#/components/examples/VoiceList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/SpeakersUnavailable"
     post:
@@ -1320,6 +1441,8 @@ paths:
               parameters:
                 voice_id: $response.body#/voice/id
               description: 從語者庫刪除這個人
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/CrossSite"
         "404":
@@ -1370,6 +1493,8 @@ paths:
               examples:
                 voices:
                   $ref: "#/components/examples/VoiceList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/CrossSite"
         "404":
@@ -1466,6 +1591,22 @@ components:
         type: string
 
   responses:
+    Unauthorized:
+      summary: 沒有帶正確的存取權杖
+      description: 只在 `.env` 設定了 `ASR_ACCESS_TOKEN` 時出現。
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+            const: Bearer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            missing:
+              dataValue:
+                detail: 需要存取權杖
     CrossSite:
       summary: 來自其他網站的請求
       description: 瀏覽器帶來的 `Sec-Fetch-Site` 是 `cross-site` 或 `same-site`。
@@ -1763,6 +1904,17 @@ components:
         max_text_length: 500
         max_hotwords_length: 1000
 
+  securitySchemes:
+    accessToken:
+      type: http
+      scheme: bearer
+      description: "`.env` 的 `ASR_ACCESS_TOKEN`，命令列工具、MCP server 與其他程式用這個。"
+    session:
+      type: apiKey
+      in: cookie
+      name: breeze_asr_session
+      description: "`POST /api/session` 設定的 cookie，網頁用這個。"
+
   schemas:
     Error:
       type: object
@@ -1813,6 +1965,14 @@ components:
       properties:
         status:
           const: ok
+
+    SessionLogin:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          description: "`.env` 的 `ASR_ACCESS_TOKEN`"
 
     ClientErrorReport:
       type: object
@@ -2179,6 +2339,9 @@ components:
               memory_bytes:
                 type: integer
                 description: GPU 的記憶體大小
+              architecture:
+                type: string
+                description: "OpenVINO 回報的 `DEVICE_ARCHITECTURE`，GPU 的形式是 `GPU: vendor=0x8086 arch=v12.70.4`；廠商代碼不是 Intel（`0x8086`）的 GPU 不測"
         nvidia_gpus:
           type: array
           items:
@@ -2196,6 +2359,9 @@ components:
         amd_gpu_tools:
           type: boolean
           description: 是否找得到 `rocm-smi` 或 `amd-smi`
+        torch_build:
+          type: [string, "null"]
+          description: 安裝的 PyTorch 版本種類，例如 `CUDA 13.0`、`ROCm 7.2`、`CPU`；沒裝 PyTorch 時是 null。加入這個欄位之前調校的設定檔沒有它
         torch_gpus:
           type: array
           items:

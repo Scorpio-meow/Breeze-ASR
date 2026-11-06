@@ -1,14 +1,20 @@
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
 
+from app import hardware
 from app.config import ConfigError
 from app.hardware import (
     EngineConfig,
+    GpuQueryError,
     HardwareProfile,
     SelectionError,
+    configure_torch_allocator,
+    gpu_free_bytes,
     load_profile,
+    max_loaded,
     save_profile,
     select,
     tuned_speed,
@@ -142,3 +148,40 @@ def test_select_switches_to_a_measured_candidate():
             select(profile, label, 1)
     with pytest.raises(SelectionError, match="手寫"):
         select(HardwareProfile(EngineConfig(**OPENVINO), None), "GPU・int8", 1)
+
+
+def _completed(returncode: int, stdout: str, stderr: str):
+    return lambda args, **kwargs: subprocess.CompletedProcess(args, returncode, stdout, stderr)
+
+
+def test_gpu_free_memory_is_read_in_a_separate_process(monkeypatch):
+    monkeypatch.setattr(hardware.subprocess, "run", _completed(0, "8589934592\n", ""))
+    assert gpu_free_bytes("cuda:1") == 8 * 1024**3
+    stderr = "Traceback\nRuntimeError: CUDA error: no device\n"
+    monkeypatch.setattr(hardware.subprocess, "run", _completed(1, "", stderr))
+    with pytest.raises(GpuQueryError, match="cuda:1 的剩餘顯示記憶體：RuntimeError: CUDA error: no device"):
+        gpu_free_bytes("cuda:1")
+
+
+def test_resident_models_follow_free_gpu_memory(monkeypatch):
+    monkeypatch.setattr(hardware, "gpu_free_bytes", lambda device: 10 * 1024**3)
+    count, reason = max_loaded(EngineConfig(**TORCH), 3 * 1024**3, 2)
+    assert count == 2
+    assert "可用顯示記憶體 10.0 GB" in reason
+
+
+def test_unreadable_gpu_memory_keeps_one_model(monkeypatch):
+    def broken(device):
+        raise GpuQueryError(f"無法讀取 {device} 的剩餘顯示記憶體：CUDA error")
+
+    monkeypatch.setattr(hardware, "gpu_free_bytes", broken)
+    assert max_loaded(EngineConfig(**TORCH), 3 * 1024**3, 2) == (
+        1,
+        "無法讀取 cuda:0 的剩餘顯示記憶體：CUDA error，保守只常駐 1 個",
+    )
+
+
+def test_torch_allocator_uses_expandable_segments(monkeypatch):
+    monkeypatch.setenv("PYTORCH_ALLOC_CONF", "")
+    configure_torch_allocator()
+    assert hardware.os.environ["PYTORCH_ALLOC_CONF"] == "expandable_segments:True"

@@ -49,7 +49,7 @@ def split_sentences(
     durations = [u.end - u.start for u in units if u.end > u.start]
     typical = min(statistics.median(durations), _MEDIAN_CAP_SECONDS) if durations else None
     if typical is not None:
-        units = _trim_absorbed_pauses(units, typical * _LONGEST_WORD_IN_MEDIANS)
+        units = _trim_absorbed_pauses(units, typical)
     strengths = [_boundary(left, right, typical) for left, right in pairwise(units)]
     pieces = _split_at(strengths, len(units), _CLAUSE)
     pieces = _merge_short(pieces, units, strengths, max_seconds, min_seconds)
@@ -88,11 +88,17 @@ def _units(words: list[Word]) -> list[_Unit]:
     return units
 
 
-def _trim_absorbed_pauses(units: list[_Unit], longest: float) -> list[_Unit]:
+def _trim_absorbed_pauses(units: list[_Unit], typical: float) -> list[_Unit]:
+    longest = typical * _LONGEST_WORD_IN_MEDIANS
     return [
-        replace(u, start=u.end - longest) if (i == 0 or u.space_before) and u.end - u.start > longest else u
+        replace(u, start=u.end - typical) if _opens_phrase(units, i) and u.end - u.start > longest else u
         for i, u in enumerate(units)
     ]
+
+
+def _opens_phrase(units: list[_Unit], index: int) -> bool:
+    unit = units[index]
+    return index == 0 or unit.space_before or unit.start > units[index - 1].end
 
 
 def _boundary(left: _Unit, right: _Unit, typical: float | None) -> int:

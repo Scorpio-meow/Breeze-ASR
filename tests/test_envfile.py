@@ -1,4 +1,5 @@
 import codecs
+from pathlib import Path
 
 from app.envfile import add_missing
 
@@ -27,3 +28,13 @@ def test_bom_and_crlf_from_notepad_are_respected(tmp_path):
 
     assert add_missing(example, target) == ["ASR_LOG_LEVEL"]
     assert target.read_bytes() == codecs.BOM_UTF8 + b"ASR_HOST=0.0.0.0\r\nASR_LOG_LEVEL=INFO\r\n"
+
+
+def test_allowed_hosts_is_added_to_an_env_from_an_older_version(tmp_path):
+    example = Path(__file__).resolve().parent.parent / ".env.example"
+    lines = example.read_text(encoding="utf-8").splitlines()
+    target = tmp_path / ".env"
+    target.write_text("\n".join(line for line in lines if not line.startswith("ASR_ALLOWED_HOSTS=")) + "\n", "utf-8")
+
+    assert add_missing(example, target) == ["ASR_ALLOWED_HOSTS"]
+    assert target.read_text(encoding="utf-8").endswith("\nASR_ALLOWED_HOSTS=127.0.0.1,localhost\n")

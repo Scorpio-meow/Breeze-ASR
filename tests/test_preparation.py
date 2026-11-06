@@ -11,6 +11,8 @@ def _settings(data_dir) -> Settings:
     return Settings(
         "127.0.0.1",
         7860,
+        frozenset({"127.0.0.1"}),
+        None,
         data_dir / "models.json",
         data_dir,
         data_dir / "profile.json",

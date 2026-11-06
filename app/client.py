@@ -7,10 +7,11 @@ from pathlib import Path
 
 import httpx
 
+from .config import ACCESS_TOKEN_OFF, LOCAL_ALIASES
+
 _CONNECT_SECONDS = 10.0
 _REQUEST_SECONDS = 60.0
 POLL_SECONDS = 2.0
-_LOCAL_ALIASES = {"0.0.0.0": "127.0.0.1", "::": "::1"}
 FINISHED = ("succeeded", "failed", "cancelled")
 
 
@@ -28,17 +29,24 @@ def service_url(explicit: str | None) -> str:
     host, port = os.environ.get("ASR_HOST"), os.environ.get("ASR_PORT")
     if not host or not port:
         raise ServiceError("不知道服務的網址：請用 --url 指定，或在專案資料夾用 uv run --env-file .env 執行")
-    host = _LOCAL_ALIASES.get(host, host)
+    host = LOCAL_ALIASES.get(host, host)
     return f"http://[{host}]:{port}" if ":" in host else f"http://{host}:{port}"
 
 
+def access_token() -> str | None:
+    raw = (os.environ.get("ASR_ACCESS_TOKEN") or "").strip()
+    return raw if raw and raw != ACCESS_TOKEN_OFF else None
+
+
 class AsrClient:
-    def __init__(self, base_url: str) -> None:
+    def __init__(self, base_url: str, token: str | None) -> None:
         self._http = httpx.Client(
             base_url=base_url,
+            headers={"Authorization": f"Bearer {token}"} if token is not None else None,
             timeout=httpx.Timeout(_REQUEST_SECONDS, connect=_CONNECT_SECONDS, write=None),
         )
         self.base_url = base_url
+        self.uses_token = token is not None
 
     def close(self) -> None:
         self._http.close()
@@ -48,6 +56,12 @@ class AsrClient:
             response = self._http.request(method, path, **kwargs)
         except httpx.HTTPError as exc:
             raise ServiceError(f"連不上 Breeze ASR 服務 {self.base_url}：{exc}") from exc
+        if response.status_code == 401:
+            raise ServiceError(
+                f"{self.base_url} 需要存取權杖：請把環境變數 ASR_ACCESS_TOKEN 設成和服務 .env 相同的值"
+                if not self.uses_token
+                else f"{self.base_url} 拒絕這個存取權杖：請確認 ASR_ACCESS_TOKEN 和服務 .env 的值相同"
+            )
         if response.status_code >= 400:
             try:
                 detail = response.json().get("detail")

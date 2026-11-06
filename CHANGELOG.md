@@ -4,6 +4,33 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-06
+
+### Added
+
+- 必填的 `ASR_ACCESS_TOKEN`（存取權杖）。`ASR_HOST` 不是本機位址時必須設成至少 24 個字元，否則拒絕啟動；只監聽本機時可填 `off`。網頁以 `POST /api/session` 登入（cookie 記住 400 天），API 用 `Authorization: Bearer`，命令列工具與 MCP server 讀同名的環境變數；一分鐘內登入錯 10 次，這一分鐘內的登入一律拒絕。
+- 必填的 `ASR_ALLOWED_HOSTS`（接受的主機名稱，逗號分隔）。`Host` 標頭不在清單裡的請求一律回 400，擋下 DNS rebinding；清單必須包含 `ASR_HOST` 對應的本機位址，否則拒絕啟動。
+- 從手機或平板使用：`docs/deployment.md` 說明 `tailscale serve`（iPhone Safari 要 HTTPS 才能錄音）與區網自簽憑證的限制。
+- `docs/benchmarks.md` 補上 RTX 5060 Ti 的 CUDA 實測與各種優化做法的比較。
+- 硬體偵測多記錄 `torch_build`（PyTorch 是 CUDA、ROCm 或 CPU 版）與 OpenVINO 裝置的 `architecture`。
+
+### Changed
+
+- **升級注意**：Docker 部署與 `ASR_HOST` 設成 `0.0.0.0` 的電腦，要先在 `.env` 設定 `ASR_ACCESS_TOKEN` 與 `ASR_ALLOWED_HOSTS` 才能啟動。安裝與啟動腳本會補上 `ASR_ACCESS_TOKEN=off` 與 `ASR_ALLOWED_HOSTS=127.0.0.1,localhost`；從區網 IP、`.ts.net` 網址或反向代理連線的，要把網址裡的名稱加進清單。
+- 觸控裝置：按鈕與輸入框約 40 像素高，輸入框的字改成 16 像素（iPhone 不再自動放大頁面），右側面板加寬；在波形上輕點跳到該處、左右拖曳移動播放位置，上下滑動只捲動頁面。
+- 以 http 從其他裝置按「錄音」時，提示改用 HTTPS 網址開啟；開始錄音時主動恢復音訊處理，避免音量表不動。
+
+### Fixed
+
+- 手機寬度下需要水平捲動（工具列撐寬頁面、播放到結尾時播放頭超出右緣）、字幕面板標題擠成一字一行，以及窄版頁面的工具列被拉開。
+- 自動調校會用 OpenVINO 測 NVIDIA 顯示卡（透過驅動附的 OpenCL），int8 比 CPU 慢 2.6 倍、fp16 無法執行。現在廠商代碼不是 Intel 的 GPU 只用 PyTorch 測。
+- 自動調校載入 PyTorch 權重前不檢查剩餘顯示記憶體，空間不夠時會用到 CUDA 記憶體不足。現在先比較預估用量與那張卡當下的剩餘量，不夠就改用其他裝置；有模型開啟句子分段時，預估包含逐字時間戳記多用的約 0.25 GB。
+- PyTorch 句子分段會留下每一層的 attention，長錄音還會因為 PyTorch 快取的碎片越佔越多。現在只保留 DTW 要用的 23 個 cross-attention head，推論行程也改用 `expandable_segments`，逐字時間不變；Breeze ASR 26 長錄音的顯示記憶體峰值從 7.7 GB 降到 3.7 GB，速度從 0.068 加快到 0.036。
+- 在「硬體」改用 PyTorch 的設定時，網頁行程會在 GPU 上留下 CUDA context；剩餘顯示記憶體改在短暫的子行程裡讀。
+- 看不到 GPU 時，「硬體」的提示改為檢查 `CUDA_VISIBLE_DEVICES` 與驅動，不再叫人改裝 CUDA 版 PyTorch（ROCm 版同理）。
+- 「硬體」裡的 CPU 名稱多了結尾空白。
+- Breeze ASR 26 句子分段的段落起點常比實際開口早約 0.5 秒：停頓後與每個 30 秒視窗的第一個字會把停頓算進自己的時間。現在這種字只保留一個字長中位數，台語例句的起點誤差中位數從 0.53 秒降到 0.20 秒。
+
 ## [0.2.7] - 2026-11-05
 
 ### Changed
@@ -138,7 +165,8 @@
 - 在不能錄音的網址按「錄音」，狀態列說明原因與瀏覽器的設定方式。
 - 所有回應加上 `Cache-Control: no-cache`，更新版本後瀏覽器不會繼續使用舊的前端程式。
 
-[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.7...HEAD
+[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.7...v0.3.0
 [0.2.7]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.6...v0.2.7
 [0.2.6]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.4...v0.2.5

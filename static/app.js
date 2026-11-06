@@ -49,6 +49,7 @@ const WAVEFORM_BUCKETS = 4000;
 const RULER_MIN_GAP_PX = 72;
 const SEEK_STEP_SECONDS = 5;
 const SEEK_PAGE_SECONDS = 30;
+const TOUCH_SLOP_PX = 8;
 const RULER_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600];
 
 const state = {
@@ -206,6 +207,7 @@ async function api(url, options = {}) {
   }
   const res = await fetch(url, init);
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401) requireLogin();
   if (!res.ok) {
     const error = new Error(typeof data.detail === "string" ? data.detail : `HTTP ${res.status}`);
     error.status = res.status;
@@ -248,10 +250,70 @@ function setEta(ratio) {
   if (ratio !== null) $("eta").style.transform = `scaleX(${Math.min(1, Math.max(0, ratio))})`;
 }
 
+function loginOpen() {
+  return $("login-dialog").open;
+}
+
+function requireLogin() {
+  const dialog = $("login-dialog");
+  if (dialog.open) return;
+  setStatus("需要存取權杖", "", "error");
+  dialog.showModal();
+  $("login-token").focus();
+}
+
+function bindLogin() {
+  const dialog = $("login-dialog");
+  const form = $("login-form");
+  const input = $("login-token");
+  const status = $("login-status");
+  const submit = $("login-submit");
+  dialog.addEventListener("cancel", (event) => event.preventDefault());
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const token = input.value.trim();
+    if (!token) {
+      status.textContent = "請輸入存取權杖";
+      input.focus();
+      return;
+    }
+    submit.disabled = true;
+    status.textContent = "";
+    let res;
+    try {
+      res = await fetch("/api/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+        cache: "no-store",
+      });
+    } catch {
+      res = null;
+    }
+    submit.disabled = false;
+    if (!res?.ok) {
+      const data = res ? await res.json().catch(() => ({})) : {};
+      status.textContent = !res ? "無法連線到服務" : typeof data.detail === "string" ? data.detail : `HTTP ${res.status}`;
+      input.select();
+      return;
+    }
+    input.value = "";
+    dialog.close();
+    setStatus("就緒", "");
+    announce("已登入");
+    refreshConfig();
+  });
+}
+
 async function refreshConfig() {
+  if (loginOpen()) return;
   let config;
   try {
     const res = await fetch("/api/config", { cache: "no-store" });
+    if (res.status === 401) {
+      requireLogin();
+      return;
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     config = await res.json();
   } catch {
@@ -1110,21 +1172,37 @@ function bindPlayback() {
     const rect = body();
     if (rect.width > 0) seek(((clientX - rect.left) / rect.width) * timelineDuration());
   };
+  let touch = null;
   tracks.addEventListener("pointerdown", (event) => {
     if (!state.audio || event.button !== 0 || !event.target.closest(".track-body")) return;
+    if (event.pointerType === "touch") {
+      touch = { id: event.pointerId, x: event.clientX, scrubbing: false };
+      return;
+    }
     event.preventDefault();
     tracks.setPointerCapture(event.pointerId);
     tracks.classList.add("is-scrubbing");
     seekToX(event.clientX);
   });
   tracks.addEventListener("pointermove", (event) => {
-    if (tracks.hasPointerCapture(event.pointerId)) seekToX(event.clientX);
+    if (touch?.id === event.pointerId) {
+      if (!touch.scrubbing && Math.abs(event.clientX - touch.x) < TOUCH_SLOP_PX) return;
+      touch.scrubbing = true;
+      tracks.classList.add("is-scrubbing");
+      seekToX(event.clientX);
+    } else if (tracks.hasPointerCapture(event.pointerId)) {
+      seekToX(event.clientX);
+    }
   });
   const release = (event) => {
     if (tracks.hasPointerCapture(event.pointerId)) tracks.releasePointerCapture(event.pointerId);
     tracks.classList.remove("is-scrubbing");
+    touch = null;
   };
-  tracks.addEventListener("pointerup", release);
+  tracks.addEventListener("pointerup", (event) => {
+    if (touch?.id === event.pointerId && !touch.scrubbing) seekToX(event.clientX);
+    release(event);
+  });
   tracks.addEventListener("pointercancel", release);
   const steps = {
     ArrowLeft: -SEEK_STEP_SECONDS,
@@ -1168,7 +1246,7 @@ function showRecordingUnsupported() {
     announce("這個瀏覽器不支援錄音，請改用上傳檔案");
     return;
   }
-  const detail = `在 chrome://flags 搜尋 insecure origins，加入 ${location.origin}`;
+  const detail = `請改用 HTTPS 網址開啟，或在電腦的 chrome://flags 搜尋 insecure origins，加入 ${location.origin}`;
   setStatus("瀏覽器只允許 HTTPS 或 localhost 錄音", detail, "error");
   announce(`瀏覽器只允許 HTTPS 或 localhost 錄音，${detail}`);
 }
@@ -1204,6 +1282,7 @@ async function startRecording() {
   const recorder = new MediaRecorder(stream, preferred ? { mimeType: preferred } : undefined);
   const chunks = [];
   const audioContext = new AudioContext();
+  audioContext.resume().catch(() => {});
   const analyser = audioContext.createAnalyser();
   analyser.fftSize = 1024;
   audioContext.createMediaStreamSource(stream).connect(analyser);
@@ -1279,6 +1358,7 @@ function upload(url, fields, file, name, onProgress) {
     });
     xhr.addEventListener("load", () => {
       const data = xhr.response || {};
+      if (xhr.status === 401) requireLogin();
       if (xhr.status >= 200 && xhr.status < 300) resolve(data);
       else reject(new Error(typeof data.detail === "string" ? data.detail : `上傳失敗（HTTP ${xhr.status}）`));
     });
@@ -1371,6 +1451,10 @@ function startJob(job, blob, opened) {
 async function pollJob() {
   const current = state.job;
   if (!current) return;
+  if (loginOpen()) {
+    state.pollTimer = setTimeout(pollJob, JOB_POLL_MS);
+    return;
+  }
   let res = null;
   let job = null;
   try {
@@ -1386,6 +1470,11 @@ async function pollJob() {
   }
   if (res?.status === 404) {
     showJobError("找不到這個工作，可能已過期或伺服器已重新啟動");
+    return;
+  }
+  if (res?.status === 401) {
+    requireLogin();
+    state.pollTimer = setTimeout(pollJob, JOB_POLL_MS);
     return;
   }
   if (!job) {
@@ -2603,6 +2692,7 @@ function bindResultTools() {
 }
 
 bindErrorReports();
+bindLogin();
 bindUpload();
 bindRecorder();
 bindForm();

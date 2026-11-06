@@ -31,7 +31,16 @@ from mcp.types import (
 )
 from pydantic import BaseModel, Field
 
-from .client import FINISHED, POLL_SECONDS, AsrClient, NotFoundError, ServiceError, describe_progress, service_url
+from .client import (
+    FINISHED,
+    POLL_SECONDS,
+    AsrClient,
+    NotFoundError,
+    ServiceError,
+    access_token,
+    describe_progress,
+    service_url,
+)
 from .exports import FORMATS
 from .logsetup import setup_logging
 
@@ -152,8 +161,8 @@ class JobList(BaseModel):
 def _service() -> AsrClient:
     global _client
     if _client is None:
-        _client = AsrClient(service_url(None))
-        log.info("連到 Breeze ASR 服務 %s", _client.base_url)
+        _client = AsrClient(service_url(None), access_token())
+        log.info("連到 Breeze ASR 服務 %s（%s存取權杖）", _client.base_url, "帶" if _client.uses_token else "不帶")
     return _client
 
 

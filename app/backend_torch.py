@@ -59,6 +59,39 @@ def _words(chunks: list[dict]) -> list[Word]:
     return words
 
 
+def _drop_attention_weights(module, args, output):
+    return output[0], None
+
+
+def _select_heads(heads):
+    def hook(module, args, output):
+        if output[1] is None:
+            return output
+        return output[0], output[1].index_select(1, heads)
+
+    return hook
+
+
+def _record_alignment_heads_only(model, model_id: str) -> None:
+    import torch
+
+    alignment_heads = getattr(model.generation_config, "alignment_heads", None)
+    if not alignment_heads:
+        raise ValueError(f"{model_id} 的 generation_config 沒有 alignment_heads，無法使用 sentence_segments")
+    heads_by_layer: dict[int, list[int]] = {}
+    for layer, head in alignment_heads:
+        heads_by_layer.setdefault(layer, []).append(head)
+    for layer in model.model.encoder.layers:
+        layer.self_attn.register_forward_hook(_drop_attention_weights, prepend=True)
+    for number, layer in enumerate(model.model.decoder.layers):
+        layer.self_attn.register_forward_hook(_drop_attention_weights, prepend=True)
+        heads = torch.tensor(heads_by_layer.get(number, []), dtype=torch.long, device=model.device)
+        layer.encoder_attn.register_forward_hook(_select_heads(heads), prepend=True)
+    model.generation_config.alignment_heads = [
+        [layer, heads_by_layer[layer].index(head)] for layer, head in alignment_heads
+    ]
+
+
 class TorchEngine:
     def __init__(self, settings: Settings, config: EngineConfig) -> None:
         self._settings = settings
@@ -78,6 +111,8 @@ class TorchEngine:
         language = spec.local.language
         if language is not None and f"<|{language}|>" not in model.generation_config.lang_to_id:
             raise ValueError(f"models.json 的 language={language!r} 不是這個模型支援的語言代碼")
+        if spec.local.sentence_segments is not None:
+            _record_alignment_heads_only(model, spec.id)
         return pipeline(
             "automatic-speech-recognition",
             model=model,

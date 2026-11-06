@@ -4,7 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from .client import FINISHED, AsrClient, ServiceError, describe_progress, service_url
+from .client import FINISHED, AsrClient, ServiceError, access_token, describe_progress, service_url
 from .exports import FORMATS
 from .watch import output_path
 
@@ -122,7 +122,7 @@ def main() -> None:
         stream.reconfigure(encoding="utf-8", errors="backslashreplace")
     args = _parser().parse_args()
     try:
-        client = AsrClient(service_url(args.url))
+        client = AsrClient(service_url(args.url), access_token())
     except ServiceError as exc:
         sys.exit(f"錯誤：{exc}")
     try:

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import ipaddress
 import os
+import re
+import socket
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -29,6 +32,11 @@ def _require_int(name: str, minimum: int) -> int:
 
 _SWITCH = {"on": True, "off": False}
 WATCH_OFF = "off"
+ACCESS_TOKEN_OFF = "off"
+MIN_ACCESS_TOKEN_LENGTH = 24
+LOCAL_ALIASES = {"0.0.0.0": "127.0.0.1", "::": "::1"}
+_HOST_HEADER = re.compile(r"(\[[^\]]*\]|[^:\[\]]*)(?::\d*)?")
+_HOST_NAME = re.compile(r"[a-z0-9_-]+(?:\.[a-z0-9_-]+)*")
 
 
 def _require_switch(name: str) -> bool:
@@ -55,6 +63,69 @@ def _require_dir(name: str) -> Path:
     return path
 
 
+def is_loopback(host: str) -> bool:
+    try:
+        found = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM, flags=socket.AI_PASSIVE)
+    except (socket.gaierror, UnicodeError):
+        return False
+    return bool(found) and all(ipaddress.ip_address(address[0]).is_loopback for *_, address in found)
+
+
+def _ip(name: str) -> str | None:
+    try:
+        return str(ipaddress.ip_address(name))
+    except ValueError:
+        return None
+
+
+def normalize_host(name: str) -> str:
+    bare = name.strip().lower()
+    if bare.startswith("[") and bare.endswith("]"):
+        bare = bare[1:-1]
+    return _ip(bare) or bare
+
+
+def host_name(header: str) -> str:
+    found = _HOST_HEADER.fullmatch(header)
+    return normalize_host(found[1]) if found else ""
+
+
+def _load_allowed_hosts(host: str) -> frozenset[str]:
+    names = set()
+    for entry in _require("ASR_ALLOWED_HOSTS").split(","):
+        if not entry.strip():
+            continue
+        name = normalize_host(entry)
+        if _ip(name) is None and not _HOST_NAME.fullmatch(name):
+            raise ConfigError(
+                f"ASR_ALLOWED_HOSTS 的 {entry.strip()!r} 不是主機名稱或 IP；只填名稱或 IP，不含 http:// 與埠號，多個以逗號分隔"
+            )
+        names.add(name)
+    local = normalize_host(LOCAL_ALIASES.get(host, host))
+    if local not in names:
+        raise ConfigError(
+            f"ASR_ALLOWED_HOSTS 必須包含 {local}：命令列工具、MCP server、啟動腳本與 Docker 的健康檢查都用 ASR_HOST 對應的 {local} 連線"
+        )
+    return frozenset(names)
+
+
+def _load_access_token(host: str) -> str | None:
+    raw = _require("ASR_ACCESS_TOKEN")
+    if raw == ACCESS_TOKEN_OFF:
+        if is_loopback(host):
+            return None
+        raise ConfigError(
+            f"ASR_HOST 是 {host}，其他電腦連得到這個服務，ASR_ACCESS_TOKEN 不可以是 {ACCESS_TOKEN_OFF}；"
+            f"請設成至少 {MIN_ACCESS_TOKEN_LENGTH} 個字元的隨機字串，"
+            '例如在專案資料夾執行 uv run --no-sync python -c "import secrets; print(secrets.token_urlsafe(32))"'
+        )
+    if len(raw) < MIN_ACCESS_TOKEN_LENGTH:
+        raise ConfigError(f"ASR_ACCESS_TOKEN 至少要 {MIN_ACCESS_TOKEN_LENGTH} 個字元，目前只有 {len(raw)} 個")
+    if not raw.isascii() or not raw.isprintable() or " " in raw:
+        raise ConfigError("ASR_ACCESS_TOKEN 只能用英文字母、數字與符號，不能有空白或中文")
+    return raw
+
+
 @dataclass(frozen=True)
 class WatchSettings:
     directory: Path
@@ -69,6 +140,8 @@ class WatchSettings:
 class Settings:
     host: str
     port: int
+    allowed_hosts: frozenset[str]
+    access_token: str | None
     models_file: Path
     data_dir: Path
     hardware_profile: Path
@@ -142,9 +215,12 @@ def _load_watch() -> WatchSettings | None:
 
 
 def load_settings() -> Settings:
+    host = _require("ASR_HOST")
     settings = Settings(
-        host=_require("ASR_HOST"),
+        host=host,
         port=_require_int("ASR_PORT", 1),
+        allowed_hosts=_load_allowed_hosts(host),
+        access_token=_load_access_token(host),
         models_file=Path(_require("ASR_MODELS_FILE")),
         data_dir=Path(_require("ASR_DATA_DIR")),
         hardware_profile=Path(_require("ASR_HARDWARE_PROFILE")),

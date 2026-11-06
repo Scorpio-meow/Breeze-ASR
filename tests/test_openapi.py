@@ -28,6 +28,8 @@ def routes(tmp_path_factory) -> dict[tuple[str, str], APIRoute]:
     settings = Settings(
         host="127.0.0.1",
         port=7860,
+        allowed_hosts=frozenset({"127.0.0.1"}),
+        access_token=None,
         models_file=ROOT / "models.json",
         data_dir=data,
         hardware_profile=data / "hardware-profile.json",

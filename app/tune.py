@@ -21,7 +21,7 @@ from . import preparation
 from .benchmark import SAMPLE_META
 from .catalog import Catalog, ModelSpec
 from .config import Settings
-from .hardware import EngineConfig, HardwareProfile, gb, max_loaded
+from .hardware import EngineConfig, GpuQueryError, HardwareProfile, gb, gpu_free_bytes, max_loaded
 from .logsetup import log_stderr, remove_tree
 
 log = logging.getLogger(__name__)
@@ -40,6 +40,10 @@ _DEVICE_PRECISIONS = {"FP32": ov.Type.f32, "FP16": ov.Type.f16, "BF16": ov.Type.
 _SOURCE_PRECISIONS = {"F32": ov.Type.f32, "F16": ov.Type.f16, "BF16": ov.Type.bf16}
 _TORCH_DTYPE = "float16"
 _TORCH_NUM_BEAMS = 1
+_TORCH_DTYPE_BYTES = {"float16": 2, "bfloat16": 2, "float32": 4}
+_TORCH_RUNTIME_BYTES = 1024**3
+_TORCH_WORD_TIMESTAMP_RUNTIME_BYTES = 1280 * 1024**2
+_INTEL_GPU_VENDOR = "0x8086"
 
 Reporter = Callable[[dict], None]
 
@@ -87,6 +91,18 @@ def _amd_gpu_tools() -> bool:
     return any(shutil.which(tool) is not None for tool in ("rocm-smi", "amd-smi"))
 
 
+def _torch_build() -> str | None:
+    try:
+        import torch
+    except ImportError:
+        return None
+    if torch.version.hip:
+        return f"ROCm {torch.version.hip}"
+    if torch.version.cuda:
+        return f"CUDA {torch.version.cuda}"
+    return "CPU"
+
+
 def _torch_gpus() -> list[dict]:
     try:
         import torch
@@ -104,9 +120,11 @@ def _torch_gpus() -> list[dict]:
 def _device_info(core: ov.Core, device: str) -> dict:
     supported = core.get_property(device, "SUPPORTED_PROPERTIES")
     info = {
-        "name": core.get_property(device, "FULL_DEVICE_NAME"),
+        "name": core.get_property(device, "FULL_DEVICE_NAME").strip(),
         "precisions": list(core.get_property(device, "OPTIMIZATION_CAPABILITIES")),
     }
+    if "DEVICE_ARCHITECTURE" in supported:
+        info["architecture"] = core.get_property(device, "DEVICE_ARCHITECTURE")
     if "DEVICE_TYPE" in supported:
         info["type"] = core.get_property(device, "DEVICE_TYPE").name.lower()
     if "GPU_DEVICE_TOTAL_MEM_SIZE" in supported:
@@ -129,6 +147,7 @@ def detect_hardware() -> dict:
         "openvino_devices": openvino_devices,
         "nvidia_gpus": _nvidia_gpus(),
         "amd_gpu_tools": _amd_gpu_tools(),
+        "torch_build": _torch_build(),
         "torch_gpus": _torch_gpus(),
     }
 
@@ -158,6 +177,31 @@ def _format_reason(weight_format: str, compute: tuple[str, ov.Type], source: tup
     return None
 
 
+def _gpu_vendor(info: dict) -> str | None:
+    match = re.search(r"vendor=(0x[0-9a-fA-F]+)", info.get("architecture", ""))
+    return match.group(1).lower() if match else None
+
+
+def _missing_gpu_reasons(hardware: dict) -> list[dict]:
+    build = hardware["torch_build"] or ""
+    skipped = []
+    for gpu in hardware["nvidia_gpus"]:
+        reason = (
+            f"已安裝 {build} 版 PyTorch，但它看不到這張卡；請檢查 CUDA_VISIBLE_DEVICES，以及顯示卡驅動是否支援 {build}"
+            if build.startswith("CUDA")
+            else "安裝的 PyTorch 不支援 CUDA；要使用請改裝 CUDA 版（uv sync --no-default-groups --group cu130）"
+        )
+        skipped.append({"label": f"{gpu['name']}（PyTorch CUDA）", "reason": reason})
+    if hardware["amd_gpu_tools"]:
+        reason = (
+            f"已安裝 {build} 版 PyTorch，但它看不到 AMD GPU；請檢查 HIP_VISIBLE_DEVICES、ROCm 驅動，以及使用者是否在 video、render 群組"
+            if build.startswith("ROCm")
+            else "安裝的 PyTorch 不支援 ROCm；要使用請改裝 ROCm 版（Linux：uv sync --no-default-groups --group rocm72）"
+        )
+        skipped.append({"label": "AMD GPU（PyTorch ROCm）", "reason": reason})
+    return skipped
+
+
 def _phase(config: EngineConfig) -> int:
     return 0 if config.engine == "openvino" and config.device.startswith("CPU") else 1
 
@@ -169,6 +213,15 @@ def _candidates(hardware: dict, source: tuple[str, ov.Type] | None) -> tuple[lis
         if device.startswith("NPU"):
             skipped.append(
                 {"label": f"{info['name']}（{device}）", "reason": "實測時驅動回報 DEVICE_LOST、裝置被重置，不支援 NPU"}
+            )
+            continue
+        vendor = _gpu_vendor(info)
+        if device.startswith("GPU") and vendor is not None and vendor != _INTEL_GPU_VENDOR:
+            skipped.append(
+                {
+                    "label": f"{info['name']}（OpenVINO {device}）",
+                    "reason": f"OpenVINO 只支援 Intel 顯示卡（這張的廠商代碼是 {vendor}），NVIDIA、AMD 顯示卡改用 PyTorch 測",
+                }
             )
             continue
         compute = _compute_precision(info["precisions"])
@@ -189,20 +242,7 @@ def _candidates(hardware: dict, source: tuple[str, ov.Type] | None) -> tuple[lis
         config = EngineConfig("torch", f"cuda:{gpu['index']}", None, _TORCH_DTYPE, _TORCH_NUM_BEAMS, 1)
         candidates.append(_Candidate(label, config))
     if not hardware["torch_gpus"]:
-        for gpu in hardware["nvidia_gpus"]:
-            skipped.append(
-                {
-                    "label": f"{gpu['name']}（PyTorch CUDA）",
-                    "reason": "安裝的 PyTorch 不支援 CUDA；要使用請改裝 CUDA 版（uv sync --no-default-groups --group cu130）",
-                }
-            )
-        if hardware["amd_gpu_tools"]:
-            skipped.append(
-                {
-                    "label": "AMD GPU（PyTorch ROCm）",
-                    "reason": "安裝的 PyTorch 不支援 ROCm；要使用請改裝 ROCm 版（Linux：uv sync --no-default-groups --group rocm72）",
-                }
-            )
+        skipped.extend(_missing_gpu_reasons(hardware))
     skipped.append({"label": "PyTorch CPU", "reason": "CPU 上 OpenVINO 比 PyTorch 快，只測 OpenVINO"})
     return sorted(candidates, key=lambda c: _phase(c.config)), skipped
 
@@ -211,8 +251,11 @@ def _weight_bytes(config: EngineConfig, parameters: int) -> int:
     return parameters * _FORMAT_TYPES[config.weight_format].bitwidth // 8
 
 
-def _memory_need(config: EngineConfig, parameters: int, overheads: list[int]) -> int:
-    if config.engine != "openvino" or not _FORMAT_TYPES[config.weight_format].is_real():
+def _memory_need(config: EngineConfig, parameters: int, overheads: list[int], word_timestamps: bool) -> int:
+    if config.engine == "torch":
+        runtime = _TORCH_WORD_TIMESTAMP_RUNTIME_BYTES if word_timestamps else _TORCH_RUNTIME_BYTES
+        return parameters * _TORCH_DTYPE_BYTES[config.torch_dtype] + runtime
+    if not _FORMAT_TYPES[config.weight_format].is_real():
         return 0
     return _weight_bytes(config, parameters) + (min(overheads) if overheads else 0)
 
@@ -225,13 +268,20 @@ def _memory_limit(info: dict, available: int) -> int:
     return min(available, info["memory_bytes"])
 
 
+def _available(config: EngineConfig, devices: dict) -> int:
+    if config.engine == "torch":
+        return gpu_free_bytes(config.device)
+    return _memory_limit(devices[config.device], psutil.virtual_memory().available)
+
+
 def _blocker(config: EngineConfig, inaccurate: set[str], failed: dict[str, str], need: int, limit: int) -> str | None:
     if config.engine == "openvino" and config.weight_format in inaccurate:
         return f"{config.weight_format} 在 CPU 上的錯誤率已不合格，不再測"
     if config.device in failed:
         return f"這個裝置第一個實測的 {failed[config.device]} 就無法執行，其餘格式不再測"
     if need > limit:
-        return f"預估執行時需要 {gb(need)} GB 記憶體，超過可用的 {gb(limit)} GB"
+        where = "顯示記憶體" if config.engine == "torch" else "記憶體"
+        return f"預估執行時需要 {gb(need)} GB {where}，超過目前可用的 {gb(limit)} GB"
     return None
 
 
@@ -393,6 +443,7 @@ def run_tuning(settings: Settings, catalog: Catalog, report: Reporter) -> Hardwa
     dtypes, parameters = preparation.source_info(snapshot)
     log.info("%s 原始權重：%s，%d 個參數", spec.id, "、".join(sorted(dtypes)), parameters)
     candidates, skipped = _candidates(hardware, _source_precision(dtypes))
+    word_timestamps = any(m.local.sentence_segments is not None for m in local_models)
     for item in skipped:
         log.info("略過 %s：%s", item["label"], item["reason"])
     if not candidates:
@@ -428,9 +479,11 @@ def run_tuning(settings: Settings, catalog: Catalog, report: Reporter) -> Hardwa
             _grade(results)
             inaccurate = {r["weight_format"] for r in results if r["status"] == "rejected"}
             graded = True
-        need = _memory_need(config, parameters, overheads)
-        limit = _memory_limit(devices[config.device], psutil.virtual_memory().available) if need else 0
-        reason = _blocker(config, inaccurate, failed, need, limit)
+        need = _memory_need(config, parameters, overheads, word_timestamps)
+        try:
+            reason = _blocker(config, inaccurate, failed, need, _available(config, devices) if need else 0)
+        except GpuQueryError as exc:
+            reason = str(exc)
         if reason is not None:
             skipped.append({"label": candidate.label, "reason": reason})
             log.info("略過 %s：%s", candidate.label, reason)

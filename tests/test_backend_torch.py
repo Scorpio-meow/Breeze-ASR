@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from app.backend_torch import TorchEngine, _segments, _words
+from app.backend_torch import TorchEngine, _record_alignment_heads_only, _segments, _words
 from app.catalog import LocalBackend, ModelSpec, SentenceSegments
 from app.hardware import EngineConfig
 
@@ -97,6 +97,64 @@ def test_phrases_are_split_into_characters_and_english_words():
     assert [w.text for w in words] == [" 做", "好", " TTS", "了"]
     assert [round(w.start, 2) for w in words] == [1.0, 1.2, 1.4, 2.0]
     assert round(words[-1].end, 2) == 2.2
+
+
+def _tiny_whisper():
+    from transformers import WhisperConfig, WhisperForConditionalGeneration
+
+    torch.manual_seed(0)
+    config = WhisperConfig(
+        vocab_size=60,
+        num_mel_bins=8,
+        d_model=16,
+        encoder_layers=2,
+        decoder_layers=3,
+        encoder_attention_heads=4,
+        decoder_attention_heads=4,
+        encoder_ffn_dim=32,
+        decoder_ffn_dim=32,
+        max_source_positions=40,
+        max_target_positions=32,
+        decoder_start_token_id=1,
+        bos_token_id=1,
+        eos_token_id=2,
+        pad_token_id=2,
+    )
+    model = WhisperForConditionalGeneration(config).eval()
+    model.generation_config.alignment_heads = [[2, 3], [1, 0], [2, 1]]
+    return model
+
+
+def _generate_with_token_timestamps(model):
+    features = torch.randn(1, 8, 80, generator=torch.Generator().manual_seed(1))
+    with torch.inference_mode():
+        return model.generate(
+            features, return_token_timestamps=True, return_dict_in_generate=True, max_new_tokens=8, min_new_tokens=8
+        )
+
+
+def test_only_alignment_heads_are_recorded_and_token_timestamps_are_unchanged():
+    full = _generate_with_token_timestamps(_tiny_whisper())
+    model = _tiny_whisper()
+    _record_alignment_heads_only(model, "org/model")
+    compact = _generate_with_token_timestamps(model)
+    assert torch.equal(compact["sequences"], full["sequences"])
+    assert torch.equal(compact["token_timestamps"], full["token_timestamps"])
+    assert len(full["encoder_attentions"]) == 2
+    assert len(compact["encoder_attentions"]) == 0
+    assert all(len(step) == 0 for step in compact["decoder_attentions"])
+    assert model.generation_config.alignment_heads == [[2, 0], [1, 0], [2, 1]]
+    for full_step, compact_step in zip(full["cross_attentions"], compact["cross_attentions"], strict=True):
+        assert [weights.shape[1] for weights in compact_step] == [0, 1, 2]
+        assert torch.equal(compact_step[1], full_step[1][:, [0]])
+        assert torch.equal(compact_step[2], full_step[2][:, [3, 1]])
+
+
+def test_sentence_segments_need_alignment_heads():
+    model = _tiny_whisper()
+    model.generation_config.alignment_heads = None
+    with pytest.raises(ValueError, match="alignment_heads"):
+        _record_alignment_heads_only(model, "org/model")
 
 
 def test_segments_clamp_to_audio_length():

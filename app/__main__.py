@@ -69,10 +69,12 @@ def main() -> None:
     )
     log.info("%s", versions(_PACKAGES))
     log.info(
-        "設定：%s:%d，模型清單 %s，資料目錄 %s，硬體設定檔 %s，上傳上限 %d MB，音訊上限 %d 秒，排隊上限 %d 筆，"
-        "結果保留 %d 秒，字幕字型 %s（%s），日誌 %s、每個檔 %d MB、保留 %d 個",
+        "設定：%s:%d，接受的主機名稱 %s，存取權杖%s，模型清單 %s，資料目錄 %s，硬體設定檔 %s，上傳上限 %d MB，"
+        "音訊上限 %d 秒，排隊上限 %d 筆，結果保留 %d 秒，字幕字型 %s（%s），日誌 %s、每個檔 %d MB、保留 %d 個",
         settings.host,
         settings.port,
+        "、".join(sorted(settings.allowed_hosts)),
+        "開啟" if settings.access_token is not None else "關閉",
         settings.models_file,
         settings.data_dir.resolve(),
         settings.hardware_profile,

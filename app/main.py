@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
 import re
 import shutil
@@ -20,11 +22,12 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.requests import cookie_parser
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .audio import AudioDecodeError, decode_to_file, probe_media, waveform
 from .catalog import load_catalog
-from .config import ConfigError, Settings
+from .config import ConfigError, Settings, host_name
 from .exports import FORMATS, ExportContext, render
 from .glossary import MAX_HOTWORDS_LENGTH, GlossaryError, GlossaryStore, parse
 from .hardware import HardwareProfile, SelectionError, load_profile, select
@@ -65,6 +68,11 @@ _CONTROL_CHARACTERS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 _UPLOAD_PATHS = re.compile(r"/api/jobs(/[^/]+/renders)?")
 _SWITCH = {"on": True, "off": False}
 _UNLOGGED_REJECTIONS = frozenset({"/api/hotwords/count"})
+_SESSION_COOKIE = "breeze_asr_session"
+_SESSION_PURPOSE = b"breeze-asr-session"
+_SESSION_MAX_AGE_SECONDS = 400 * 24 * 60 * 60
+_LOGIN_FAILURES_PER_MINUTE = 10
+_PUBLIC_API_PATHS = frozenset({"/api/health", "/api/session"})
 _CSP = (
     "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
     "media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; "
@@ -131,6 +139,76 @@ class SecurityHeadersMiddleware:
             await response(scope, receive, send_with_headers)
             return
         await self.app(scope, receive, send_with_headers)
+
+
+class AllowedHostsMiddleware:
+    def __init__(self, app: ASGIApp, allowed: frozenset[str]) -> None:
+        self.app = app
+        self.allowed = allowed
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        headers = [value.decode("latin-1") for name, value in scope["headers"] if name == b"host"]
+        name = host_name(headers[0]) if len(headers) == 1 else ""
+        if name in self.allowed:
+            await self.app(scope, receive, send)
+            return
+        log.warning(
+            "%s %s 被拒絕（400）：%s",
+            scope["method"],
+            _one_line(scope["path"]),
+            f"Host 標頭 {_one_line('、'.join(headers))} 不在 ASR_ALLOWED_HOSTS 裡" if headers else "請求沒有 Host 標頭",
+        )
+        detail = (
+            f"服務不接受 {_one_line(name)} 這個名稱；要用這個網址連線，請把 {_one_line(name)} 加進服務 .env 的 ASR_ALLOWED_HOSTS 後重新啟動"
+            if name
+            else "請求的 Host 標頭缺少或格式不正確"
+        )
+        await JSONResponse({"detail": detail}, status_code=400)(scope, receive, send)
+
+
+def session_value(token: str) -> str:
+    return hmac.new(token.encode(), _SESSION_PURPOSE, hashlib.sha256).hexdigest()
+
+
+def public_paths(static_dir: Path) -> frozenset[str]:
+    files = {f"/{path.name}" for path in static_dir.iterdir() if path.is_file()}
+    return frozenset({"/", "/favicon.ico", *_PUBLIC_API_PATHS, *files})
+
+
+class AccessTokenMiddleware:
+    def __init__(self, app: ASGIApp, token: str, public: frozenset[str]) -> None:
+        self.app = app
+        self.token = token.encode()
+        self.session = session_value(token).encode()
+        self.public = public
+
+    def _authorized(self, scope: Scope) -> bool:
+        cookies = []
+        for name, value in scope["headers"]:
+            if name == b"authorization":
+                scheme, _, credentials = value.partition(b" ")
+                if scheme.lower() == b"bearer" and hmac.compare_digest(credentials.strip(), self.token):
+                    return True
+            elif name == b"cookie":
+                cookies.append(value.decode("latin-1"))
+        session = cookie_parser("; ".join(cookies)).get(_SESSION_COOKIE, "")
+        return hmac.compare_digest(session.encode("utf-8", "replace"), self.session)
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope["path"] in self.public or self._authorized(scope):
+            await self.app(scope, receive, send)
+            return
+        if scope["method"] not in ("GET", "HEAD"):
+            log.warning("%s %s 被拒絕（401）：沒有帶正確的存取權杖", scope["method"], _one_line(scope["path"]))
+        response = JSONResponse({"detail": "需要存取權杖"}, status_code=401, headers={"WWW-Authenticate": "Bearer"})
+        await response(scope, receive, send)
+
+
+class SessionLogin(BaseModel):
+    token: str
 
 
 class SpeakerName(BaseModel):
@@ -221,15 +299,23 @@ class _RateLimit:
         self._dropped = 0
         self._lock = threading.Lock()
 
+    def _expire(self, now: float) -> None:
+        while self._times and now - self._times[0] >= self._window:
+            self._times.popleft()
+
     def acquire(self, now: float) -> bool:
         with self._lock:
-            while self._times and now - self._times[0] >= self._window:
-                self._times.popleft()
+            self._expire(now)
             if len(self._times) >= self.limit:
                 self._dropped += 1
                 return False
             self._times.append(now)
             return True
+
+    def full(self, now: float) -> bool:
+        with self._lock:
+            self._expire(now)
+            return len(self._times) >= self.limit
 
     def take_dropped(self) -> int:
         with self._lock:
@@ -258,6 +344,7 @@ def create_app(settings: Settings) -> FastAPI:
     glossary = GlossaryStore(settings.glossary_file)
     counter = HotwordsCounter()
     client_errors = _RateLimit(_CLIENT_ERRORS_PER_MINUTE, 60)
+    login_failures = _RateLimit(_LOGIN_FAILURES_PER_MINUTE, 60)
     queue = JobQueue(
         inference,
         speaker_service,
@@ -398,6 +485,9 @@ def create_app(settings: Settings) -> FastAPI:
     app.add_middleware(
         UploadLimitMiddleware, paths=_UPLOAD_PATHS, max_bytes=settings.max_upload_bytes + _MULTIPART_OVERHEAD
     )
+    if settings.access_token is not None:
+        app.add_middleware(AccessTokenMiddleware, token=settings.access_token, public=public_paths(STATIC_DIR))
+    app.add_middleware(AllowedHostsMiddleware, allowed=settings.allowed_hosts)
     app.add_middleware(SecurityHeadersMiddleware)
 
     def _job_or_404(job_id: str):
@@ -424,6 +514,34 @@ def create_app(settings: Settings) -> FastAPI:
     @app.get("/api/health")
     def health() -> dict:
         return {"status": "ok"}
+
+    @app.post("/api/session", status_code=204)
+    def login(body: SessionLogin, request: Request) -> Response:
+        if settings.access_token is None:
+            raise HTTPException(status_code=404, detail="這個服務沒有設定存取權杖")
+        now = time.monotonic()
+        if login_failures.full(now):
+            raise HTTPException(status_code=429, detail="嘗試太多次，請一分鐘後再試")
+        if not hmac.compare_digest(body.token.strip().encode(), settings.access_token.encode()):
+            login_failures.acquire(now)
+            raise HTTPException(status_code=401, detail="存取權杖不正確")
+        secure = request.url.scheme == "https" or request.headers.get("origin", "").startswith("https://")
+        response = Response(status_code=204)
+        response.set_cookie(
+            _SESSION_COOKIE,
+            session_value(settings.access_token),
+            max_age=_SESSION_MAX_AGE_SECONDS,
+            path="/",
+            secure=secure,
+            httponly=True,
+            samesite="strict",
+        )
+        log.info(
+            "以存取權杖登入（%s，%s）",
+            request.client.host if request.client else "未知來源",
+            "HTTPS" if secure else "HTTP",
+        )
+        return response
 
     @app.post("/api/client-errors", status_code=204)
     def report_client_error(body: ClientErrorReport, request: Request) -> Response:
