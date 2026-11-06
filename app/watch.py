@@ -57,10 +57,6 @@ class FolderWatcher:
         self._error: str | None = None
         self._processed = 0
 
-    @property
-    def settings(self) -> WatchSettings:
-        return self._settings
-
     def start(self) -> None:
         log.info(
             "監看資料夾 %s，每 %d 秒檢查一次：模型 %s，說話者 %s，標點 %s，輸出 %s",

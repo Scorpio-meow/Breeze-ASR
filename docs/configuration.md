@@ -24,7 +24,7 @@
 | `ASR_MAX_UPLOAD_MB` | 單檔大小上限 | `2048` |
 | `ASR_MAX_AUDIO_SECONDS` | 音訊長度上限 | `10800` |
 | `ASR_MAX_QUEUE` | 最多可排隊的工作數 | `20` |
-| `ASR_JOB_TTL_SECONDS` | 完成的結果與燒好字幕的影片保留多久，至少 60 | `86400` |
+| `ASR_JOB_TTL_SECONDS` | 完成的結果與燒好字幕的影片保留多久，至少 60；結果從最後一次修改起算 | `86400` |
 | `ASR_SUBTITLE_FONT` | ASS 匯出與燒錄字幕的字型名稱；含空白時加引號 | `"Microsoft JhengHei"` |
 | `ASR_SUBTITLE_FONTS_DIR` | 燒錄字幕時尋找字型檔的資料夾，必須存在 | `C:/Windows/Fonts` |
 | `ASR_LOG_LEVEL` | [日誌](deployment.md#日誌)等級：`DEBUG`、`INFO`、`WARNING` 或 `ERROR`；`DEBUG` 也會記下第三方套件的細節 | `INFO` |

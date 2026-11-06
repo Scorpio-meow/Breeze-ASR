@@ -1,10 +1,15 @@
+import time
 from dataclasses import replace
 
 import pytest
+from fastapi.testclient import TestClient
 
+from app import main as main_module
 from app.glossary import parse
 from app.jobs import JobStatus, RevisionConflict, TranscriptInvalid
+from app.speakers import NO_SPEECH
 from app.transcript import Segment, Speaker
+from tests.test_access_token import _app
 from tests.test_jobs import FakeInference, _queue, _submit, _wait
 
 
@@ -68,6 +73,12 @@ def test_invalid_segments_are_rejected(tmp_path, segments, message):
     assert job.revision == 0
 
 
+def test_zero_length_segment_from_the_model_can_be_saved(tmp_path):
+    queue, job = _finished(tmp_path)
+    updated = queue.replace_transcript(job.id, 0, [Segment(0.5, 0.5, "好", None)], None)
+    assert updated.revision == 1
+
+
 def test_speakers_must_match_the_result(tmp_path):
     queue, job = _finished(tmp_path, speakers=True)
     segments = job.transcript.segments
@@ -118,3 +129,61 @@ def test_voiceprint_speakers_stay_listed_after_a_merge(tmp_path):
     result = queue.describe(updated)["result"]
     assert [s["id"] for s in result["speakers"]] == ["S2"]
     assert result["voiceprint_speakers"] == ["S1"]
+
+
+def test_editing_keeps_the_result_past_its_original_expiry(tmp_path):
+    queue, job = _finished(tmp_path)
+    finished = time.time() - 3600 - 1
+    job.finished_at = finished
+    queue.replace_transcript(job.id, 0, [Segment(0.0, 1.0, "改過", None)], None)
+    with queue._cond:
+        queue._purge_expired()
+    assert queue.get(job.id) is job
+    restored = _queue(tmp_path, FakeInference(finish=True)).get(job.id)
+    assert restored.transcript.text == "改過"
+    assert restored.finished_at == finished
+
+
+def test_speaker_with_only_a_zero_length_segment_is_kept(tmp_path):
+    queue, job = _finished(tmp_path, speakers=True)
+    speakers = [*job.transcript.speakers, Speaker("S3", "說話者 3", 0.0, None, None)]
+    segments = [Segment(0.0, 0.4, "你", "S1"), Segment(0.4, 0.4, "嗯", "S3"), Segment(0.4, 1.0, "好", "S2")]
+    updated = queue.replace_transcript(job.id, 0, segments, speakers)
+    assert [s.id for s in updated.transcript.speakers] == ["S1", "S2", "S3"]
+    queue.replace_transcript(job.id, updated.revision, segments, updated.transcript.speakers)
+
+
+def test_saved_result_with_an_empty_speaker_list_becomes_editable(tmp_path):
+    queue, job = _finished(tmp_path)
+    job.transcript = replace(job.transcript, speakers=[])
+    with queue._cond:
+        queue._persist(job)
+    restored = _queue(tmp_path, FakeInference(finish=True)).get(job.id)
+    assert restored.transcript.speakers is None
+    assert restored.transcript.speakers_error == NO_SPEECH
+
+
+def test_saving_keeps_a_deleted_voice_as_unlinked_instead_of_rejecting(tmp_path, monkeypatch):
+    received = {}
+
+    class RecordingQueue:
+        def __init__(self, *_args) -> None:
+            pass
+
+        def replace_transcript(self, job_id, revision, segments, speakers):
+            received.update(segments=segments, speakers=speakers)
+            return job_id
+
+        def describe(self, job_id):
+            return {"id": job_id}
+
+    monkeypatch.setattr(main_module, "JobQueue", RecordingQueue)
+    body = {
+        "revision": 0,
+        "segments": [{"start": 0.123, "end": 1.0, "text": " 你好\n  世界 ", "speaker": "S1"}],
+        "speakers": [{"id": "S1", "name": "小明", "voice_id": "deleted-voice", "similarity": 0.9}],
+    }
+    response = TestClient(_app(tmp_path, None)).put("/api/jobs/abc/transcript", json=body)
+    assert response.status_code == 200
+    assert received["segments"] == [Segment(0.12, 1.0, "你好 世界", "S1")]
+    assert received["speakers"] == [Speaker("S1", "小明", 0.0, None, None)]

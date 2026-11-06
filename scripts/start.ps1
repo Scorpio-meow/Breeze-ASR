@@ -32,8 +32,10 @@ foreach ($line in Get-Content .env -Encoding UTF8) {
         $settings[$Matches[1]] = $Matches[2]
     }
 }
-$address = if ($settings["ASR_HOST"] -eq "0.0.0.0") { "127.0.0.1" } else { $settings["ASR_HOST"] }
-$url = "http://${address}:$($settings["ASR_PORT"])"
+$url = uv run --no-sync --env-file .env python -c "from app.client import service_url; print(service_url(None))"
+if ($LASTEXITCODE -ne 0) {
+    throw "無法從 .env 的 ASR_HOST、ASR_PORT 組出服務網址"
+}
 
 if (-not $NoBrowser) {
     Start-Job -ArgumentList $url -ScriptBlock {

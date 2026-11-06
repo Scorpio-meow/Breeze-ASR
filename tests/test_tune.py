@@ -99,7 +99,7 @@ def test_openvino_leaves_non_intel_gpus_to_pytorch():
 
 def test_cuda_pytorch_that_cannot_see_the_gpu_is_not_told_to_reinstall():
     hardware = _hardware(
-        nvidia_gpus=[{"index": 0, "name": "NVIDIA RTX", "memory_total_gb": 16.0, "memory_free_gb": 15.0}],
+        nvidia_gpus=[{"index": 0, "name": "NVIDIA RTX"}],
         torch_build="CUDA 13.0",
     )
     _, skipped = _candidates(hardware, None)
@@ -110,7 +110,7 @@ def test_cuda_pytorch_that_cannot_see_the_gpu_is_not_told_to_reinstall():
 
 def test_hint_when_gpu_present_but_pytorch_lacks_support():
     hardware = _hardware(
-        nvidia_gpus=[{"index": 0, "name": "NVIDIA RTX", "memory_total_gb": 16.0, "memory_free_gb": 15.0}],
+        nvidia_gpus=[{"index": 0, "name": "NVIDIA RTX"}],
         amd_gpu_tools=True,
     )
     candidates, skipped = _candidates(hardware, None)

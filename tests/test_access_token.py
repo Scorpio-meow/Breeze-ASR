@@ -106,6 +106,25 @@ def test_repeated_wrong_tokens_lock_login_for_a_minute(guarded):
     assert _login(guarded, TOKEN).status_code == 429
 
 
+def test_oversized_login_is_rejected_before_the_body_is_read(guarded):
+    response = guarded.post(
+        "/api/session", content=b'{"token": "' + b"x" * 5000 + b'"}', headers={"Content-Type": "application/json"}
+    )
+    assert response.status_code == 413
+    assert _login(guarded, TOKEN).status_code == 204
+
+
+def test_oversized_upload_is_rejected_with_the_limit_in_megabytes(guarded):
+    response = guarded.post(
+        "/api/jobs",
+        headers={"Authorization": f"Bearer {TOKEN}"},
+        files={"file": ("a.wav", b"x" * (2 * 1024 * 1024))},
+        data={"model": "m", "speakers": "off", "punctuation": "off"},
+    )
+    assert response.status_code == 413
+    assert response.json()["detail"] == "檔案超過上限 1 MB"
+
+
 def test_cross_site_login_is_still_rejected(guarded):
     assert _login(guarded, TOKEN, **{"sec-fetch-site": "cross-site"}).status_code == 403
 

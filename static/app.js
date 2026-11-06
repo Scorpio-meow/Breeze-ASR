@@ -78,6 +78,7 @@ const state = {
   renderTimer: null,
   recording: null,
   uploading: false,
+  openTicket: 0,
   peaks: null,
   waveToken: 0,
   frame: 0,
@@ -645,7 +646,7 @@ function bindDialogs() {
     $("voices-dialog").showModal();
   });
   $("hardware-btn").addEventListener("click", () => $("hardware-dialog").showModal());
-  for (const dialog of document.querySelectorAll("dialog")) {
+  for (const dialog of document.querySelectorAll("dialog:not(#login-dialog)")) {
     dialog.addEventListener("click", (event) => {
       if (event.target === dialog) dialog.close();
     });
@@ -698,18 +699,26 @@ function renderJobs() {
   list.replaceChildren(...state.jobs.map(jobItem));
 }
 
+function unsentRecording() {
+  return !!state.audio?.recorded && ![...state.blobs.values()].some((known) => known.blob === state.audio.blob);
+}
+
 async function openJob(id, quiet = false) {
   if (state.job?.id === id) return;
   if (state.uploading) return setStatus("上傳中，請等上傳完成再切換工作", "", "error");
   if (state.recording) return setStatus("請先停止錄音", "", "error");
+  if (unsentRecording()) return setStatus("錄音還沒送出", "請先按「辨識」送出，或按「關閉」放棄這段錄音", "error");
+  const ticket = ++state.openTicket;
   let job;
   try {
     job = await api(`/api/jobs/${encodeURIComponent(id)}`);
   } catch (err) {
-    if (err.status === 404) storageRemove(STORAGE_KEYS.job);
+    if (ticket !== state.openTicket) return;
+    if (err.status === 404 && storageGet(STORAGE_KEYS.job) === id) storageRemove(STORAGE_KEYS.job);
     if (!quiet) setStatus(err.message, "", "error");
     return;
   }
+  if (ticket !== state.openTicket) return;
   const known = state.blobs.get(id);
   if (known) {
     if (state.audio?.blob !== known.blob) setAudio(known.blob, known.name);
@@ -1257,6 +1266,9 @@ function bindRecorder() {
     else if (state.recording) stopRecording();
     else startRecording();
   });
+  window.addEventListener("beforeunload", (event) => {
+    if (state.recording || unsentRecording()) event.preventDefault();
+  });
 }
 
 function recordingName(type) {
@@ -1270,11 +1282,14 @@ function recordingName(type) {
 async function startRecording() {
   if (state.uploading) return setStatus("上傳中，請等上傳完成再錄音", "", "error");
   let stream;
+  $("record-btn").disabled = true;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (err) {
     setStatus(err?.name === "NotAllowedError" ? "沒有麥克風權限" : "無法開啟麥克風", "", "error");
     return;
+  } finally {
+    $("record-btn").disabled = false;
   }
   const preferred = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/mp4"].find((t) =>
     MediaRecorder.isTypeSupported(t),
@@ -1313,7 +1328,10 @@ async function startRecording() {
   recorder.addEventListener("stop", () => {
     const type = recorder.mimeType || preferred || "audio/webm";
     const blob = new Blob(chunks, { type });
-    if (blob.size) setAudio(blob, recordingName(type));
+    if (blob.size) {
+      setAudio(blob, recordingName(type));
+      if (state.audio?.blob === blob) state.audio.recorded = true;
+    }
     announce("錄音完成");
   });
 
@@ -1788,7 +1806,7 @@ function rememberCaret() {
       : selection.anchorOffset === 0
         ? 0
         : editor.textContent.length;
-  state.caret = { index, offset };
+  state.caret = { index, offset, text: editor.textContent };
 }
 
 function settle() {
@@ -1803,11 +1821,16 @@ function saveSegmentText(index, node) {
     node.textContent = saved;
     return Promise.resolve();
   }
+  const limit = state.config.max_text_length;
+  if (text.length > limit) {
+    setStatus(`第 ${index + 1} 段沒有儲存：最多 ${limit} 個字`, `目前 ${text.length} 個字，請縮短後再離開`, "error");
+    return Promise.resolve();
+  }
   const draft = currentDraft();
   draft.segments[index].text = text;
   const saving = commit(draft, `已更新第 ${index + 1} 段`)
     .then((ok) => {
-      if (!ok && node.isConnected && document.activeElement !== node) node.textContent = saved;
+      if (!ok && node.isConnected && document.activeElement !== node) node.textContent = state.segments[index]?.text ?? saved;
     })
     .finally(() => {
       if (state.pendingSave === saving) state.pendingSave = null;
@@ -1878,23 +1901,35 @@ async function commit(draft, message) {
   return true;
 }
 
+function withCurrentVoices(draft) {
+  if (!draft.speakers) return draft;
+  const current = new Map(state.speakers.map((s) => [s.id, s]));
+  const speakers = draft.speakers.map((s) => {
+    const now = current.get(s.id);
+    return now ? { ...s, voice_id: now.voice_id, similarity: now.similarity } : s;
+  });
+  return { ...draft, speakers };
+}
+
 async function undo() {
   await settle();
-  if (!state.history.past.length || !editable()) return;
+  const history = state.history;
+  if (!history.past.length || !editable()) return;
   const before = currentDraft();
-  const draft = state.history.past.pop();
-  if (await saveDraft(draft, "已復原")) state.history.future.push(before);
-  else state.history.past.push(draft);
+  const draft = history.past.pop();
+  if (await saveDraft(withCurrentVoices(draft), "已復原")) history.future.push(before);
+  else history.past.push(draft);
   updateHistoryButtons();
 }
 
 async function redo() {
   await settle();
-  if (!state.history.future.length || !editable()) return;
+  const history = state.history;
+  if (!history.future.length || !editable()) return;
   const before = currentDraft();
-  const draft = state.history.future.pop();
-  if (await saveDraft(draft, "已重做")) state.history.past.push(before);
-  else state.history.future.push(draft);
+  const draft = history.future.pop();
+  if (await saveDraft(withCurrentVoices(draft), "已重做")) history.past.push(before);
+  else history.future.push(draft);
   updateHistoryButtons();
 }
 
@@ -1974,7 +2009,7 @@ async function splitCue() {
   const now = previewHoldsJobAudio() ? audioEl().currentTime : null;
   const inside = now !== null && now > segment.start + SPLIT_MARGIN_SECONDS && now < segment.end - SPLIT_MARGIN_SECONDS;
   const span = segment.end - segment.start;
-  let offset = state.caret?.index === index ? state.caret.offset : null;
+  let offset = state.caret?.index === index && state.caret.text === text ? state.caret.offset : null;
   if (offset === null) {
     const at = inside ? now : segment.start + span / 2;
     offset = Math.round((text.length * (at - segment.start)) / span);
@@ -2091,11 +2126,7 @@ function bindCueEditor() {
 
 function renderSpeakers(result) {
   const notice = $("speakers-error");
-  const message = result.speakers_error
-    ? `${result.speakers_error}（字幕不受影響）`
-    : result.speakers && !result.speakers.length
-      ? "沒有偵測到可分辨的說話聲音"
-      : "";
+  const message = result.speakers_error ? `${result.speakers_error}（字幕不受影響）` : "";
   notice.textContent = message;
   notice.hidden = !message;
   $("speakers-empty").hidden = !!state.speakers.length || !!message;
@@ -2121,7 +2152,7 @@ function speakerItem(speaker) {
   swatch.setAttribute("aria-hidden", "true");
   const input = el("input", "speaker-name");
   input.type = "text";
-  input.maxLength = state.config.speakers.max_name_length;
+  if (state.config.speakers) input.maxLength = state.config.speakers.max_name_length;
   input.autocomplete = "off";
   input.spellcheck = false;
   input.enterKeyHint = "done";
@@ -2582,25 +2613,26 @@ async function startBurn() {
   if (!source || !editable()) return;
   await settle();
   clearTimeout(state.renderTimer);
-  state.render = { id: "", status: "queued", progress: 0, error: null };
+  const jobId = state.job.id;
+  const placeholder = { id: "", job_id: jobId, status: "queued", progress: 0, error: null };
+  state.render = placeholder;
   renderBurn();
   $("burn-status").textContent = "上傳影片…";
+  let render;
   try {
-    state.render = await upload(
-      `/api/jobs/${encodeURIComponent(state.job.id)}/renders`,
-      {},
-      source.blob,
-      source.name,
-      (ratio) => {
-        $("burn-status").textContent = ratio < 1 ? `上傳影片 ${Math.round(ratio * 100)}%` : "檢查影片…";
-      },
-    );
+    render = await upload(`/api/jobs/${encodeURIComponent(jobId)}/renders`, {}, source.blob, source.name, (ratio) => {
+      if (state.render !== placeholder) return;
+      $("burn-status").textContent = ratio < 1 ? `上傳影片 ${Math.round(ratio * 100)}%` : "檢查影片…";
+    });
   } catch (err) {
-    state.render = { id: "", status: "failed", progress: 0, error: err.message };
+    if (state.render !== placeholder) return;
+    state.render = { id: "", job_id: jobId, status: "failed", progress: 0, error: err.message };
     renderBurn();
     announce(err.message);
     return;
   }
+  if (state.render !== placeholder) return;
+  state.render = render;
   renderBurn();
   state.renderTimer = setTimeout(pollRender, RENDER_POLL_MS);
 }

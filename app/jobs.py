@@ -18,7 +18,7 @@ from .glossary import GlossaryStore
 from .inference import InferenceClient, InferenceError
 from .logsetup import remove_tree
 from .punctuation import PunctuationError, PunctuationService
-from .speakers import DiarizationError, DiarizationRun, SpeakerService
+from .speakers import NO_SPEECH, DiarizationError, DiarizationRun, SpeakerService
 from .transcript import Segment, Speaker, Transcript
 from .voices import Voiceprint
 
@@ -81,6 +81,7 @@ class Job:
     speakers_progress: float | None = None
     speakers_progress_step: int = 0
     finished_at: float | None = None
+    edited_at: float | None = None
     transcript: Transcript | None = None
     speaker_voiceprints: dict[str, Voiceprint] = field(default_factory=dict)
     error: str | None = None
@@ -91,6 +92,10 @@ class Job:
     @property
     def done(self) -> bool:
         return self.status in (JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED)
+
+    def expired(self, cutoff: float) -> bool:
+        last_change = self.edited_at or self.finished_at
+        return self.done and last_change is not None and last_change < cutoff
 
 
 class JobQueue:
@@ -142,6 +147,7 @@ class JobQueue:
             "hotwords": job.hotwords,
             "created_at": job.created_at,
             "finished_at": job.finished_at,
+            "edited_at": job.edited_at,
             "punctuation_error": job.punctuation_error,
             "revision": job.revision,
             "transcript": job.transcript.to_dict(),
@@ -159,7 +165,7 @@ class JobQueue:
         for path in self._results_dir.glob("*.json"):
             try:
                 record = json.loads(path.read_text(encoding="utf-8"))
-                if record["finished_at"] < cutoff:
+                if (record.get("edited_at") or record["finished_at"]) < cutoff:
                     path.unlink(missing_ok=True)
                     expired += 1
                     continue
@@ -175,9 +181,10 @@ class JobQueue:
                     created_at=record["created_at"],
                     status=JobStatus.SUCCEEDED,
                     finished_at=record["finished_at"],
+                    edited_at=record.get("edited_at"),
                     punctuation_error=record.get("punctuation_error"),
                     revision=record.get("revision", 0),
-                    transcript=Transcript.from_dict(record["transcript"]),
+                    transcript=_without_empty_speakers(Transcript.from_dict(record["transcript"])),
                     speaker_voiceprints={
                         sid: Voiceprint.from_json(data) for sid, data in record.get("speaker_voiceprints", {}).items()
                     },
@@ -257,10 +264,6 @@ class JobQueue:
         with self._cond:
             return self._jobs.get(job_id)
 
-    def pending_count(self) -> int:
-        with self._cond:
-            return len(self._pending)
-
     def summaries(self) -> list[dict]:
         with self._cond:
             jobs = sorted(self._jobs.values(), key=lambda j: j.created_at, reverse=True)
@@ -320,6 +323,7 @@ class JobQueue:
 
     def _touch(self, job: Job) -> None:
         job.revision += 1
+        job.edited_at = time.time()
         self._persist(job)
 
     def rename_speaker(self, job_id: str, speaker_id: str, name: str) -> Job:
@@ -357,7 +361,8 @@ class JobQueue:
                 speaking = {s.id: 0.0 for s in speakers}
                 for segment in segments:
                     speaking[segment.speaker] += segment.end - segment.start
-                speakers = [replace(s, seconds=round(speaking[s.id], 1)) for s in speakers if speaking[s.id] > 0]
+                used = {segment.speaker for segment in segments}
+                speakers = [replace(s, seconds=round(speaking[s.id], 1)) for s in speakers if s.id in used]
             job.transcript = replace(
                 current,
                 segments=segments,
@@ -452,7 +457,7 @@ class JobQueue:
 
     def _purge_expired(self) -> None:
         cutoff = time.time() - self._ttl_seconds
-        expired = [jid for jid, j in self._jobs.items() if j.done and (j.finished_at or 0) < cutoff]
+        expired = [jid for jid, j in self._jobs.items() if j.expired(cutoff)]
         for jid in expired:
             del self._jobs[jid]
             try:
@@ -699,6 +704,12 @@ class JobQueue:
                 log.exception("工作 %s 的結果無法寫入磁碟，服務重新啟動後會遺失", job.id)
 
 
+def _without_empty_speakers(transcript: Transcript) -> Transcript:
+    if transcript.speakers == []:
+        return replace(transcript, speakers=None, speakers_error=NO_SPEECH)
+    return transcript
+
+
 def _check_transcript(
     segments: list[Segment], speakers: list[Speaker] | None, has_speakers: bool, audio_seconds: float
 ) -> None:
@@ -719,8 +730,8 @@ def _check_transcript(
             raise TranscriptInvalid(f"第 {i} 段的時間不是數字")
         if segment.start < 0 or segment.end > audio_seconds + _TIME_SLACK_SECONDS:
             raise TranscriptInvalid(f"第 {i} 段的時間超出音訊範圍（0–{audio_seconds} 秒）")
-        if segment.end <= segment.start:
-            raise TranscriptInvalid(f"第 {i} 段的結束時間必須晚於開始時間")
+        if segment.end < segment.start:
+            raise TranscriptInvalid(f"第 {i} 段的結束時間不可早於開始時間")
         if segment.start < previous_start:
             raise TranscriptInvalid(f"第 {i} 段的開始時間早於上一段，字幕必須依開始時間排序")
         previous_start = segment.start

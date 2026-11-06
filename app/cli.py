@@ -43,11 +43,16 @@ def _transcribe(client: AsrClient, args: argparse.Namespace) -> int:
     model = args.model or config["default_model"]
     hotwords = client.glossary()["hotwords"] if args.glossary else args.hotwords or ""
     submitted = []
+    failed = 0
     for source in sources:
-        job = client.submit(source, model, args.speakers, args.punctuation == "on", hotwords)
+        try:
+            job = client.submit(source, model, args.speakers, args.punctuation == "on", hotwords)
+        except ServiceError as exc:
+            _log(f"{source.name}：無法送出：{exc}")
+            failed += 1
+            continue
         _log(f"{source.name}：已送出（工作 {job['id']}）")
         submitted.append((source, job["id"]))
-    failed = 0
     for source, job_id in submitted:
         last = ""
 

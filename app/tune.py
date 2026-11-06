@@ -62,7 +62,7 @@ def _nvidia_gpus() -> list[dict]:
     if shutil.which("nvidia-smi") is None:
         return []
     proc = subprocess.run(
-        ["nvidia-smi", "--query-gpu=index,name,memory.total,memory.free", "--format=csv,noheader,nounits"],
+        ["nvidia-smi", "--query-gpu=index,name", "--format=csv,noheader"],
         capture_output=True,
         text=True,
         check=False,
@@ -75,15 +75,8 @@ def _nvidia_gpus() -> list[dict]:
         )
     gpus = []
     for line in proc.stdout.strip().splitlines() if proc.returncode == 0 else []:
-        index, name, total, free = (part.strip() for part in line.split(","))
-        gpus.append(
-            {
-                "index": int(index),
-                "name": name,
-                "memory_total_gb": round(int(total) / 1024, 1),
-                "memory_free_gb": round(int(free) / 1024, 1),
-            }
-        )
+        index, name = (part.strip() for part in line.split(",", 1))
+        gpus.append({"index": int(index), "name": name})
     return gpus
 
 

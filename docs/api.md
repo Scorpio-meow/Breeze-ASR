@@ -207,7 +207,7 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 | `punctuation_error` | 自動標點失敗的原因，字幕保留沒有標點的版本 |
 | `audio_seconds`、`processing_seconds` | 音訊長度、處理花的秒數 |
 
-不分辨說話者時，`speakers` 與每段的 `speaker` 是 `null`。
+不分辨說話者時，`speakers` 與每段的 `speaker` 是 `null`；分辨失敗或沒有偵測到說話聲音時也是，原因在 `speakers_error`。
 
 ## DELETE /api/jobs/{id}
 
@@ -233,11 +233,11 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 ```
 
 - `revision` 必須等於目前結果的版本號，避免覆蓋在別的分頁做的修改。
-- 最多 20000 段，依開始時間排序；每段的結束時間要晚於開始時間，而且在音訊長度內；時間取到百分之一秒。每段文字的規則同 [`PATCH …/segments/{index}`](#patch-apijobsidsegmentsindex)。
+- 最多 20000 段，依開始時間排序；每段的結束時間不可早於開始時間，而且在音訊長度內；時間取到百分之一秒。每段文字的規則同 [`PATCH …/segments/{index}`](#patch-apijobsidsegmentsindex)。
 - 沒有分辨說話者的結果，`speakers` 與每段的 `speaker` 都是 `null`；有分辨說話者時，每段的 `speaker` 必須在 `speakers` 裡。
 - 說話者 `id` 是 S 加數字，可以新增（例如把幾段改給新的說話者 `S5`）。新增的人沒有聲紋，不能「記住聲音」；新的編號不要用 `voiceprint_speakers` 裡的編號，否則會沿用那位說話者原本的聲紋。
 - 沒有任何字幕的說話者會被移除（合併說話者就是把字幕都改給另一人）；每人的時間 `seconds` 依字幕重新計算。
-- `voice_id` 必須是語者庫裡的人或 `null`。
+- `voice_id` 是語者庫裡的人或 `null`；語者庫裡已經沒有的人（例如剛刪除）存成 `null`，復原刪除前的版本時不會失敗。
 
 **回應：**
 - 200：更新後的工作狀態

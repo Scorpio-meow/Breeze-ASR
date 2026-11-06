@@ -27,7 +27,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .audio import AudioDecodeError, decode_to_file, probe_media, waveform
 from .catalog import load_catalog
-from .config import ConfigError, Settings, host_name
+from .config import SWITCH, ConfigError, Settings, host_name
 from .exports import FORMATS, ExportContext, render
 from .glossary import MAX_HOTWORDS_LENGTH, GlossaryError, GlossaryStore, parse
 from .hardware import HardwareProfile, SelectionError, load_profile, select
@@ -66,7 +66,8 @@ _MAX_LOGGED_TEXT_LENGTH = 1000
 _CLIENT_ERRORS_PER_MINUTE = 30
 _CONTROL_CHARACTERS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 _UPLOAD_PATHS = re.compile(r"/api/jobs(/[^/]+/renders)?")
-_SWITCH = {"on": True, "off": False}
+_SESSION_PATH = re.compile(r"/api/session")
+_MAX_SESSION_BODY_BYTES = 4096
 _UNLOGGED_REJECTIONS = frozenset({"/api/hotwords/count"})
 _SESSION_COOKIE = "breeze_asr_session"
 _SESSION_PURPOSE = b"breeze-asr-session"
@@ -81,10 +82,11 @@ _CSP = (
 
 
 class UploadLimitMiddleware:
-    def __init__(self, app: ASGIApp, paths: re.Pattern[str], max_bytes: int) -> None:
+    def __init__(self, app: ASGIApp, paths: re.Pattern[str], max_bytes: int, detail: str) -> None:
         self.app = app
         self.paths = paths
         self.max_bytes = max_bytes
+        self.detail = detail
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] == "http" and scope["method"] == "POST" and self.paths.fullmatch(scope["path"]):
@@ -94,14 +96,13 @@ class UploadLimitMiddleware:
                 await JSONResponse({"detail": "請求缺少 Content-Length"}, status_code=411)(scope, receive, send)
                 return
             if not length.isdigit() or int(length) > self.max_bytes:
-                limit_mb = (self.max_bytes - _MULTIPART_OVERHEAD) // (1024 * 1024)
                 log.warning(
-                    "POST %s 被拒絕（413）：Content-Length %s 超過上限 %d MB",
+                    "POST %s 被拒絕（413）：Content-Length %s 超過上限 %d 位元組",
                     scope["path"],
                     _one_line(length.decode("latin-1")),
-                    limit_mb,
+                    self.max_bytes,
                 )
-                await JSONResponse({"detail": f"檔案超過上限 {limit_mb} MB"}, status_code=413)(scope, receive, send)
+                await JSONResponse({"detail": self.detail}, status_code=413)(scope, receive, send)
                 return
         await self.app(scope, receive, send)
 
@@ -282,9 +283,9 @@ def _hotwords(raw: str) -> str:
 
 
 def _switch(raw: str, name: str) -> bool:
-    if raw not in _SWITCH:
+    if raw not in SWITCH:
         raise HTTPException(status_code=400, detail=f"{name} 只能是 on 或 off")
-    return _SWITCH[raw]
+    return SWITCH[raw]
 
 
 def _one_line(text: str | None) -> str:
@@ -483,7 +484,13 @@ def create_app(settings: Settings) -> FastAPI:
         return await request_validation_exception_handler(request, exc)
 
     app.add_middleware(
-        UploadLimitMiddleware, paths=_UPLOAD_PATHS, max_bytes=settings.max_upload_bytes + _MULTIPART_OVERHEAD
+        UploadLimitMiddleware,
+        paths=_UPLOAD_PATHS,
+        max_bytes=settings.max_upload_bytes + _MULTIPART_OVERHEAD,
+        detail=f"檔案超過上限 {settings.max_upload_mb} MB",
+    )
+    app.add_middleware(
+        UploadLimitMiddleware, paths=_SESSION_PATH, max_bytes=_MAX_SESSION_BODY_BYTES, detail="登入資料太大"
     )
     if settings.access_token is not None:
         app.add_middleware(AccessTokenMiddleware, token=settings.access_token, public=public_paths(STATIC_DIR))
@@ -705,8 +712,6 @@ def create_app(settings: Settings) -> FastAPI:
         if body.speakers is not None:
             known = {v["id"] for v in speaker_service.voices.entries()} if speaker_service is not None else set()
             for s in body.speakers:
-                if s.voice_id is not None and s.voice_id not in known:
-                    raise HTTPException(status_code=422, detail=f"語者庫裡沒有 {s.voice_id}")
                 if s.similarity is not None and not 0 <= s.similarity <= 1:
                     raise HTTPException(status_code=422, detail="similarity 必須介於 0 到 1")
             speakers = [
@@ -714,8 +719,8 @@ def create_app(settings: Settings) -> FastAPI:
                     id=s.id,
                     name=_clean_line(s.name, "名字", _MAX_NAME_LENGTH),
                     seconds=0.0,
-                    voice_id=s.voice_id,
-                    similarity=s.similarity if s.voice_id is not None else None,
+                    voice_id=s.voice_id if s.voice_id in known else None,
+                    similarity=s.similarity if s.voice_id in known else None,
                 )
                 for s in body.speakers
             ]

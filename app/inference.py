@@ -193,6 +193,7 @@ class InferenceClient:
         self._catalog = catalog
         self._ctx = mp.get_context("spawn")
         self._lock = threading.Lock()
+        self._lifecycle = threading.Lock()
         self._models = self._initial_status()
         self._hardware: dict = {"state": "starting"}
         self._pending: dict[str, _Pending] = {}
@@ -211,7 +212,8 @@ class InferenceClient:
 
     def stop(self) -> None:
         self._stopping.set()
-        self._shutdown_process()
+        with self._lifecycle:
+            self._shutdown_process()
 
     def _shutdown_process(self) -> None:
         if self._process is not None and self._process.is_alive():
@@ -244,42 +246,46 @@ class InferenceClient:
         self._restart(change, {"state": "starting"})
 
     def _restart(self, change: Callable[[], None], hardware: dict) -> None:
-        self._restarting.set()
-        try:
-            self._shutdown_process()
+        with self._lifecycle:
+            self._restarting.set()
             try:
-                change()
-            except Exception:
-                log.exception("變更硬體設定失敗，改用原本的設定重新啟動推論行程")
-                raise
+                self._shutdown_process()
+                try:
+                    change()
+                except Exception:
+                    log.exception("變更硬體設定失敗，改用原本的設定重新啟動推論行程")
+                    raise
+                finally:
+                    with self._lock:
+                        self._models = self._initial_status()
+                        self._hardware = hardware
+                    self._spawn()
             finally:
-                with self._lock:
-                    self._models = self._initial_status()
-                    self._hardware = hardware
-                self._spawn()
-        finally:
-            self._restarting.clear()
+                self._restarting.clear()
 
     def cancel(self, job_id: str) -> None:
-        with self._lock:
-            pending = self._pending.get(job_id)
-        if pending is None:
-            return
-        log.info("中止推論行程以取消工作 %s", job_id)
-        self._restarting.set()
-        try:
-            children = _children(self._process)
-            self._process.kill()
-            _kill(children)
-            self._process.join()
+        with self._lifecycle:
             with self._lock:
-                self._models = self._initial_status()
-                self._hardware = {"state": "starting"}
-            self._spawn()
-        finally:
-            self._restarting.clear()
-        pending.error = "工作已取消"
-        pending.done.set()
+                if job_id not in self._pending:
+                    return
+            log.info("中止推論行程以取消工作 %s", job_id)
+            self._restarting.set()
+            try:
+                children = _children(self._process)
+                self._process.kill()
+                _kill(children)
+                self._process.join()
+                with self._lock:
+                    self._models = self._initial_status()
+                    self._hardware = {"state": "starting"}
+                self._spawn()
+                with self._lock:
+                    pending = self._pending.get(job_id)
+            finally:
+                self._restarting.clear()
+        if pending is not None:
+            pending.error = "工作已取消"
+            pending.done.set()
 
     def _spawn(self) -> None:
         requests, events = self._ctx.Queue(), self._ctx.Queue()
@@ -396,25 +402,28 @@ class InferenceClient:
             pending.done.set()
 
     def _restart_after_crash(self) -> None:
-        log.error(
-            "推論行程意外結束（exit code %s），%d 秒後重新啟動；%s；Python 例外的 traceback 在 inference.log，"
-            "原生程式碼當掉的呼叫堆疊在 %s",
-            self._process.exitcode,
-            _RESTART_DELAY_SECONDS,
-            system_memory(),
-            self._settings.logs_dir / _CRASH_LOG,
-        )
-        with self._lock:
-            pending = list(self._pending.values())
-            self._models = self._initial_status()
-            self._hardware = {"state": "starting"}
-        for item in pending:
-            if item.started:
-                item.error = "推論行程意外結束（可能是驅動程式錯誤或記憶體不足），已自動重新啟動，請再送出一次"
-                item.done.set()
-        time.sleep(_RESTART_DELAY_SECONDS)
-        self._spawn()
-        for item in pending:
-            if not item.started:
-                item.resend = True
-                item.done.set()
+        with self._lifecycle:
+            if self._stopping.is_set() or self._process.is_alive():
+                return
+            log.error(
+                "推論行程意外結束（exit code %s），%d 秒後重新啟動；%s；Python 例外的 traceback 在 inference.log，"
+                "原生程式碼當掉的呼叫堆疊在 %s",
+                self._process.exitcode,
+                _RESTART_DELAY_SECONDS,
+                system_memory(),
+                self._settings.logs_dir / _CRASH_LOG,
+            )
+            with self._lock:
+                pending = list(self._pending.values())
+                self._models = self._initial_status()
+                self._hardware = {"state": "starting"}
+            for item in pending:
+                if item.started:
+                    item.error = "推論行程意外結束（可能是驅動程式錯誤或記憶體不足），已自動重新啟動，請再送出一次"
+                    item.done.set()
+            time.sleep(_RESTART_DELAY_SECONDS)
+            self._spawn()
+            for item in pending:
+                if not item.started:
+                    item.resend = True
+                    item.done.set()

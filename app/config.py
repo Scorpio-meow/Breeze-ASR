@@ -30,7 +30,7 @@ def _require_int(name: str, minimum: int) -> int:
     return value
 
 
-_SWITCH = {"on": True, "off": False}
+SWITCH = {"on": True, "off": False}
 WATCH_OFF = "off"
 ACCESS_TOKEN_OFF = "off"
 MIN_ACCESS_TOKEN_LENGTH = 24
@@ -41,9 +41,9 @@ _HOST_NAME = re.compile(r"[a-z0-9_-]+(?:\.[a-z0-9_-]+)*")
 
 def _require_switch(name: str) -> bool:
     raw = _require(name)
-    if raw not in _SWITCH:
+    if raw not in SWITCH:
         raise ConfigError(f"{name} 只能是 on 或 off，目前是 {raw!r}")
-    return _SWITCH[raw]
+    return SWITCH[raw]
 
 
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")

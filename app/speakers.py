@@ -23,6 +23,7 @@ log = logging.getLogger(__name__)
 _PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 _STDERR_TAIL_LINES = 5
 _STDERR_KEEP_LINES = 200
+NO_SPEECH = "沒有偵測到可分辨的說話聲音"
 
 
 class DiarizationError(RuntimeError):
@@ -199,7 +200,7 @@ class SpeakerService:
 
     def label(self, transcript: Transcript, raw: list[RawSpeaker]) -> tuple[Transcript, dict[str, Voiceprint]]:
         if not raw:
-            return replace(transcript, speakers=[]), {}
+            return replace(transcript, speakers_error=NO_SPEECH), {}
         owners = [_owner(segment, raw) for segment in transcript.segments]
         numbering: dict[int, str] = {}
         for owner in owners:

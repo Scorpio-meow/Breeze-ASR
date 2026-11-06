@@ -3,7 +3,7 @@ import pytest
 
 from app.catalog import HubFile, SpeakerConfig
 from app.diarize import _Cluster, _exclusive, _merge, _merge_pairs, _overlapped
-from app.speakers import RawSpeaker, SpeakerService, default_speaker_name
+from app.speakers import NO_SPEECH, RawSpeaker, SpeakerService, default_speaker_name
 from app.transcript import Segment, Transcript
 from app.voices import Voiceprint
 
@@ -76,9 +76,10 @@ def test_label_fills_names_from_voice_library(tmp_path):
     assert speaker.similarity == pytest.approx(1.0)
 
 
-def test_label_without_speech_gives_empty_list(tmp_path):
+def test_label_without_speech_reports_it_instead_of_an_empty_list(tmp_path):
     labelled, voiceprints = SpeakerService(_config(), tmp_path).label(_transcript(Segment(0, 1, "x", None)), [])
-    assert labelled.speakers == []
+    assert labelled.speakers is None
+    assert labelled.speakers_error == NO_SPEECH
     assert voiceprints == {}
 
 

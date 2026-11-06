@@ -246,6 +246,7 @@ class RenderQueue:
                     self._cond.wait(timeout=60)
                     self._purge_expired()
                 render = self._renders[self._pending.popleft()]
+                render.status = "running"
             try:
                 self._render(render)
             except Exception as exc:

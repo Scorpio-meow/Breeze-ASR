@@ -3,7 +3,7 @@ $self: https://raw.githubusercontent.com/Scorpio-meow/Breeze-ASR/main/docs/opena
 info:
   title: Breeze ASR
   summary: 本機語音辨識服務的 HTTP API：上傳錄音、取得逐字稿、編輯字幕、匯出檔案與燒錄字幕。
-  version: 0.3.0
+  version: 0.3.1
   license:
     name: MIT
     identifier: MIT
@@ -801,12 +801,12 @@ paths:
         網頁的改文字、改時間、分割、合併、刪除、改說話者、合併說話者、尋找取代與復原都是送這個請求（只有在「說話者」面板改名字用 `PATCH …/speakers/{speaker_id}`）。
 
         - `revision` 必須等於目前 `result.revision`，否則回 409。
-        - 字幕依開始時間排序；每段的結束時間要晚於開始時間，而且在 0 到音訊長度之間（容許 0.01 秒誤差）；時間四捨五入到 0.01 秒。最多 20000 段。
+        - 字幕依開始時間排序；每段的結束時間不可早於開始時間，而且在 0 到音訊長度之間（容許 0.01 秒誤差）；時間四捨五入到 0.01 秒。最多 20000 段。
         - 每段文字的連續空白與換行會合併成一個空格，不可空白，最多 500 字。
         - 沒有分辨說話者的結果，`speakers` 與每段的 `speaker` 都必須是 `null`；有分辨說話者時，`speakers` 是陣列，每段的 `speaker` 都要在裡面。
         - 說話者 `id` 是 S 加 1–4 位數字（例如 `S5`），可以新增；新增的人沒有聲紋，不能記住聲音。新的編號不要用 `voiceprint_speakers` 裡的編號，否則會沿用那位說話者原本的聲紋。
         - 沒有任何字幕的說話者會被移除（合併說話者就是把字幕都改給另一人）；每人的 `seconds` 依字幕重新計算，送來的值不會用到。
-        - `voice_id` 必須是語者庫裡的人或 `null`；`voice_id` 是 `null` 時 `similarity` 一律存成 `null`。
+        - `voice_id` 是語者庫裡的人或 `null`；語者庫裡已經沒有的人（例如剛刪除）存成 `null`。`voice_id` 是 `null` 時 `similarity` 一律存成 `null`。
         - 全文 `text` 會改成各段文字以換行相接。
       requestBody:
         required: true
@@ -896,9 +896,6 @@ paths:
                 speakersNull:
                   dataValue:
                     detail: 這份結果沒有分辨說話者，speakers 必須是 null
-                voice:
-                  dataValue:
-                    detail: 語者庫裡沒有 Xk2pQ9rT_aE
                 emptyText:
                   dataValue:
                     detail: 第 4 段文字不可空白
@@ -2346,16 +2343,12 @@ components:
           type: array
           items:
             type: object
-            required: [index, name, memory_total_gb, memory_free_gb]
+            required: [index, name]
             properties:
               index:
                 type: integer
               name:
                 type: string
-              memory_total_gb:
-                type: number
-              memory_free_gb:
-                type: number
         amd_gpu_tools:
           type: boolean
           description: 是否找得到 `rocm-smi` 或 `amd-smi`
@@ -2683,7 +2676,7 @@ components:
           items:
             $ref: "#/components/schemas/Segment"
         speakers:
-          description: 說話者清單；不分辨說話者或分辨失敗時是 `null`
+          description: 說話者清單；不分辨說話者、分辨失敗或沒有偵測到說話聲音時是 `null`，後兩者的原因在 `speakers_error`
           anyOf:
             - type: array
               items:
