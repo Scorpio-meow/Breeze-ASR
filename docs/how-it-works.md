@@ -103,14 +103,14 @@ flowchart TD
 1. **偵測硬體**：CPU、記憶體、OpenVINO 看得到的裝置，以及安裝的 PyTorch 是 CUDA、ROCm 還是 CPU 版、看得到哪些 GPU。每個 OpenVINO 裝置記錄它回報的運算精度、內顯或獨顯、廠商代碼與可用的 GPU 記憶體。偵測時不在 GPU 上建立 CUDA context，不佔顯示記憶體。
 2. **讀模型**：從預設模型的 safetensors 檔頭取得原始精度與參數量，不看 `config.json`（Breeze ASR 25 的 `config.json` 寫 float32，實際是 bf16；Breeze ASR 26 是 fp32；兩者都是 1,543,304,960 個參數）。
 3. **列出組合**：每個 OpenVINO 裝置（NPU 與非 Intel 的 GPU 除外）× int4、int8、fp16、fp32；每張 PyTorch 看得到的 GPU 測 fp16。
-   - NVIDIA 驅動附的 OpenCL（Docker 的 NVIDIA Container Toolkit 也會放進容器）會讓 OpenVINO 把 NVIDIA 卡也列成 `GPU`。但 OpenVINO 只支援 Intel 顯示卡，在 NVIDIA 卡上比 CPU 慢、還佔顯示記憶體，fp16 無法執行（見[效能實測](benchmarks.md#rtx-5060-ti16-gbcuda)），所以廠商代碼不是 Intel（`0x8086`）的 GPU 不交給 OpenVINO。
+   - NVIDIA 驅動附的 OpenCL（Docker 的 NVIDIA Container Toolkit 也會放進容器）會讓 OpenVINO 把 NVIDIA 卡也列成 `GPU`。但 OpenVINO 只支援 Intel 顯示卡，在 NVIDIA 卡上比 CPU 慢、還佔顯示記憶體，fp16 無法執行（見[效能實測](benchmarks.md#ryzen-9-9950x3d-128-gb--rtx-5090-32-gb--rtx-5060-ti-16-gb)），所以廠商代碼不是 Intel（`0x8086`）的 GPU 不交給 OpenVINO。
    - 裝置以它回報的最窄浮點精度運算（CPU 多半是 FP32，內顯是 FP16，有 AMX 的 CPU 是 BF16）。比運算精度寬的浮點格式不測，例如 GPU 的 fp32；比原始權重寬的也不測，例如 Breeze ASR 25 的 fp32 只會保留原本的 bf16。
 4. **實測**：先 CPU（取得錯誤率基準），再 GPU 與 PyTorch；同一裝置由小到大（int4 → int8 → fp16 → fp32）。每項用內附的 29 秒範例語音（`app/assets/tune-sample.ogg`）暖機一次、量兩次取較快的一次，並比對參考逐字稿算字元錯誤率。每項在獨立的子行程裡測，出錯、當掉或超過 15 分鐘只淘汰那一項。
 5. **略過**：每項開始前依序檢查，任一成立就略過並寫明原因：
    - 錯誤率：錯誤率主要由權重格式決定。在 CPU 上超過 15%，或比最準的設定高出超過 1 個百分點的格式，不再拿到其他裝置測。
    - 裝置故障：某裝置第一個實測的項目就當掉或逾時，該裝置其餘格式不再測，壞掉的裝置最多只耗一次逾時。
    - 記憶體（OpenVINO 只檢查 fp16、fp32）：預估 = 參數量 × 權重格式的大小 ＋ 已實測項目中最小的「私有記憶體 − 權重大小」。權重以格式本身的大小計算，不以裝置的運算精度計算（實測 CPU 跑 fp16 比整份展開成 fp32 省記憶體）。上限是當下的系統可用記憶體；內顯再以裝置回報的 GPU 記憶體為上限，獨顯直接用 GPU 記憶體。int8、int4 一律實測、不檢查：它們是最小的格式，也是錯誤率的比較基準，不能因為記憶體暫時吃緊而讓整輪調校沒有結果。
-   - 顯示記憶體（PyTorch）：預估 = 參數量 × 2 bytes（fp16）＋ 執行開銷。執行開銷平常算 1 GB；有任何本機模型開啟[句子分段](#句子分段)時算 1.25 GB，因為逐字時間戳記要改用 eager attention。推論行程設定 `PYTORCH_ALLOC_CONF=expandable_segments:True`，長錄音不會因為 PyTorch 快取的碎片多佔顯示記憶體；要自訂配置器時設 `PYTORCH_CUDA_ALLOC_CONF`，它優先於 `PYTORCH_ALLOC_CONF`。上限是那張卡當下的剩餘顯示記憶體，在另一個短暫的子行程裡讀，推論子行程不會因此在 GPU 上留下 CUDA context。預估超過剩餘量就略過、不載入權重，改用其他裝置。實測數字見[效能實測](benchmarks.md#rtx-5060-ti16-gbcuda)。
+   - 顯示記憶體（PyTorch）：預估 = 參數量 × 2 bytes（fp16）＋ 執行開銷。執行開銷平常算 1 GB；有任何本機模型開啟[句子分段](#句子分段)時算 1.25 GB，因為逐字時間戳記要改用 eager attention。推論行程設定 `PYTORCH_ALLOC_CONF=expandable_segments:True`，長錄音不會因為 PyTorch 快取的碎片多佔顯示記憶體；要自訂配置器時設 `PYTORCH_CUDA_ALLOC_CONF`，它優先於 `PYTORCH_ALLOC_CONF`。上限是那張卡當下的剩餘顯示記憶體，在另一個短暫的子行程裡讀，推論子行程不會因此在 GPU 上留下 CUDA context。預估超過剩餘量就略過、不載入權重，改用其他裝置。實測數字見[效能實測](benchmarks.md#顯示記憶體與-cuda-優化)。
 6. **轉換**：只轉換真的要實測的格式。OpenVINO 從 PyTorch 以原始精度匯出一次（最花時間、最吃記憶體的一步），其他格式再從它壓縮權重，壓縮設定與 `optimum-cli --weight-format` 的預設相同；已經轉好的格式直接沿用。
 7. **選擇**：依上圖的規則選定設定；速度相差 5% 以內時比的是執行時的記憶體（實例見[效能實測](benchmarks.md#core-ultra-7-155u32-gb)）。
 8. **常駐模型數**：依量到的單一模型私有記憶體與目前可用記憶體（最多用一半；PyTorch 為可用顯示記憶體的 80%）決定同時常駐幾個模型。顯示記憶體同樣在短暫的子行程裡讀，所以在「硬體」改用 PyTorch 的設定時，網頁行程也不會載入 PyTorch 或佔用顯示記憶體。
@@ -118,7 +118,7 @@ flowchart TD
 
 | 裝置 | 處理方式 |
 | --- | --- |
-| Intel／AMD CPU | 測 OpenVINO 各格式；CPU 上 OpenVINO 比 PyTorch 快，PyTorch CPU 不測 |
+| Intel／AMD CPU | 測 OpenVINO 各格式；CPU 上 OpenVINO 比 PyTorch 快（[實測](benchmarks.md#ryzen-9-9950x3d-128-gb--rtx-5090-32-gb--rtx-5060-ti-16-gb)），PyTorch CPU 不測 |
 | Intel 內顯／獨顯 | 測 OpenVINO int4、int8、fp16 中在 CPU 上錯誤率合格的格式 |
 | Intel NPU | 不支援，在「硬體」列為未測試，原因見[不支援或未實測的硬體](deployment.md#不支援或未實測的硬體) |
 | NVIDIA GPU | 測 PyTorch fp16；沒裝 CUDA 版 PyTorch 時列為未測試並說明原因（安裝見[部署](deployment.md#gpu-支援)）。已是 CUDA 版卻看不到卡時，提示檢查 `CUDA_VISIBLE_DEVICES` 是否把它排除、驅動是否太舊，不會叫你重裝 |

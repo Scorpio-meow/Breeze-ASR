@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- `docs/benchmarks.md` 補上 Ryzen 9 9950X3D 的 CPU 實測：執行緒數幾乎不影響速度，PyTorch CPU 比 OpenVINO int8 慢 2.3–4.7 倍。
+- `docs/benchmarks.md` 補上 Breeze ASR 26 在台語錄音上的量化對照：OpenVINO int8、fp16 和原始 fp32 權重的輸出只差 1.9%、0.9%。
+- `docs/benchmarks.md` 補上 RTX 5090 的 CUDA 實測：Breeze ASR 25 速度 0.021，比 RTX 5060 Ti 快約 1.7 倍；卡空著時自動調校選它。
+
 ## [0.3.0] - 2026-11-06
 
 ### Added

@@ -4,7 +4,7 @@
 
 速度是處理秒數除以音訊秒數，越小越快。除非另外註明，都是 Breeze ASR 25、內附的 29 秒範例語音（`app/assets/tune-sample.ogg`）、greedy 解碼，在 Intel Core Ultra 7 155U（32 GB）接電源時測。
 
-**本頁**：[辨識速度與自動調校](#辨識速度與自動調校) · [句子分段](#句子分段) · [分辨說話者](#分辨說話者) · [熱詞](#熱詞)
+**本頁**：[辨識速度與自動調校](#辨識速度與自動調校) · [顯示記憶體與 CUDA 優化](#顯示記憶體與-cuda-優化) · [句子分段](#句子分段) · [分辨說話者](#分辨說話者) · [熱詞](#熱詞)
 
 ## 辨識速度與自動調校
 
@@ -14,12 +14,12 @@
 | --- | --- | --- | --- | --- |
 | Core Ultra 7 155U、32 GB | 內顯・int8 | 0.38 | 2.8 GB | 約 7 分鐘（int8 已轉好） |
 | Core i7-9700、UHD 630、8 GB | CPU・int8 | 0.63–0.84 | 2.4 GB | 約 7 分鐘（int8 已轉好） |
-| Ryzen 9 9950X3D、RTX 5060 Ti 16 GB | PyTorch CUDA・fp16 | 0.035 | 顯示記憶體 3.6 GB | 約 1.5–2 分鐘（含轉換） |
-| 同一台，顯示記憶體不足時 | CPU・int8 | 0.14 | 3.7 GB | — |
+| Ryzen 9 9950X3D 128 GB + RTX 5090 32 GB + RTX 5060 Ti 16 GB | RTX 5090・PyTorch fp16 | 0.021 | 顯示記憶體 3.8 GB | 約 1.5–2 分鐘（含轉換） |
 
 - 每項暖機一次再量兩次、取較快的一次；選擇的規則見[自動調校](how-it-works.md#自動調校)。
-- fp32 一律不測：原始權重是 bf16，Intel 內顯也以 FP16 運算。
+- fp32 一律不測：原始權重是 bf16；Intel 內顯以 FP16 運算，Ryzen 9 9950X3D 的 CPU 以 BF16 運算。
 - int4 在三台機器的 CER 都是 2.8%，比最準的設定高 1.1 個百分點而被淘汰。
+- 調校只用 Breeze ASR 25 實測，選出的格式也套用到 Breeze ASR 26。在台語錄音上（[教育部例句](https://huggingface.co/datasets/sarahwei/Taiwanese-Minnan-Example-Sentences) 32 句串接 157.7 秒），OpenVINO int8、fp16 和 Breeze ASR 26 原始的 fp32 權重（PyTorch CPU）相比，輸出只差 1.9%、0.9%，差的多是同義詞；對照華語翻譯的 CER 都約 41%（翻譯用字本來就有差異，所以偏高）。
 - 每段都以 30 秒視窗計算，幾秒鐘的短句也要約 9 秒（內顯）。
 - Breeze ASR 26 幾乎不輸出時間戳記、解碼的 token 較少，同一段錄音約比 25 快一倍（Docker、CPU：0.6 對 1.1–1.2）。
 
@@ -51,33 +51,41 @@
 - 轉換：以原始精度匯出約 2 分鐘，再壓縮成 int4 約 1 分鐘、int8 約 1.5 分鐘、fp16 約 3 分鐘。
 - 在「硬體」改用其他實測過的設定，到模型就緒約 15–20 秒（內顯已有編譯快取）。
 
-### RTX 5060 Ti（16 GB，CUDA）
+### Ryzen 9 9950X3D 128 GB + RTX 5090 32 GB + RTX 5060 Ti 16 GB
 
-2026-11-06，Linux：AMD Ryzen 9 9950X3D（以 8 核 16 執行緒測）、121 GB 記憶體、RTX 5060 Ti 16 GB（驅動 595.84）、PyTorch 2.14.1+cu130、transformers 5.5.4。
+2026-11-06，Linux：AMD Ryzen 9 9950X3D（16 核 32 執行緒）、驅動 595.84、PyTorch 2.14.1+cu130、transformers 5.5.4。每張卡分開實測，依調校規則選最快的 RTX 5090：
 
 | 組合 | 速度 | CER | 記憶體 | 結果 |
 | --- | --- | --- | --- | --- |
-| CPU・int4 | 0.12 | 2.8% | 2.3 GB | 淘汰 |
-| CPU・int8 | 0.148 | 1.7% | 3.7 GB | 可用 |
-| CPU・fp16 | 0.225 | 1.7% | 6.7 GB | 可用 |
-| PyTorch CUDA・fp16 | 0.035 | 1.7% | 顯示記憶體 3.6 GB | 選中，比 CPU・int8 快約 4 倍；空卡時同時常駐 2 個模型 |
+| CPU・int4 | 0.110 | 2.8% | 2.2 GB | 淘汰 |
+| CPU・int8 | 0.142 | 1.7% | 3.5 GB | 可用；顯示卡都放不下時選它 |
+| CPU・fp16 | 0.215 | 1.7% | 6.3 GB | 可用 |
+| PyTorch CPU・bf16 | 0.323 | 1.7% | — | 調校不測：比 CPU・int8 慢 2.3 倍 |
+| PyTorch CPU・fp32 | 0.672 | 1.7% | — | 調校不測：比 CPU・int8 慢 4.7 倍 |
+| RTX 5090・PyTorch fp16 | 0.021 | 1.7% | 顯示記憶體 3.8 GB | 選中；空卡時同時常駐 2 個模型 |
+| RTX 5060 Ti・PyTorch fp16 | 0.035 | 1.7% | 顯示記憶體 3.6 GB | 可用；只有這張卡時選它 |
 
+- RTX 5090 比 RTX 5060 Ti 快約 1.7 倍、比 CPU・int8 快約 7 倍；19.4 分鐘的錄音是 0.0205，1 小時約 74 秒。兩張卡的差距比規格差距小，因為解碼一次產生一個 token，瓶頸在每一步的延遲，大卡的運算量用不滿。
+- CPU 執行緒數幾乎不影響速度，原因同上：int4、int8、fp16 在 8 核 16 執行緒、16 核 16 執行緒、16 核 32 執行緒之間差距都在 3% 以內（int8 是 0.138–0.140），8 核放在有 3D V-Cache 的 CCD 或另一個 CCD 也一樣，所以用 `compose.cpuset.yaml` 限定 8 核也不會變慢。
 - NVIDIA 卡不交給 OpenVINO：它透過 NVIDIA 的 OpenCL 跑 int8 比 CPU 慢 2.6 倍，fp16 無法執行。
-- 顯示記憶體不足時：剩餘量低於預估就略過 PyTorch、改選 CPU・int8，調校期間沒有佔用顯示記憶體。
+- 顯示記憶體不足時，剩餘量低於預估就略過 PyTorch、改選 CPU・int8，調校期間沒有佔用顯示記憶體；RTX 5090 被佔滿（剩 0.0 GB）時實測也是如此。
 - 轉換：以原始精度匯出約 18 秒，壓縮成 int4、int8 各約 12 秒、fp16 約 6 秒。
 
-顯示記憶體（fp16，權重 2.9 GB，`PYTORCH_ALLOC_CONF=expandable_segments:True`）：
+## 顯示記憶體與 CUDA 優化
 
-| 情況 | `max_memory_allocated` | `max_memory_reserved`（設定檔記的值） | `nvidia-smi` | 調校預估 |
-| --- | --- | --- | --- | --- |
-| 一般辨識（58 秒–19.4 分鐘） | 3.2 GB | 3.2 GB | 3.3–3.4 GB | 3.9 GB |
-| Breeze ASR 26 句子分段（58 秒–19.4 分鐘） | 3.5 GB | 3.5–3.6 GB | 3.7 GB | 4.1 GB |
+PyTorch fp16，權重 2.9 GB，推論行程設定 `PYTORCH_ALLOC_CONF=expandable_segments:True`：
+
+| 卡 | 情況 | `max_memory_allocated` | `max_memory_reserved`（設定檔記的值） | `nvidia-smi` | 調校預估 |
+| --- | --- | --- | --- | --- | --- |
+| RTX 5060 Ti | 一般辨識（58 秒–19.4 分鐘） | 3.2 GB | 3.2 GB | 3.3–3.4 GB | 3.9 GB |
+| RTX 5060 Ti | Breeze ASR 26 句子分段（58 秒–19.4 分鐘） | 3.5 GB | 3.5–3.6 GB | 3.7 GB | 4.1 GB |
+| RTX 5090 | 一般辨識（29 秒–19.4 分鐘） | 3.2 GB | 3.2 GB | 3.8 GB | 3.9 GB |
 
 - 句子分段只保留 DTW 要用的 23 個 cross-attention head；transformers 預設會留下全部 attention，每個 30 秒視窗光 encoder 就 2.7 GB，還會搬到系統記憶體保留到辨識完。
-- 推論行程設定 `expandable_segments`，速度與輸出都不變；不設的話 PyTorch 快取的碎片會隨錄音變長累積，19.4 分鐘句子分段的 `nvidia-smi` 是 4.6 GB。
+- 不設 `expandable_segments` 的話，PyTorch 快取的碎片會隨錄音變長累積，19.4 分鐘句子分段的 `nvidia-smi` 是 4.6 GB；設了之後速度與輸出都不變。
 - 調校只用 Breeze ASR 25 實測，所以預估以本機模型中最吃顯示記憶體的情況計算。
 
-優化方向（每項 CER 都是 1.7%）：
+優化方向（RTX 5060 Ti，每項 CER 都是 1.7%）：
 
 | 做法 | 速度 | 顯示記憶體 | 結論 |
 | --- | --- | --- | --- |
@@ -92,7 +100,7 @@
 | CTranslate2 fp16 | 0.046 | 4.0 GB | 不做：慢 33% |
 | CTranslate2 int8_float16 | 0.036 | 2.2 GB | 目前不做，見下方 |
 
-長音訊（範例語音重複 10 次，291 秒）：
+長音訊（RTX 5060 Ti，範例語音重複 10 次，291 秒）：
 
 | 做法 | 速度 | CER | 顯示記憶體 |
 | --- | --- | --- | --- |
@@ -123,7 +131,7 @@ Breeze ASR 26，內顯、int8。「句子邊界」是每句實際開口與收尾
 | CPU | 0.62 → 0.75 | 0.46 → 0.58 |
 
 - PyTorch（CPU fp32、CUDA fp16）在 58 秒串接的範例語音上，輸出文字和 OpenVINO 逐字相同，切成 23 段（OpenVINO 24 段）、最長 6.4 秒。段落開始時間比 OpenVINO 早約 0.2–0.8 秒，因為中文片語的時間是平均分給每個字的。
-- CUDA 速度 0.042，19.4 分鐘的錄音 0.036；顯示記憶體見 [RTX 5060 Ti](#rtx-5060-ti16-gbcuda)。ROCm 尚未實機實測。
+- CUDA 速度：RTX 5060 Ti 0.042（19.4 分鐘的錄音 0.036），RTX 5090 0.028；顯示記憶體見[顯示記憶體與 CUDA 優化](#顯示記憶體與-cuda-優化)。ROCm 尚未實機實測。
 
 ## 分辨說話者
 
