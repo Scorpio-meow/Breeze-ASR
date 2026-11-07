@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-11-08
+
+### Changed
+
+- `docs/benchmarks.md` 的 Core i7-9700 換成 0.3.2 的實測：CPU・int8 速度 0.66，記憶體不足時兩種 fp16 仍被實測，整輪調校約 35 分鐘。
+
+### Fixed
+
+- 自動調校低估 fp16 的記憶體：以 FP32 運算的 CPU 跑 fp16，實際約 4.8 GB，卻只估約 3.6 GB；量測時正在換頁的結果還會把權重以外的開銷算成 0，連帶低估之後的內顯・fp16。8 GB、只剩 1.8 GB 可用的電腦因此兩種 fp16 都在換頁中實測，整輪調校從約 7 分鐘拉長到約 35 分鐘。現在浮點權重依權重格式與裝置運算精度中較寬的一方估（CPU 的 fp16 約 6.5 GB），量到的記憶體比權重還小時不拿來預估其他格式。
+
 ## [0.3.2] - 2026-11-08
 
 ### Added
@@ -211,7 +221,8 @@
 - 在不能錄音的網址按「錄音」，狀態列說明原因與瀏覽器的設定方式。
 - 所有回應加上 `Cache-Control: no-cache`，更新版本後瀏覽器不會繼續使用舊的前端程式。
 
-[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.7...v0.3.0

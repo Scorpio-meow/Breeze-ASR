@@ -244,13 +244,20 @@ def _weight_bytes(config: EngineConfig, parameters: int) -> int:
     return parameters * _FORMAT_TYPES[config.weight_format].bitwidth // 8
 
 
-def _memory_need(config: EngineConfig, parameters: int, overheads: list[int], word_timestamps: bool) -> int:
+def _resident_weight_bytes(config: EngineConfig, parameters: int, devices: dict) -> int:
+    compute = _compute_precision(devices[config.device]["precisions"])[1]
+    return parameters * max(_FORMAT_TYPES[config.weight_format].bitwidth, compute.bitwidth) // 8
+
+
+def _memory_need(
+    config: EngineConfig, parameters: int, devices: dict, overheads: list[int], word_timestamps: bool
+) -> int:
     if config.engine == "torch":
         runtime = _TORCH_WORD_TIMESTAMP_RUNTIME_BYTES if word_timestamps else _TORCH_RUNTIME_BYTES
         return parameters * _TORCH_DTYPE_BYTES[config.torch_dtype] + runtime
     if not _FORMAT_TYPES[config.weight_format].is_real():
         return 0
-    return _weight_bytes(config, parameters) + (min(overheads) if overheads else 0)
+    return _resident_weight_bytes(config, parameters, devices) + (min(overheads) if overheads else 0)
 
 
 def _memory_limit(info: dict, available: int) -> int:
@@ -472,7 +479,7 @@ def run_tuning(settings: Settings, catalog: Catalog, report: Reporter) -> Hardwa
             _grade(results)
             inaccurate = {r["weight_format"] for r in results if r["status"] == "rejected"}
             graded = True
-        need = _memory_need(config, parameters, overheads, word_timestamps)
+        need = _memory_need(config, parameters, devices, overheads, word_timestamps)
         try:
             reason = _blocker(config, inaccurate, failed, need, _available(config, devices) if need else 0)
         except GpuQueryError as exc:
@@ -492,9 +499,17 @@ def run_tuning(settings: Settings, catalog: Catalog, report: Reporter) -> Hardwa
             if record["status"] == "failed":
                 failed[config.device] = config.weight_format
         if config.engine == "openvino" and record["status"] == "measured":
-            overhead = max(0, record["memory_bytes"] - _weight_bytes(config, parameters))
-            overheads.append(overhead)
-            log.info("推論時權重以外的記憶體開銷約 %.1f GB", gb(overhead))
+            weights = _weight_bytes(config, parameters)
+            if record["memory_bytes"] < weights:
+                log.warning(
+                    "實測 %s 量到的記憶體 %.1f GB 比權重 %.1f GB 還小，可能正在換頁，不拿來預估其他格式",
+                    candidate.label,
+                    gb(record["memory_bytes"]),
+                    gb(weights),
+                )
+            else:
+                overheads.append(record["memory_bytes"] - weights)
+                log.info("推論時權重以外的記憶體開銷約 %.1f GB", gb(overheads[-1]))
     _grade(results)
 
     usable = [r for r in results if r["status"] == "ok"]

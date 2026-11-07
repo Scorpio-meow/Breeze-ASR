@@ -188,18 +188,22 @@ def test_weights_are_sized_at_their_own_format_on_every_device():
 
 
 def test_only_float_formats_are_held_back_by_memory():
-    assert _memory_need(_config("CPU", "int4"), 1000, [300], False) == 0
-    assert _memory_need(_config("GPU", "int8"), 1000, [300], False) == 0
-    assert _memory_need(_config("CPU", "fp16"), 1000, [700, 300], True) == 2300
-    assert _memory_need(_config("GPU", "fp16"), 1000, [], False) == 2000
+    assert _memory_need(_config("CPU", "int4"), 1000, DEVICES, [300], False) == 0
+    assert _memory_need(_config("GPU", "int8"), 1000, DEVICES, [300], False) == 0
+    assert _memory_need(_config("GPU", "fp16"), 1000, DEVICES, [], False) == 2000
+
+
+def test_float_weights_are_estimated_at_the_wider_of_format_and_compute_precision():
+    assert _memory_need(_config("CPU", "fp16"), 1000, DEVICES, [700, 300], True) == 4300
+    assert _memory_need(_config("GPU", "fp16"), 1000, DEVICES, [700, 300], False) == 2300
 
 
 def test_pytorch_memory_need_counts_weights_at_its_dtype_and_runtime():
     fp16 = EngineConfig("torch", "cuda:0", None, "float16", 1, 1)
     fp32 = EngineConfig("torch", "cuda:0", None, "float32", 1, 1)
-    assert _memory_need(fp16, 1000, [300], False) == 2000 + _TORCH_RUNTIME_BYTES
-    assert _memory_need(fp32, 1000, [], False) == 4000 + _TORCH_RUNTIME_BYTES
-    assert _memory_need(fp16, 1000, [], True) == 2000 + _TORCH_WORD_TIMESTAMP_RUNTIME_BYTES
+    assert _memory_need(fp16, 1000, DEVICES, [300], False) == 2000 + _TORCH_RUNTIME_BYTES
+    assert _memory_need(fp32, 1000, DEVICES, [], False) == 4000 + _TORCH_RUNTIME_BYTES
+    assert _memory_need(fp16, 1000, DEVICES, [], True) == 2000 + _TORCH_WORD_TIMESTAMP_RUNTIME_BYTES
 
 
 def test_memory_limit_uses_device_memory_where_reported():
@@ -309,3 +313,59 @@ def test_unreadable_gpu_memory_skips_the_gpu(monkeypatch, tmp_path):
     profile, measured, reason = _tune(monkeypatch, tmp_path, broken)
     assert "torch" not in measured
     assert reason == "無法讀取 cuda:0 的剩餘顯示記憶體：CUDA error"
+
+
+def _tune_openvino(monkeypatch, tmp_path, available, gpu_memory, memory_of):
+    hardware = _hardware(openvino_devices={"CPU": DEVICES["CPU"], "GPU": DEVICES["GPU"] | {"memory_bytes": gpu_memory}})
+    measured = []
+
+    def measure(candidate, directory, spec, settings, sample):
+        config = candidate.config
+        measured.append((config.device, config.weight_format))
+        return {
+            "label": candidate.label,
+            "engine": config.engine,
+            "device": config.device,
+            "weight_format": config.weight_format,
+            "torch_dtype": None,
+            "torch_num_beams": None,
+            "status": "measured",
+            "transcribe_seconds": 3.0,
+            "memory_bytes": memory_of[(config.device, config.weight_format)],
+            "rtf": 0.1,
+            "cer": 0.02,
+        }
+
+    monkeypatch.setattr(tune, "detect_hardware", lambda: hardware)
+    monkeypatch.setattr(tune.preparation, "download", lambda spec: tmp_path)
+    monkeypatch.setattr(tune.preparation, "source_info", lambda snapshot: ({"BF16"}, GB))
+    monkeypatch.setattr(tune.preparation, "is_prepared", lambda target: True)
+    monkeypatch.setattr(tune.psutil, "virtual_memory", lambda: SimpleNamespace(available=available))
+    monkeypatch.setattr(tune, "_measure", measure)
+    monkeypatch.setattr(tune, "_remove_unused", lambda settings, spec, config: None)
+    catalog = SimpleNamespace(models=[SPEC], default_model=SPEC.id, get=lambda model_id: SPEC)
+    profile = tune.run_tuning(SimpleNamespace(openvino_dir=tmp_path), catalog, lambda progress: None)
+    return measured, {item["label"]: item["reason"] for item in profile.tuning["skipped"]}
+
+
+MEASURED_MEMORY = {
+    ("CPU", "int4"): GB,
+    ("CPU", "int8"): 3 * GB // 2,
+    ("CPU", "fp16"): 3 * GB // 2,
+    ("GPU", "int4"): GB,
+    ("GPU", "int8"): 3 * GB // 2,
+    ("GPU", "fp16"): 3 * GB,
+}
+
+
+def test_fp16_on_a_cpu_that_computes_in_fp32_is_skipped_when_fp32_sized_weights_do_not_fit(monkeypatch, tmp_path):
+    measured, reasons = _tune_openvino(monkeypatch, tmp_path, 4 * GB, 8 * GB, MEASURED_MEMORY)
+    assert ("CPU", "fp16") not in measured
+    assert reasons["Test CPU（OpenVINO CPU・fp16）"] == "預估執行時需要 4.5 GB 記憶體，超過目前可用的 4.0 GB"
+
+
+def test_a_measurement_smaller_than_its_weights_does_not_lower_later_estimates(monkeypatch, tmp_path):
+    measured, reasons = _tune_openvino(monkeypatch, tmp_path, 6 * GB, 11 * GB // 5, MEASURED_MEMORY)
+    assert ("CPU", "fp16") in measured
+    assert ("GPU", "fp16") not in measured
+    assert reasons["Test iGPU（OpenVINO GPU・fp16）"] == "預估執行時需要 2.5 GB 記憶體，超過目前可用的 2.2 GB"
