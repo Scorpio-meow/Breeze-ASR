@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- `docs/benchmarks.md` 新增 Core i5-12500H 筆電（Iris Xe 內顯、40 GB）的實測：自動調校選內顯・int8，速度 0.34，CPU・int8 是 0.42。
+
 ## [0.3.1] - 2026-11-06
 
 ### Added
