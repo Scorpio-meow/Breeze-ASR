@@ -79,6 +79,8 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 - 204：設定 `breeze_asr_session` cookie，`HttpOnly`、`SameSite=Strict`、保留 400 天，網頁以 HTTPS 開啟時再加上 `Secure`；值由權杖導出，不是權杖本身。
 - 401：權杖不正確
 - 404：服務沒有設定存取權杖（`ASR_ACCESS_TOKEN=off`）
+- 411：請求缺少 `Content-Length`
+- 413：請求超過 4 KB；這個端點不需要權杖，所以還沒讀內容就拒絕
 - 429：一分鐘內錯了 10 次，這一分鐘內的登入一律拒絕，連正確的權杖也一樣
 
 ## POST /api/client-errors
@@ -87,7 +89,7 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 
 **請求：** JSON `{"kind": "error", "message": "x is not defined", "source": "app.js:10:5"}`，三個欄位都必填。換行會併成一行，每欄只記前 1000 個字。
 
-**回應：** 204
+**回應：** 204；整個服務一分鐘超過 30 則時回 429（沒有內容），這則不會記錄。
 
 ## GET /api/config
 
@@ -293,6 +295,7 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 - 202：燒錄狀態 `{"id", "job_id", "status", "progress", "error", "filename", "created_at", "finished_at"}`
 - 404：找不到工作
 - 409：工作還沒有辨識結果
+- 411：請求缺少 `Content-Length`
 - 413：檔案超過 `ASR_MAX_UPLOAD_MB`
 - 422：檔案沒有影像、讀不到長度，或長度不符
 - 503：排隊的燒錄工作已達 `ASR_MAX_QUEUE`
@@ -316,8 +319,10 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 
 **回應：**
 - 200：MP4 檔（附件），檔名是「原檔名-字幕.mp4」
+- 206：帶 `Range` 標頭（例如 `bytes=0-1048575`）時只回傳那一段，播放器可以直接拖曳
 - 404：找不到或已過期
 - 409：還沒完成
+- 416：`Range` 超出檔案大小
 
 ## GET /api/voices
 

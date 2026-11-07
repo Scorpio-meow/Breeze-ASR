@@ -4,10 +4,20 @@
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-08
+
 ### Added
 
 - `docs/benchmarks.md` 新增 Core i5-12500H 筆電（Iris Xe 內顯、40 GB）的實測：自動調校選內顯・int8，速度 0.34，CPU・int8 是 0.42。
 - `PRIVACY.md` 隱私權政策：資料存在哪裡、保留多久、瀏覽器存了什麼、什麼情況會連到外面、怎麼關閉用量回報與刪除資料。`SECURITY.md` 原本的資料一節移到這裡。
+
+### Fixed
+
+- Breeze ASR 26 加熱詞一律回 500：網頁的熱詞計數與送出辨識、命令列工具、MCP 的 `transcribe` 都會遇到，監看資料夾設成 26、詞彙表又有熱詞時，每次檢查都失敗。原因是它的 Hugging Face repo 沒有 `tokenizer.json`；現在改用兩個模型都有的 `vocab.json` 與 `merges.txt` 計算 token 數，結果和原本相同。
+- 服務自己產生的 `/api/openapi.json` 版本寫成 `0.1.0`，現在和專案版本相同。
+- MCP 的 `job_id` 只接受工作編號用的字元（英文字母、數字、`_`、`-`），傳入像路徑的值時直接說明是哪個參數不合格，不會只回「Error executing tool」。
+- 命令列工具與 MCP server 找不到服務網址時，訊息改成說明要設定 `ASR_HOST`、`ASR_PORT`；原本叫 MCP 的使用者改用它沒有的 `--url`。
+- API 文件：`POST /api/session` 的 411、413 沒寫；`docs/api.md` 另外漏了燒錄上傳的 411、瀏覽器錯誤回報的 429，以及下載影片的 `Range`（206、416）。
 
 ## [0.3.1] - 2026-11-06
 
@@ -201,7 +211,8 @@
 - 在不能錄音的網址按「錄音」，狀態列說明原因與瀏覽器的設定方式。
 - 所有回應加上 `Cache-Control: no-cache`，更新版本後瀏覽器不會繼續使用舊的前端程式。
 
-[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.7...v0.3.0
 [0.2.7]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.6...v0.2.7

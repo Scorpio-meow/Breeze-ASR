@@ -3,7 +3,7 @@ $self: https://raw.githubusercontent.com/Scorpio-meow/Breeze-ASR/main/docs/opena
 info:
   title: Breeze ASR
   summary: 本機語音辨識服務的 HTTP API：上傳錄音、取得逐字稿、編輯字幕、匯出檔案與燒錄字幕。
-  version: 0.3.1
+  version: 0.3.2
   license:
     name: MIT
     identifier: MIT
@@ -51,6 +51,7 @@ info:
     ## 上傳上限
 
     - `POST /api/jobs` 與 `POST /api/jobs/{job_id}/renders` 必須帶 `Content-Length`，沒有就回 411。
+    - 不需要權杖的 `POST /api/session` 也必須帶 `Content-Length`，超過 4 KB 時還沒讀內容就回 413。
     - `Content-Length` 超過 `ASR_MAX_UPLOAD_MB` 再加 64 KiB（multipart 的欄位與分隔線）時，還沒讀檔就回 413；檔案本身超過 `ASR_MAX_UPLOAD_MB` 也回 413。
     - 音訊長度超過 `ASR_MAX_AUDIO_SECONDS` 回 422；排隊中的工作達到 `ASR_MAX_QUEUE` 回 503。
 
@@ -161,6 +162,8 @@ paths:
         只在 `.env` 設定了 `ASR_ACCESS_TOKEN` 時使用。權杖正確就設定 `breeze_asr_session` cookie，之後同一個瀏覽器的請求不必再帶權杖。cookie 是 `HttpOnly`、`SameSite=Strict`、保留 400 天，網頁以 HTTPS 開啟時再加上 `Secure`；值由權杖導出，不是權杖本身，改掉權杖後所有瀏覽器都要重新登入。
 
         權杖前後的空白與換行會先去掉。一分鐘內錯了 10 次之後，這一分鐘內的登入一律回 429，連正確的權杖也一樣。
+
+        這個端點不需要權杖，所以請求必須帶 `Content-Length`（缺少回 411），超過 4 KB 時還沒讀內容就回 413，不會把整個請求讀進記憶體。
       security: []
       requestBody:
         required: true
@@ -203,6 +206,18 @@ paths:
                 off:
                   dataValue:
                     detail: 這個服務沒有設定存取權杖
+        "411":
+          $ref: "#/components/responses/LengthRequired"
+        "413":
+          summary: 登入資料超過 4 KB
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                tooLarge:
+                  dataValue:
+                    detail: 登入資料太大
         "422":
           $ref: "#/components/responses/ValidationFailed"
         "429":
@@ -1517,6 +1532,7 @@ components:
       description: 工作編號，`POST /api/jobs` 回傳的 `id`（16 個字元，URL-safe Base64）。
       schema:
         type: string
+        pattern: "^[A-Za-z0-9_-]+$"
       example: Hn4cV7pLs0aR1uYb
     RenderId:
       name: render_id

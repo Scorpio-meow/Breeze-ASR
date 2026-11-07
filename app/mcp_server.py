@@ -7,7 +7,6 @@ import json
 import logging
 import sys
 import time
-import tomllib
 from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -42,12 +41,12 @@ from .client import (
     service_url,
 )
 from .exports import FORMATS
-from .logsetup import setup_logging
+from .logsetup import project, setup_logging
 
 log = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parent.parent
-_PROJECT = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+_PROJECT = project()
 _ICON = Icon(
     src="data:image/svg+xml;base64," + base64.b64encode((ROOT / "static" / "icon.svg").read_bytes()).decode(),
     mime_type="image/svg+xml",
@@ -67,6 +66,7 @@ _TRANSCRIPT_URI = "breeze-asr://jobs/{job_id}/transcript.{fmt}"
 _MAX_COMPLETIONS = 100
 SPEAKERS_PATTERN = r"^(off|auto|[1-9][0-9]*)$"
 SPEAKER_ID_PATTERN = r"^S[1-9][0-9]{0,3}$"
+JOB_ID_PATTERN = r"^[A-Za-z0-9_-]+$"
 
 _READ = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
 _SUBMIT = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False)
@@ -75,7 +75,7 @@ _CHANGE = ToolAnnotations(read_only_hint=False, destructive_hint=True, idempoten
 TextFormat = Literal[*_TEXT_FORMATS]
 JobStatus = Literal["queued", "running", "succeeded", "failed", "cancelled"]
 ModelState = Literal["waiting", "downloading", "converting", "prepared", "loading", "ready", "failed"]
-JobId = Annotated[str, Field(description="transcribe 或 list_jobs 回傳的 job_id")]
+JobId = Annotated[str, Field(pattern=JOB_ID_PATTERN, description="transcribe 或 list_jobs 回傳的 job_id")]
 
 server = MCPServer(
     name="breeze-asr",

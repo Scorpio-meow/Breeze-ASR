@@ -28,12 +28,15 @@ class HotwordsCounter:
 
     def _load(self, spec: ModelSpec) -> tuple[object, int]:
         from huggingface_hub import hf_hub_download
-        from tokenizers import Tokenizer
+        from tokenizers import Tokenizer, models, pre_tokenizers
 
         with self._lock:
             if spec.id not in self._loaded:
                 revision = spec.local.revision
-                tokenizer = Tokenizer.from_file(hf_hub_download(spec.id, "tokenizer.json", revision=revision))
+                vocab = hf_hub_download(spec.id, "vocab.json", revision=revision)
+                merges = hf_hub_download(spec.id, "merges.txt", revision=revision)
+                tokenizer = Tokenizer(models.BPE.from_file(vocab, merges))
+                tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
                 config = json.loads(Path(hf_hub_download(spec.id, "config.json", revision=revision)).read_text("utf-8"))
                 self._loaded[spec.id] = (tokenizer, config["max_target_positions"] // 2 - 1)
                 log.info("讀取 %s 的 tokenizer：熱詞上限 %d token", spec.id, self._loaded[spec.id][1])

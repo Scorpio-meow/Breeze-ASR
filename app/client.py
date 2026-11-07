@@ -28,7 +28,10 @@ def service_url(explicit: str | None) -> str:
         return explicit.rstrip("/")
     host, port = os.environ.get("ASR_HOST"), os.environ.get("ASR_PORT")
     if not host or not port:
-        raise ServiceError("不知道服務的網址：請用 --url 指定，或在專案資料夾用 uv run --env-file .env 執行")
+        raise ServiceError(
+            "不知道服務的網址：請設定環境變數 ASR_HOST 與 ASR_PORT（在專案資料夾用 uv run --env-file .env 執行就會讀入）；"
+            "命令列工具也可以用 --url 指定"
+        )
     host = LOCAL_ALIASES.get(host, host)
     return f"http://[{host}]:{port}" if ":" in host else f"http://{host}:{port}"
 

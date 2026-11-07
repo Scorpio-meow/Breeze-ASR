@@ -15,7 +15,8 @@ from app.client import NotFoundError, ServiceError
 from app.exports import FORMATS
 
 ROOT = Path(__file__).resolve().parent.parent
-SCHEMAS = yaml.safe_load((ROOT / "docs" / "openapi.yaml").read_text(encoding="utf-8"))["components"]["schemas"]
+COMPONENTS = yaml.safe_load((ROOT / "docs" / "openapi.yaml").read_text(encoding="utf-8"))["components"]
+SCHEMAS = COMPONENTS["schemas"]
 PROJECT = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
 
 CONFIG = {
@@ -226,6 +227,7 @@ def test_schemas_match_the_service():
     assert list(typing.get_args(mcp_server.ModelState)) == SCHEMAS["ModelState"]["enum"]
     assert mcp_server.SPEAKERS_PATTERN == SCHEMAS["SpeakersMode"]["pattern"]
     assert mcp_server.SPEAKER_ID_PATTERN == SCHEMAS["Speaker"]["properties"]["id"]["pattern"]
+    assert mcp_server.JOB_ID_PATTERN == COMPONENTS["parameters"]["JobId"]["schema"]["pattern"]
 
 
 def test_list_models_reports_models_and_features(service):
@@ -363,6 +365,10 @@ def test_rename_speaker_returns_the_new_name(service):
     output = _structured(_call("rename_speaker", {"job_id": "job1", "speaker_id": "S1", "name": "王小明"}))
     assert output["speakers"] == [{"id": "S1", "name": "王小明", "seconds": 30.2}]
     assert service.renamed == [("job1", "S1", "王小明")]
+
+
+def test_job_id_that_is_not_a_job_id_is_rejected_before_calling_the_service(service):
+    assert "job_id" in _error(_call("job_status", {"job_id": "job1/export/md"}))
 
 
 def test_rename_speaker_rejects_an_invalid_speaker_id(service):

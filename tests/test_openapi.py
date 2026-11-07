@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
 from app.config import Settings
@@ -23,7 +24,7 @@ def _operations() -> dict[tuple[str, str], dict]:
 
 
 @pytest.fixture(scope="module")
-def routes(tmp_path_factory) -> dict[tuple[str, str], APIRoute]:
+def app(tmp_path_factory) -> FastAPI:
     data = tmp_path_factory.mktemp("data")
     settings = Settings(
         host="127.0.0.1",
@@ -44,9 +45,14 @@ def routes(tmp_path_factory) -> dict[tuple[str, str], APIRoute]:
         log_file_count=1,
         watch=None,
     )
+    return create_app(settings)
+
+
+@pytest.fixture(scope="module")
+def routes(app) -> dict[tuple[str, str], APIRoute]:
     return {
         (method.lower(), route.path): route
-        for route in create_app(settings).routes
+        for route in app.routes
         if isinstance(route, APIRoute) and route.include_in_schema
         for method in route.methods
     }
@@ -64,9 +70,10 @@ def test_spec_documents_each_success_status(routes):
     assert missing == []
 
 
-def test_spec_version_matches_the_project():
+def test_spec_version_matches_the_project(app):
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     assert SPEC["info"]["version"] == project["version"]
+    assert app.openapi()["info"]["version"] == project["version"]
 
 
 def test_spec_lists_every_export_format():

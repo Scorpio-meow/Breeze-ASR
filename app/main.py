@@ -45,7 +45,7 @@ from .jobs import (
     SpeakerNotFound,
     TranscriptInvalid,
 )
-from .logsetup import remove_tree
+from .logsetup import project, remove_tree
 from .punctuation import PunctuationService
 from .renders import SOURCE_NAME, RenderQueue, RenderQueueFull
 from .speakers import SpeakerService, default_speaker_name
@@ -465,6 +465,7 @@ def create_app(settings: Settings) -> FastAPI:
 
     app = FastAPI(
         title="Breeze ASR",
+        version=project()["version"],
         lifespan=lifespan,
         docs_url=None,
         redoc_url=None,

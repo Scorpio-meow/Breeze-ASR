@@ -140,8 +140,12 @@ def log_stderr(logger: logging.Logger, what: str, stderr: str) -> None:
     logger.info("%s在 stderr 輸出 %s：\n%s", what, scope, "\n".join(shown))
 
 
+def project() -> dict:
+    return tomllib.loads(_PROJECT_FILE.read_text(encoding="utf-8"))["project"]
+
+
 def versions(packages: tuple[str, ...]) -> str:
-    project = tomllib.loads(_PROJECT_FILE.read_text(encoding="utf-8"))["project"]
+    info = project()
     found = []
     for name in packages:
         try:
@@ -149,6 +153,6 @@ def versions(packages: tuple[str, ...]) -> str:
         except metadata.PackageNotFoundError:
             found.append(f"{name} 未安裝")
     return (
-        f"Breeze ASR {project['version']}（Python {platform.python_version()}，{platform.platform()}）；"
+        f"Breeze ASR {info['version']}（Python {platform.python_version()}，{platform.platform()}）；"
         f"套件：{'、'.join(found)}"
     )
