@@ -17,39 +17,9 @@
 
 ## 資料
 
-```mermaid
-flowchart LR
-    subgraph local["這台電腦"]
-        direction TB
-        browser["瀏覽器"] <--> service["Breeze ASR 服務"]
-        folder["監看資料夾"] --> service
-        service <--> data[("資料目錄<br/>結果、詞彙表、語者庫、日誌")]
-    end
-    subgraph outside["這台電腦以外"]
-        direction TB
-        phone["手機、平板或其他電腦<br/>要帶存取權杖"]
-        hf["Hugging Face"]
-        remote["既有的 Breeze ASR 服務"]
-        mcp["MCP 用戶端<br/>例如 Claude"]
-    end
-    phone <-.->|只有開放其他裝置連線時| service
-    hf -->|只在第一次下載模型| service
-    service -.->|只有設成 remote 的模型| remote
-    service -.->|只有使用 MCP server 時| mcp
-```
+錄音、逐字稿與聲紋存在哪裡、保留多久、會送到哪裡，以及怎麼關閉用量回報與刪除資料，見[隱私權政策](PRIVACY.md)。
 
-圖的文字說明：瀏覽器、監看資料夾、Breeze ASR 服務與資料目錄都在這台電腦上，錄音與結果不會離開這台電腦。對外連線只有四種：開放手機、平板或其他電腦連線時，錄音與逐字稿在那台裝置與服務之間傳送；第一次啟動時從 Hugging Face 下載模型；`models.json` 設成 `remote` 的模型，會把音訊送到指定的 Breeze ASR 服務；使用 MCP server 時，逐字稿會交給 MCP 用戶端（例如 Claude），可能因此送到外部 AI 服務。
-
-- 上傳的音訊解碼後存在 `ASR_DATA_DIR`，辨識完成即刪除；結果在 `ASR_JOB_TTL_SECONDS` 到期後刪除。
-- 燒錄字幕上傳的影片燒完即刪除；燒好的影片放在 `ASR_DATA_DIR/renders`，到 `ASR_JOB_TTL_SECONDS` 或服務重新啟動時刪除。
-- 詞彙表（熱詞與取代規則）存在 `ASR_DATA_DIR/glossary.json`。
-- 語者庫的聲紋屬於個人生物特徵，只存在 `ASR_DATA_DIR/voices/`，不會送到外部服務。請依所在地的個人資料法規取得說話者同意，不需要時從「語者庫」刪除。
-- 日誌存在 `ASR_DATA_DIR/logs/`，會記上傳的檔名，不記字幕內容、熱詞內容、人名與權杖（包括送來的錯誤權杖）；瀏覽器回報的 JavaScript 錯誤訊息照原文記下。見[日誌](docs/deployment.md#日誌)。
-- 監看資料夾：服務讀取 `ASR_WATCH_DIR` 裡的錄音，在同一個資料夾寫出結果檔與 `.error.txt`，不會刪除或修改原檔。
-- 從手機、平板或其他電腦上傳與錄音時，處理方式和在這台電腦上傳相同；手機只留下瀏覽器的下載檔與登入用的 cookie。
-- 命令列工具與 MCP server 只把檔案送到 `.env` 指定的服務。
 - `.env` 含存取權杖，也可能含遠端服務的 API 金鑰，已列在 `.gitignore`，不要提交。
-- OpenVINO 與 NNCF 預設會把用量統計（套件版本、作業系統、權重壓縮參數與一組固定的識別碼，不含錄音與字幕）送到 Google Analytics。推論子行程每次啟動、載入 OpenVINO 之前，會寫入 OpenVINO 自己的設定檔把它關閉（Windows 是 `%LOCALAPPDATA%\Intel Corporation\openvino_telemetry`，Linux、macOS 是 `~/intel/openvino_telemetry`），所以這台電腦上其他 OpenVINO 工具的用量回報也會一起關閉。Hugging Face 的用量回報由 `.env` 的 `HF_HUB_DISABLE_TELEMETRY=1` 關閉。
 
 ## 已有的防護
 

@@ -12,7 +12,8 @@
 - [docs/cli.md](docs/cli.md): 命令列工具與 MCP server
 - [CHANGELOG.md](CHANGELOG.md): 更新紀錄
 - [CONTRIBUTING.md](CONTRIBUTING.md): 開發環境、提交前檢查、撰寫原則
-- [SECURITY.md](SECURITY.md): 部署範圍與存取權杖、資料存放與對外連線、已有的防護、漏洞回報
+- [SECURITY.md](SECURITY.md): 部署範圍與存取權杖、已有的防護、漏洞回報
+- [PRIVACY.md](PRIVACY.md): 隱私權政策：資料存放與保留期限、瀏覽器存的資料、對外連線、用量回報、刪除方式
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md): 行為準則與檢舉方式
 - [ACCESSIBILITY.md](ACCESSIBILITY.md): 無障礙目標、支援環境、已知限制與回報方式
 - [.github/ISSUE_TEMPLATE/](.github/ISSUE_TEMPLATE/): 問題回報、功能建議、無障礙問題的 issue 範本
