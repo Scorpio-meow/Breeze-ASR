@@ -8,13 +8,14 @@
   <meta name="google-site-verification" content="jjQRA2mVrlVkjlSTMgxrNE9bMVfG6cNSKgpwz3CQm6Y">
   <title>Breeze ASR：在自己的電腦上把錄音轉成字幕與逐字稿</title>
   <meta name="description" content="開源的本機語音辨識與字幕編輯器。用 Breeze ASR 25／26 辨識臺灣華語、中英夾雜與臺灣台語，自動加標點、分辨說話者，在波形時間軸上校對後匯出字幕檔或 Word 逐字稿。">
+  <link rel="canonical" href="./" data-absolute>
   <meta name="theme-color" content="#f3f3f0" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#101010" media="(prefers-color-scheme: dark)">
   <meta property="og:type" content="website">
   <meta property="og:title" content="Breeze ASR：在自己的電腦上把錄音轉成字幕與逐字稿">
   <meta property="og:description" content="臺灣華語、中英夾雜與臺灣台語的本機語音辨識與字幕編輯器，開源、MIT 授權。">
-  <meta property="og:url" content="https://scorpio-meow.github.io/Breeze-ASR/">
-  <meta property="og:image" content="https://scorpio-meow.github.io/Breeze-ASR/images/og.png">
+  <meta property="og:url" content="./" data-absolute>
+  <meta property="og:image" content="images/og.png" data-absolute>
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:locale" content="zh_TW">
@@ -61,7 +62,7 @@
           <button class="icon-btn" type="button" aria-expanded="false" aria-controls="sound-panel" data-sound-menu>
             <svg class="i-sound-off" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 6h2.6L7.5 3v10L4.1 10H1.5z"/><path class="ln" d="M10.5 6l4 4M14.5 6l-4 4"/></svg>
             <svg class="i-sound-on" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 6h2.6L7.5 3v10L4.1 10H1.5z"/><path class="ln" d="M10 5.6a3.4 3.4 0 0 1 0 4.8M12.1 3.5a6.4 6.4 0 0 1 0 9"/></svg>
-            <span class="sr">聲音：背景音樂與古箏弦</span>
+            <span class="sr">聲音：背景音樂與古箏弦</span><span class="sr" data-sound-pending hidden>，待播放，按下開始</span>
           </button>
           <div class="sound__panel" id="sound-panel" role="group" aria-labelledby="sound-title" hidden>
             <p class="sound__title" id="sound-title">聲音</p>
@@ -116,6 +117,7 @@
       <div class="wrap hero__stage">
         <div class="appframe beam" data-demo role="group" tabindex="0" aria-label="Breeze ASR 編輯器：產品週會.m4a 的 7 段字幕與 2 位說話者" aria-describedby="demo-help">
           <p class="sr" id="demo-help">按上下方向鍵切換字幕段落。</p>
+          <p class="sr" aria-live="polite" data-demo-live></p>
           <div class="ed" aria-hidden="true">
             <div class="ed-toolbar">
               <span class="ed-app"><img src="images/app-mark.svg" alt="" width="31" height="24">Breeze ASR</span>
@@ -137,7 +139,7 @@
               <span class="ed-tc" data-tc>0:00:09.40</span>
               <span class="ed-total ed-hide-s">/ 0:00:33.77</span>
               <span class="ed-spacer"></span>
-              <span class="ed-file ed-hide-s">產品週會.m4a<span>387 KB</span></span>
+              <span class="ed-file ed-hide-s">產品週會.m4a<span>387&nbsp;KB</span></span>
             </div>
             <div class="ed-tracks" data-tracks>
               <div class="ed-ruler">
@@ -175,7 +177,7 @@
             <div class="ed-work">
               <div class="ed-grid">
                 <div class="ed-gridhead">
-                  <span class="ed-tab is-on">字幕</span><span class="ed-tab">全文</span><span class="ed-meta" data-count>7 段</span>
+                  <span class="ed-tab is-on">字幕</span><span class="ed-tab">全文</span><span class="ed-meta" data-count>7&nbsp;段</span>
                   <span class="ed-spacer"></span>
                   <span class="ed-link ed-hide-s">復原</span><span class="ed-link ed-hide-s">重做</span><span class="ed-link ed-hide-m">尋找取代</span><span class="ed-link ed-hide-m">複製全文</span>
                 </div>
@@ -217,7 +219,7 @@
               </div>
             </div>
             <div class="ed-status">
-              <span class="ed-status__main" data-status><b>完成</b><span>產品週會.m4a・7 段</span></span>
+              <span class="ed-status__main" data-status><b>完成</b><span>產品週會.m4a・7&nbsp;段</span></span>
               <span class="ed-spacer"></span>
               <span class="ed-hide-s">Breeze ASR 25 已就緒</span>
               <span class="ed-hide-xs">OpenVINO・GPU・int8</span>
@@ -236,14 +238,14 @@
         <header class="sec-head" data-reveal>
           <p class="eyebrow"><span>01:01</span>介紹影片</p>
           <h2 id="film-title">一分鐘看完 Breeze ASR</h2>
-          <p class="sec-lead" id="film-desc">從錄音、辨識、熱詞、校對到匯出，61 秒看完整個流程。影片沒有口播，只有配樂。</p>
+          <p class="sec-lead" id="film-desc">從錄音、辨識、熱詞、校對到匯出，61&nbsp;秒看完整個流程。影片沒有口播，只有配樂。</p>
         </header>
         <div class="film__frame" data-reveal style="--i:1" data-film>
           <video class="film__video" controls playsinline preload="none" width="1920" height="1080" aria-label="Breeze ASR 介紹影片，1 分 1 秒" aria-describedby="film-desc" data-film-video>
             <source src="media/breeze-asr-promo.mp4" type="video/mp4">
           </video>
           <button type="button" class="film__cover" aria-label="播放 Breeze ASR 介紹影片，1 分 1 秒" data-film-play>
-            <img src="media/breeze-asr-promo-poster.webp" alt="" width="1280" height="720" loading="lazy" decoding="async">
+            <img src="media/breeze-asr-promo-poster.webp" alt="Breeze ASR 介紹影片封面：黑貓吉祥物 LOGO、標語「在自己的電腦上，把會議錄音、課程與影片轉成可以校對的字幕與逐字稿」，下方是分成七個章節的時間軸" width="1280" height="720" loading="lazy" decoding="async">
             <span class="film__btn" aria-hidden="true"><span class="film__ico"><svg viewBox="0 0 16 16"><path d="M5 3.2v9.6l7.6-4.8z"/></svg></span><span class="film__label">播放影片</span><span class="film__dur">1:01</span></span>
           </button>
         </div>
@@ -381,7 +383,7 @@
               <div class="phone">
                 <picture>
                   <source srcset="images/mobile-dark.webp" media="(prefers-color-scheme: dark)">
-                  <img src="images/mobile-light.webp" alt="" width="468" height="660" loading="lazy" decoding="async">
+                  <img src="images/mobile-light.webp" alt="手機瀏覽器上的 Breeze ASR 編輯器：產品週會.m4a 的波形、兩位說話者的時間軸與字幕列表" width="468" height="660" loading="lazy" decoding="async">
                 </picture>
               </div>
             </div>
@@ -433,14 +435,14 @@
           <div class="hot__stats" data-reveal style="--i:1">
             <div class="stat">
               <p class="stat__label">罕見詞寫對</p>
-              <p class="stat__value"><span class="from">9</span><span class="arrow" aria-hidden="true">→</span><span data-count-to="18" data-count-from="9" data-decimals="0" data-suffix="">18</span><span class="unit">／23 處</span></p>
+              <p class="stat__value"><span class="from">9</span><span class="arrow" aria-hidden="true">→</span><span data-count-to="18" data-count-from="9" data-decimals="0" data-suffix="">18</span><span class="unit">／23&nbsp;處</span></p>
             </div>
             <div class="stat">
               <p class="stat__label">字元錯誤率</p>
               <p class="stat__value"><span class="from">14.94%</span><span class="arrow" aria-hidden="true">→</span><span data-count-to="6.64" data-count-from="14.94" data-decimals="2" data-suffix="%">6.64%</span></p>
             </div>
           </div>
-          <p class="footnote" data-reveal style="--i:2">66 秒的會議錄音，含 23 處罕見人名、公司名、地名與英文術語，以語音合成念出。見<a href="https://github.com/Scorpio-meow/Breeze-ASR/blob/main/docs/benchmarks.md#熱詞">效能實測</a>。</p>
+          <p class="footnote" data-reveal style="--i:2">66&nbsp;秒的會議錄音，含 23&nbsp;處罕見人名、公司名、地名與英文術語，以語音合成念出。見<a href="https://github.com/Scorpio-meow/Breeze-ASR/blob/main/docs/benchmarks.md#熱詞">效能實測</a>。</p>
         </div>
         <div class="hot__demo" data-reveal style="--i:1">
           <div class="hw">
@@ -466,7 +468,7 @@
         <header class="sec-head" data-reveal>
           <p class="eyebrow"><span>04</span>效能</p>
           <h2 id="performance-title">自動調校，替每台電腦挑最快的設定</h2>
-          <p class="sec-lead">第一次啟動時，用內附的 29 秒範例語音實測每個裝置與權重格式，淘汰錯誤率過高的格式，再選出最快的一個。</p>
+          <p class="sec-lead">第一次啟動時，用內附的 29&nbsp;秒範例語音實測每個裝置與權重格式，淘汰錯誤率過高的格式，再選出最快的一個。</p>
         </header>
         <div class="perf__grid">
           <figure class="bars" data-reveal style="--i:1" aria-labelledby="bars-title">
@@ -504,10 +506,10 @@
               <table class="bars__table" role="table">
                 <thead><tr role="row"><th role="columnheader" scope="col">機器與選中的設定</th><th role="columnheader" scope="col" class="num">速度</th><th role="columnheader" scope="col" class="num">記憶體</th><th role="columnheader" scope="col" class="num">整輪調校</th></tr></thead>
                 <tbody>
-                  <tr role="row"><th role="rowheader" scope="row">Ryzen 9 9950X3D＋RTX 5090<small>RTX 5090・PyTorch fp16</small></th><td role="cell" class="num" data-label="速度">0.021</td><td role="cell" class="num" data-label="記憶體">3.8 GB<small>顯示記憶體</small></td><td role="cell" class="num" data-label="整輪調校">約 1.5–2 分鐘</td></tr>
-                  <tr role="row"><th role="rowheader" scope="row">Core i5-12500H<small>Iris Xe 內顯・int8</small></th><td role="cell" class="num" data-label="速度">0.34</td><td role="cell" class="num" data-label="記憶體">3.1 GB</td><td role="cell" class="num" data-label="整輪調校">約 6 分鐘</td></tr>
-                  <tr role="row"><th role="rowheader" scope="row">Core Ultra 7 155U<small>內顯・int8</small></th><td role="cell" class="num" data-label="速度">0.38</td><td role="cell" class="num" data-label="記憶體">2.8 GB</td><td role="cell" class="num" data-label="整輪調校">約 7 分鐘</td></tr>
-                  <tr role="row"><th role="rowheader" scope="row">Core i7-9700<small>CPU・int8</small></th><td role="cell" class="num" data-label="速度">0.66</td><td role="cell" class="num" data-label="記憶體">2.2 GB</td><td role="cell" class="num" data-label="整輪調校">約 35 分鐘</td></tr>
+                  <tr role="row"><th role="rowheader" scope="row">Ryzen 9 9950X3D＋RTX 5090<small>RTX 5090・PyTorch fp16</small></th><td role="cell" class="num" data-label="速度">0.021</td><td role="cell" class="num" data-label="記憶體">3.8&nbsp;GB<small>顯示記憶體</small></td><td role="cell" class="num" data-label="整輪調校">約 1.5–2&nbsp;分鐘</td></tr>
+                  <tr role="row"><th role="rowheader" scope="row">Core i5-12500H<small>Iris Xe 內顯・int8</small></th><td role="cell" class="num" data-label="速度">0.34</td><td role="cell" class="num" data-label="記憶體">3.1&nbsp;GB</td><td role="cell" class="num" data-label="整輪調校">約 6&nbsp;分鐘</td></tr>
+                  <tr role="row"><th role="rowheader" scope="row">Core Ultra 7 155U<small>內顯・int8</small></th><td role="cell" class="num" data-label="速度">0.38</td><td role="cell" class="num" data-label="記憶體">2.8&nbsp;GB</td><td role="cell" class="num" data-label="整輪調校">約 7&nbsp;分鐘</td></tr>
+                  <tr role="row"><th role="rowheader" scope="row">Core i7-9700<small>CPU・int8</small></th><td role="cell" class="num" data-label="速度">0.66</td><td role="cell" class="num" data-label="記憶體">2.2&nbsp;GB</td><td role="cell" class="num" data-label="整輪調校">約 35&nbsp;分鐘</td></tr>
                 </tbody>
               </table>
             </div>
@@ -515,25 +517,25 @@
           <div class="perf__facts">
             <div class="fact" data-reveal style="--i:2">
               <p class="fact__value"><span data-count-to="74" data-count-from="0" data-decimals="0" data-suffix="">74</span><small>秒</small></p>
-              <p class="fact__text">RTX 5090 處理 1 小時錄音約 74 秒。</p>
+              <p class="fact__text">RTX 5090 處理 1&nbsp;小時錄音約 74&nbsp;秒。</p>
             </div>
             <div class="fact" data-reveal style="--i:3">
               <p class="fact__value"><span data-count-to="15" data-count-from="0" data-decimals="0" data-suffix="">15</span><small>秒</small></p>
-              <p class="fact__text">調校完寫出硬體設定檔，之後啟動約 15 秒就緒。</p>
+              <p class="fact__text">調校完寫出硬體設定檔，之後啟動約 15&nbsp;秒就緒。</p>
             </div>
           </div>
         </div>
         <div class="tune" data-reveal style="--i:2">
-          <p class="tune__head"><span>Core Ultra 7 155U 的實測</span><span class="tune__sub">選中：和最快的內顯・fp16 相差 5% 以內，記憶體少 1.4 GB</span></p>
+          <p class="tune__head"><span>Core Ultra 7 155U 的實測</span><span class="tune__sub">選中：和最快的內顯・fp16 相差 5% 以內，記憶體少 1.4&nbsp;GB</span></p>
           <div class="tune__scroll">
             <table class="tune__table">
               <thead><tr><th scope="col">組合</th><th scope="col" class="num">速度</th><th scope="col" class="num">字元錯誤率</th><th scope="col" class="num">記憶體</th><th scope="col">結果</th></tr></thead>
               <tbody>
-                <tr><th scope="row">CPU・int4</th><td class="num">0.38</td><td class="num">2.8%</td><td class="num">1.6 GB</td><td><span class="chip chip--out">淘汰</span></td></tr>
-                <tr><th scope="row">CPU・int8</th><td class="num">0.41</td><td class="num">1.7%</td><td class="num">2.2 GB</td><td><span class="chip">可用</span></td></tr>
-                <tr><th scope="row">CPU・fp16</th><td class="num">0.69</td><td class="num">1.7%</td><td class="num">4.8 GB</td><td><span class="chip">可用</span></td></tr>
-                <tr class="is-pick"><th scope="row">內顯・int8</th><td class="num">0.382</td><td class="num">1.7%</td><td class="num">2.8 GB</td><td><span class="chip chip--pick">選中</span></td></tr>
-                <tr><th scope="row">內顯・fp16</th><td class="num">0.378</td><td class="num">1.7%</td><td class="num">4.2 GB</td><td><span class="chip">可用</span></td></tr>
+                <tr><th scope="row">CPU・int4</th><td class="num">0.38</td><td class="num">2.8%</td><td class="num">1.6&nbsp;GB</td><td><span class="chip chip--out">淘汰</span></td></tr>
+                <tr><th scope="row">CPU・int8</th><td class="num">0.41</td><td class="num">1.7%</td><td class="num">2.2&nbsp;GB</td><td><span class="chip">可用</span></td></tr>
+                <tr><th scope="row">CPU・fp16</th><td class="num">0.69</td><td class="num">1.7%</td><td class="num">4.8&nbsp;GB</td><td><span class="chip">可用</span></td></tr>
+                <tr class="is-pick"><th scope="row">內顯・int8</th><td class="num">0.382</td><td class="num">1.7%</td><td class="num">2.8&nbsp;GB</td><td><span class="chip chip--pick">選中</span></td></tr>
+                <tr><th scope="row">內顯・fp16</th><td class="num">0.378</td><td class="num">1.7%</td><td class="num">4.2&nbsp;GB</td><td><span class="chip">可用</span></td></tr>
               </tbody>
             </table>
           </div>
@@ -570,7 +572,7 @@
           </ul>
         </div>
         <ul class="privacy__facts">
-          <li data-reveal style="--i:1"><b>上傳的音訊辨識完就刪除</b><span>辨識結果預設保留 1 天，從最後一次修改起算。</span></li>
+          <li data-reveal style="--i:1"><b>上傳的音訊辨識完就刪除</b><span>辨識結果預設保留 1&nbsp;天，從最後一次修改起算。</span></li>
           <li data-reveal style="--i:2"><b>用量回報都關閉</b><span>OpenVINO、NNCF 與 Hugging Face 的用量統計不會送出。</span></li>
           <li data-reveal style="--i:3"><b>聲紋需要同意</b><span>聲紋屬於個人生物特徵，記住別人的聲音前請先取得對方同意。</span></li>
         </ul>
@@ -589,7 +591,7 @@
             <li><code>transcribe</code>一次送出多個檔案，結果寫在原檔旁邊</li>
             <li><code>jobs</code>列出服務裡保留中的工作</li>
             <li><code>export</code>下載某個工作的任一格式</li>
-            <li>MCP 提供 7 個工具與「整理會議紀錄」「校對逐字稿」兩個提示</li>
+            <li>MCP 提供 7&nbsp;個工具與「整理會議紀錄」「校對逐字稿」兩個提示</li>
           </ul>
           <p class="cli__warn" data-reveal style="--i:2">逐字稿會進到 MCP 用戶端的對話裡，可能因此送到外部 AI 服務；不能交給外部 AI 的錄音，只用網頁或命令列工具。</p>
         </div>
@@ -603,7 +605,7 @@
 <span class="out" style="--i:0">週會.m4a：已送出（工作 z3Nq8gjFtZ4y0v3H）</span>
 <span class="out" style="--i:1">週會.m4a：處理中</span>
 <span class="out" style="--i:2">週會.m4a：辨識中</span>
-<span class="out" style="--i:3">週會.m4a：<span class="ok">完成，8 段</span></span>
+<span class="out" style="--i:3">週會.m4a：<span class="ok">完成，8&nbsp;段</span></span>
 <span class="out" style="--i:4">週會.m4a.md</span>
 <span class="out" style="--i:5">週會.m4a.srt</span></pre>
           </div>
@@ -661,14 +663,14 @@
               </ol>
               <p class="steps__note">NVIDIA、AMD 顯示卡與 GitHub 發布的映像檔，見<a href="https://github.com/Scorpio-meow/Breeze-ASR/blob/main/docs/deployment.md#docker">部署</a>。</p>
             </div>
-            <p class="first-run"><b>第一次啟動</b>會下載約 9 GB 的模型並自動調校，約需數分鐘到十幾分鐘；之後啟動約 15 秒就緒。</p>
+            <p class="first-run"><b>第一次啟動</b>會下載約 9&nbsp;GB 的模型並自動調校，約需數分鐘到十幾分鐘；之後啟動約 15&nbsp;秒就緒。</p>
             <p class="sr" aria-live="polite" data-copy-status></p>
           </div>
           <div class="req" data-reveal style="--i:2">
             <dl class="req__list">
               <div><dt>作業系統</dt><dd>Windows（x64）、Linux，或任何能執行 Docker 的系統</dd></div>
-              <div><dt>記憶體</dt><dd>建議 16 GB 以上</dd></div>
-              <div><dt>磁碟</dt><dd>約 16 GB</dd></div>
+              <div><dt>記憶體</dt><dd>建議 16&nbsp;GB 以上</dd></div>
+              <div><dt>磁碟</dt><dd>約 16&nbsp;GB</dd></div>
               <div><dt>加速</dt><dd>Intel 內顯（OpenVINO）、NVIDIA GPU（CUDA）、AMD GPU（ROCm，僅 Linux），沒有也能用 CPU</dd></div>
             </dl>
             <div class="models-list">

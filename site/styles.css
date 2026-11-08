@@ -356,6 +356,21 @@ button {
   color: var(--accent);
 }
 
+[data-sound-menu] {
+  position: relative;
+}
+
+[data-sound-menu][data-pending]::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-3);
+}
+
 .no-js .sound {
   display: none;
 }
@@ -4269,13 +4284,16 @@ kbd {
 }
 
 .model-card::after {
-  content: "↗";
+  content: "";
   position: absolute;
   right: 16px;
   top: 50%;
+  width: 14px;
+  height: 14px;
   translate: 0 -50%;
-  color: var(--ink-3);
-  transition: translate 0.35s var(--spring), color 0.2s var(--ease-out);
+  background: var(--ink-3);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 11.5l7-7M6 4.5h5.5V10'/%3E%3C/svg%3E") center / contain no-repeat;
+  transition: translate 0.35s var(--spring), background-color 0.2s var(--ease-out);
 }
 
 .model-card:hover {
@@ -4286,7 +4304,7 @@ kbd {
 
 .model-card:hover::after {
   translate: 3px calc(-50% - 3px);
-  color: var(--accent);
+  background: var(--accent);
 }
 
 .model-card__name {

@@ -27,12 +27,16 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v10.3.3
+      - run: uv run --frozen --only-group site python site/tools/subset_fonts.py check --font site/fonts/noto-sans-tc.woff2 site/index.html site/main.js site/styles.css
       - run: rsync -a --exclude tools site/ _site/
-      - run: python3 site/tools/stamp_release.py --pyproject pyproject.toml --changelog CHANGELOG.md _site/index.html
       - id: pages
         uses: actions/configure-pages@v6
       - run: |
-          printf '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>%s/</loc>\n    <lastmod>%s</lastmod>\n  </url>\n</urlset>\n' "${BASE_URL%/}" "$(git log -1 --format=%cI)" > _site/sitemap.xml
+          python3 site/tools/stamp_release.py --pyproject pyproject.toml --changelog CHANGELOG.md --base-url "$BASE_URL" _site/index.html
+          printf '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>%s/</loc>\n    <lastmod>%s</lastmod>\n  </url>\n</urlset>\n' "${BASE_URL%/}" "$(git log -1 --format=%cI -- site pyproject.toml CHANGELOG.md)" > _site/sitemap.xml
         env:
           BASE_URL: ${{ steps.pages.outputs.base_url }}
       - uses: actions/upload-pages-artifact@v5

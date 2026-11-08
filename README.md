@@ -16,7 +16,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![M8ven Score](https://m8ven.ai/badge/mcp/scorpio-meow/breeze-asr)](https://m8ven.ai/mcp/scorpio-meow/breeze-asr?s=readme)
 
-[快速開始](#快速開始) · [功能](#功能) · [系統需求](#系統需求) · [文件](#文件) · [更新紀錄](CHANGELOG.md)
+[官網](https://scorpio-meow.github.io/Breeze-ASR/) · [快速開始](#快速開始) · [功能](#功能) · [系統需求](#系統需求) · [文件](#文件) · [更新紀錄](CHANGELOG.md)
 
 </div>
 

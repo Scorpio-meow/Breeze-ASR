@@ -91,8 +91,9 @@ const sound = (() => {
   const strings = new Array(stringCount);
   const voices = new Array(stringCount);
   const zhengListeners = new Set();
-  const music = { key: "breeze-site:music", on: false, btn: wrap.querySelector('[data-sound-toggle="music"]') };
-  const zheng = { key: "breeze-site:zheng", on: false, btn: wrap.querySelector('[data-sound-toggle="zheng"]') };
+  const pendingNote = menuBtn.querySelector("[data-sound-pending]");
+  const music = { key: "breeze-site:music", on: false, armed: false, btn: wrap.querySelector('[data-sound-toggle="music"]') };
+  const zheng = { key: "breeze-site:zheng", on: false, armed: false, btn: wrap.querySelector('[data-sound-toggle="zheng"]') };
   const channels = [music, zheng];
   let ctx = null;
   let mix = null;
@@ -112,10 +113,14 @@ const sound = (() => {
       ch.on = localStorage.getItem(ch.key) === "on";
     } catch { }
   }
-  const anyOn = () => music.on || zheng.on;
+  const live = (ch) => ch.on && ch.armed;
+  const anyLive = () => live(music) || live(zheng);
   function reflect() {
+    const pending = channels.some((ch) => ch.on && !ch.armed);
     for (const ch of channels) ch.btn.setAttribute("aria-pressed", String(ch.on));
-    menuBtn.toggleAttribute("data-on", anyOn());
+    menuBtn.toggleAttribute("data-on", anyLive());
+    menuBtn.toggleAttribute("data-pending", pending);
+    pendingNote.hidden = !pending;
     for (const fn of zhengListeners) fn(zheng.on);
   }
   function persist(ch) {
@@ -186,7 +191,7 @@ const sound = (() => {
   }
   function pluck(i, velocity, delay, position) {
     const item = strings[i];
-    if (!zheng.on || document.hidden || !ctx || !item) return;
+    if (!live(zheng) || document.hidden || !ctx || !item) return;
     const voice = stringVoice(ctx, mix.strings, item.buffer, item.offset, ctx.currentTime + delay, velocity, position, voices[i]);
     voices[i] = voice;
     voice.node.addEventListener("ended", () => {
@@ -232,32 +237,29 @@ const sound = (() => {
   function sync() {
     if (!ctx) return;
     clearTimeout(suspendTimer);
-    if (anyOn() && !document.hidden) {
+    if (anyLive() && !document.hidden) {
       if (ctx.state === "suspended") ctx.resume().catch(() => { });
     } else {
       suspendTimer = setTimeout(() => ctx.suspend(), SUSPEND_DELAY_MS);
     }
     if (!bgm) return;
-    if (music.on && !document.hidden && media.size === 0) bgmIn();
+    if (live(music) && !document.hidden && media.size === 0) bgmIn();
     else bgmOut();
   }
-  function wake() {
-    if (!anyOn()) return;
-    context();
-    if (music.on) loadMusic();
-    if (zheng.on) loadStrings();
+  function arm(...list) {
+    for (const ch of list) if (ch.on) ch.armed = true;
+    reflect();
+    if (anyLive()) {
+      context();
+      if (live(music)) loadMusic();
+      if (live(zheng)) loadStrings();
+    }
+    sync();
   }
   function toggle(ch) {
     ch.on = !ch.on;
     persist(ch);
-    reflect();
-    wake();
-    sync();
-  }
-  function gesture(e) {
-    if (!anyOn() || navigator.userActivation?.isActive === false || e.target.closest?.("[data-sound]")) return;
-    wake();
-    sync();
+    arm(...channels);
   }
   function setOpen(open) {
     menuBtn.setAttribute("aria-expanded", String(open));
@@ -265,7 +267,10 @@ const sound = (() => {
   }
   reflect();
   for (const ch of channels) ch.btn.addEventListener("click", () => toggle(ch));
-  menuBtn.addEventListener("click", () => setOpen(panel.hidden));
+  menuBtn.addEventListener("click", () => {
+    arm(...channels);
+    setOpen(panel.hidden);
+  });
   document.addEventListener("click", (e) => {
     if (!panel.hidden && !wrap.contains(e.target)) setOpen(false);
   });
@@ -278,8 +283,6 @@ const sound = (() => {
       menuBtn.focus();
     }
   });
-  document.addEventListener("click", gesture, true);
-  document.addEventListener("keydown", gesture, true);
   document.addEventListener("visibilitychange", sync);
   document.addEventListener(
     "play",
@@ -302,6 +305,9 @@ const sound = (() => {
   return {
     pluck,
     zhengOn: () => zheng.on,
+    armZheng() {
+      if (zheng.on && !zheng.armed && navigator.userActivation?.isActive !== false) arm(zheng);
+    },
     enableZheng() {
       if (!zheng.on) toggle(zheng);
     },
@@ -332,7 +338,7 @@ function parseTimecode(text) {
 }
 const LATIN = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const CJK_POOL = [..."我們先確認這週的上線時程文件昨天更新了熱詞也加好那映像檔就下週發佈測試報告五前補上字幕匯出逐字稿午給大家版本一起對次進度聲音辨識標點說話者"];
-const isCjk = (ch) => /[㐀-鿿]/.test(ch);
+const isCjk = (ch) => /[\u3400-\u9fff]/.test(ch);
 function scrambleText(target, progress, seed) {
   const chars = [...target];
   const solved = Math.floor(progress * chars.length);
@@ -464,6 +470,7 @@ function heroDemo(frame) {
     blocks: blocks.filter((b) => b.dataset.seg === row.dataset.seg),
   }));
   const total = segs.at(-1).end;
+  const announce = frame.querySelector("[data-demo-live]");
   const tc = ed.querySelector("[data-tc]");
   const playhead = ed.querySelector("[data-playhead]");
   const status = ed.querySelector("[data-status]");
@@ -671,7 +678,9 @@ function heroDemo(frame) {
     if (e.target !== frame || !["ArrowDown", "ArrowUp"].includes(e.key)) return;
     e.preventDefault();
     const at = current === null || current < 0 ? (e.key === "ArrowDown" ? -1 : segs.length) : current;
-    jumpTo(clamp(at + (e.key === "ArrowDown" ? 1 : -1), 0, segs.length - 1));
+    const index = clamp(at + (e.key === "ArrowDown" ? 1 : -1), 0, segs.length - 1);
+    jumpTo(index);
+    announce.textContent = `第 ${index + 1} 段，${segs[index].spk}：${segs[index].text}`;
   });
 }
 const demo = document.querySelector("[data-demo]");
@@ -1103,7 +1112,7 @@ function zheng(root) {
       s.x = spacing * (k + 0.5);
     });
     if (!shown.includes(focus)) focus = shown[Math.floor(n / 2)];
-    range.textContent = `D 五聲定弦・${shown[0].note}–${shown.at(-1).note}・${n} 弦`;
+    range.textContent = `D 五聲定弦・${shown[0].note}–${shown.at(-1).note}・${n}\u00a0弦`;
     draw(performance.now());
   }
   function vibrate(s, velocity, delay) {
@@ -1129,6 +1138,7 @@ function zheng(root) {
   }
   const nearest = (x) => shown.reduce((a, b) => (Math.abs(b.x - x) < Math.abs(a.x - x) ? b : a));
   root.addEventListener("pointerdown", (e) => {
+    sound.armZheng();
     const x = e.clientX - canvas.getBoundingClientRect().left;
     pointer = { id: e.pointerId, x, t: e.timeStamp, x0: x, y0: e.clientY, touch: e.pointerType === "touch", moved: false };
     if (pointer.touch) return;
@@ -1152,6 +1162,7 @@ function zheng(root) {
     }
   });
   root.addEventListener("pointerup", (e) => {
+    sound.armZheng();
     if (pointer?.touch && pointer.id === e.pointerId && !pointer.moved) pluck(nearest(pointer.x0), ZHENG_TAP_VELOCITY, 0);
     if (pointer?.touch) pointer = null;
   });
@@ -1162,6 +1173,7 @@ function zheng(root) {
     if (e.pointerType !== "touch") pointer = null;
   });
   root.addEventListener("keydown", (e) => {
+    sound.armZheng();
     const k = shown.indexOf(focus);
     if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
       e.preventDefault();
