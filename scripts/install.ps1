@@ -50,6 +50,7 @@ if (-not $NoShortcut) {
     $shortcut.TargetPath = (Get-Command powershell.exe).Source
     $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $PSScriptRoot 'start.ps1')`""
     $shortcut.WorkingDirectory = $root
+    $shortcut.IconLocation = "$(Join-Path $PSScriptRoot 'breeze-asr.ico'),0"
     $shortcut.Save()
     Write-Host "已在桌面建立捷徑「Breeze ASR」"
 }

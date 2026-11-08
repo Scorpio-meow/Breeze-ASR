@@ -1,19 +1,23 @@
 <!doctype html>
 <html lang="zh-Hant-TW">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>Breeze ASR</title>
+  <link rel="icon" href="favicon.ico" sizes="32x32">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
   <script type="module" src="app.js"></script>
 </head>
+
 <body>
   <div class="app">
     <header class="toolbar">
-      <span class="app-name">Breeze ASR</span>
-
+      <span class="app-name"><img src="mark.svg" alt="" width="31" height="24">Breeze ASR</span>
       <div class="tb-group">
         <label class="tb-btn" id="open-btn" for="file-input">
           <input type="file" id="file-input" multiple accept="audio/*,video/*,.m4a,.mp3,.wav,.flac,.ogg,.opus,.webm,.mp4,.mov,.aac,.wma,.amr,.mkv,.avi" class="control-hidden">
@@ -28,9 +32,7 @@
           <span class="level" aria-hidden="true"><span class="level-fill" id="level-fill"></span></span>
         </span>
       </div>
-
       <span class="tb-sep" aria-hidden="true"></span>
-
       <form id="transcribe-form" class="tb-group" novalidate>
         <label class="tb-field">
           <span>模型</span>
@@ -54,16 +56,13 @@
         <button type="submit" class="tb-btn primary" id="submit-btn">辨識</button>
         <button type="button" class="tb-btn" id="cancel-btn" hidden>取消</button>
       </form>
-
       <span class="tb-spacer"></span>
-
       <div class="tb-group">
         <button type="button" class="tb-btn" id="glossary-btn">詞彙<span class="tb-count" id="glossary-summary"></span></button>
         <button type="button" class="tb-btn" id="voices-btn" hidden>語者庫<span class="tb-count" id="voices-summary"></span></button>
         <button type="button" class="tb-btn" id="hardware-btn" hidden>硬體</button>
       </div>
     </header>
-
     <section class="timeline-panel" aria-label="時間軸">
       <div class="transport">
         <button type="button" class="tb-btn icon" id="player-toggle" aria-label="播放" aria-pressed="false" disabled>
@@ -82,7 +81,6 @@
           <button type="button" class="link-btn" id="clear-audio" hidden>關閉</button>
         </span>
       </div>
-
       <div class="tracks" id="tracks" role="slider" tabindex="-1" aria-label="播放位置" aria-disabled="true" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="未載入音訊">
         <div class="track ruler-track">
           <span class="track-head"></span>
@@ -99,7 +97,6 @@
         <span class="playhead" id="playhead" hidden></span>
       </div>
     </section>
-
     <div class="workspace">
       <section class="grid-panel" aria-label="字幕">
         <div class="panel-head">
@@ -151,7 +148,6 @@
           <div class="fulltext" id="fulltext" hidden></div>
         </div>
       </section>
-
       <aside class="inspector">
         <section class="panel" id="preview-panel" aria-label="影片預覽" hidden>
           <div class="video-frame">
@@ -159,7 +155,6 @@
             <p class="video-cue" id="video-cue" aria-hidden="true"></p>
           </div>
         </section>
-
         <section class="panel" aria-labelledby="jobs-title">
           <h2 class="panel-head" id="jobs-title">工作<span class="head-meta" id="watch-summary"></span></h2>
           <div class="panel-body">
@@ -167,7 +162,6 @@
             <p class="panel-empty" id="jobs-empty">—</p>
           </div>
         </section>
-
         <section class="panel" aria-labelledby="cue-title">
           <h2 class="panel-head" id="cue-title">字幕<span class="head-meta" id="cue-number"></span></h2>
           <div class="panel-body">
@@ -189,7 +183,6 @@
             </div>
           </div>
         </section>
-
         <section class="panel" aria-labelledby="speakers-title">
           <h2 class="panel-head" id="speakers-title">說話者</h2>
           <div class="panel-body">
@@ -198,7 +191,6 @@
             <ul class="speaker-list" id="speaker-list"></ul>
           </div>
         </section>
-
         <section class="panel" aria-labelledby="export-title">
           <h2 class="panel-head" id="export-title">匯出</h2>
           <div class="panel-body export-row">
@@ -212,7 +204,6 @@
             <button type="button" class="tb-btn" id="burn-btn" disabled>燒錄字幕…</button>
           </div>
         </section>
-
         <section class="panel" aria-labelledby="info-title">
           <h2 class="panel-head" id="info-title">資訊</h2>
           <div class="panel-body">
@@ -222,7 +213,6 @@
         </section>
       </aside>
     </div>
-
     <footer class="statusbar">
       <span class="sb-item" id="status-line" role="status">就緒</span>
       <span class="sb-item sb-muted" id="status-detail"></span>
@@ -233,7 +223,6 @@
       <span class="sb-item sb-muted" id="runtime"></span>
     </footer>
   </div>
-
   <dialog class="dialog wide" id="glossary-dialog" aria-labelledby="glossary-title">
     <form method="dialog" class="dialog-head">
       <h2 id="glossary-title">詞彙</h2>
@@ -261,7 +250,6 @@
       </div>
     </div>
   </dialog>
-
   <dialog class="dialog" id="burn-dialog" aria-labelledby="burn-title">
     <form method="dialog" class="dialog-head">
       <h2 id="burn-title">燒錄字幕</h2>
@@ -290,7 +278,6 @@
       </div>
     </div>
   </dialog>
-
   <dialog class="dialog" id="voices-dialog" aria-labelledby="voices-title">
     <form method="dialog" class="dialog-head">
       <h2 id="voices-title">語者庫</h2>
@@ -304,7 +291,6 @@
       <p class="dialog-note" id="voices-status" role="status"></p>
     </div>
   </dialog>
-
   <dialog class="dialog wide" id="hardware-dialog" aria-labelledby="hardware-title">
     <form method="dialog" class="dialog-head">
       <h2 id="hardware-title">硬體</h2>
@@ -336,7 +322,6 @@
       </div>
     </div>
   </dialog>
-
   <dialog class="dialog narrow" id="login-dialog" aria-labelledby="login-title" aria-describedby="login-note">
     <div class="dialog-head">
       <h2 id="login-title">存取權杖</h2>
@@ -352,7 +337,7 @@
       </div>
     </form>
   </dialog>
-
   <div class="visually-hidden" aria-live="polite" id="announcer"></div>
 </body>
+
 </html>

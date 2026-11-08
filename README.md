@@ -1,5 +1,10 @@
 <div align="center">
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/breeze-asr-logo-dark.svg">
+  <img src="docs/brand/breeze-asr-logo.svg" alt="Breeze ASR" width="360">
+</picture>
+
 # Breeze ASR 網頁 APP
 
 **在自己的電腦上，把會議錄音、課程與影片轉成可以校對的字幕與逐字稿。**

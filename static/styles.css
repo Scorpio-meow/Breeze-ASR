@@ -175,8 +175,15 @@ svg {
 }
 
 .app-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   margin-right: 4px;
   font-weight: 600;
+}
+
+.app-name img {
+  display: block;
 }
 
 .tb-group {

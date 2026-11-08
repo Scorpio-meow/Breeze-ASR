@@ -4,6 +4,20 @@
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-11-08
+
+### Added
+
+- 新的專案 LOGO：吉祥物黑貓從字幕框後探出頭，蠍尾的紅色螫針像一個逗號。`docs/brand/` 有圖標與橫式字標的亮色、暗色、單色版，README 開頭也換上了。
+- 網頁 App 圖示：`apple-touch-icon.png`（加到 iPad、iPhone 主畫面時用）與 `manifest.webmanifest`（附 192、512 與 maskable 圖示），瀏覽器可以把服務安裝成 App。
+- 網頁工具列的「Breeze ASR」前面加上 LOGO（`static/mark.svg`）。
+
+### Changed
+
+- `static/icon.svg` 換成新 LOGO，網頁分頁與 MCP server 的圖示一起更新；暗色分頁會自動加上淺色外框。
+- `/favicon.ico` 改成直接回傳 16、32、48 px 的 ICO 檔，不再轉址到 `icon.svg`，不支援 SVG 圖示的瀏覽器也看得到。
+- Windows 安裝腳本建立的桌面捷徑改用新圖示 `scripts/breeze-asr.ico`，不再顯示 PowerShell 的圖示；已經建好的捷徑重新執行 `scripts\install.ps1` 就會更新。
+
 ## [0.3.3] - 2026-11-08
 
 ### Changed
@@ -221,7 +235,8 @@
 - 在不能錄音的網址按「錄音」，狀態列說明原因與瀏覽器的設定方式。
 - 所有回應加上 `Cache-Control: no-cache`，更新版本後瀏覽器不會繼續使用舊的前端程式。
 
-[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.4...HEAD
+[0.3.4]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.0...v0.3.1

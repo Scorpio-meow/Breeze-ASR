@@ -1,0 +1,737 @@
+<!doctype html>
+<html lang="zh-Hant-TW" class="no-js">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="google-site-verification" content="jjQRA2mVrlVkjlSTMgxrNE9bMVfG6cNSKgpwz3CQm6Y">
+  <title>Breeze ASR：在自己的電腦上把錄音轉成字幕與逐字稿</title>
+  <meta name="description" content="開源的本機語音辨識與字幕編輯器。用 Breeze ASR 25／26 辨識臺灣華語、中英夾雜與臺灣台語，自動加標點、分辨說話者，在波形時間軸上校對後匯出字幕檔或 Word 逐字稿。">
+  <meta name="theme-color" content="#f3f3f0" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#101010" media="(prefers-color-scheme: dark)">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Breeze ASR：在自己的電腦上把錄音轉成字幕與逐字稿">
+  <meta property="og:description" content="臺灣華語、中英夾雜與臺灣台語的本機語音辨識與字幕編輯器，開源、MIT 授權。">
+  <meta property="og:url" content="https://scorpio-meow.github.io/Breeze-ASR/">
+  <meta property="og:image" content="https://scorpio-meow.github.io/Breeze-ASR/images/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:locale" content="zh_TW">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="favicon.ico" sizes="32x32">
+  <link rel="icon" href="images/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="images/apple-touch-icon.png">
+  <link rel="preload" href="fonts/noto-sans-tc.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    document.documentElement.classList.replace("no-js", "js");
+    try { if (localStorage.getItem("breeze-site:motion") === "paused") document.documentElement.dataset.motion = "paused"; } catch {}
+  </script>
+  <script type="module" src="main.js"></script>
+</head>
+
+<body>
+  <a class="skip" href="#main">跳到主要內容</a>
+  <header class="nav" data-nav>
+    <div class="wrap nav__in">
+      <a class="brand" href="#top" aria-label="Breeze ASR 首頁">
+        <picture>
+          <source srcset="images/logo-dark.svg" media="(prefers-color-scheme: dark)">
+          <img src="images/logo.svg" alt="" width="141" height="42">
+        </picture>
+      </a>
+      <nav class="nav__menu" id="site-menu" aria-label="主要">
+        <ul class="nav__links">
+          <li><a href="#workflow">流程</a></li>
+          <li><a href="#features">功能</a></li>
+          <li><a href="#hotwords">熱詞</a></li>
+          <li><a href="#performance">效能</a></li>
+          <li><a href="#privacy">隱私</a></li>
+          <li><a href="#cli">命令列</a></li>
+        </ul>
+      </nav>
+      <div class="nav__end">
+        <button class="icon-btn" type="button" data-motion-toggle aria-pressed="false">
+          <svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 3h2.5v10H4.5zM9 3h2.5v10H9z"/></svg>
+          <svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 3v10l8-5z"/></svg>
+          <span class="sr" data-motion-label>暫停動畫</span>
+        </button>
+        <div class="sound" data-sound>
+          <button class="icon-btn" type="button" aria-expanded="false" aria-controls="sound-panel" data-sound-menu>
+            <svg class="i-sound-off" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 6h2.6L7.5 3v10L4.1 10H1.5z"/><path class="ln" d="M10.5 6l4 4M14.5 6l-4 4"/></svg>
+            <svg class="i-sound-on" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 6h2.6L7.5 3v10L4.1 10H1.5z"/><path class="ln" d="M10 5.6a3.4 3.4 0 0 1 0 4.8M12.1 3.5a6.4 6.4 0 0 1 0 9"/></svg>
+            <span class="sr">聲音：背景音樂與古箏弦</span>
+          </button>
+          <div class="sound__panel" id="sound-panel" role="group" aria-labelledby="sound-title" hidden>
+            <p class="sound__title" id="sound-title">聲音</p>
+            <button class="sound__opt" type="button" aria-pressed="false" aria-labelledby="sound-music" aria-describedby="sound-music-note" data-sound-toggle="music">
+              <span class="sound__text"><b id="sound-music">背景音樂</b><span id="sound-music-note">兩首古箏曲隨機播一首，播放影片時暫停</span></span>
+              <span class="sound__switch" aria-hidden="true"></span>
+            </button>
+            <button class="sound__opt" type="button" aria-pressed="false" aria-labelledby="sound-zheng" aria-describedby="sound-zheng-note" data-sound-toggle="zheng">
+              <span class="sound__text"><b id="sound-zheng">古箏弦</b><span id="sound-zheng-note">首頁古箏撥弦的聲音</span></span>
+              <span class="sound__switch" aria-hidden="true"></span>
+            </button>
+          </div>
+        </div>
+        <a class="btn btn--ghost btn--sm nav__gh" href="https://github.com/Scorpio-meow/Breeze-ASR">GitHub</a>
+        <a class="btn btn--primary btn--sm" href="#install">安裝</a>
+        <button class="icon-btn nav__toggle" type="button" aria-expanded="false" aria-controls="site-menu" data-menu-toggle>
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5h12M2 8h12M2 11.5h12"/></svg>
+          <span class="sr">選單</span>
+        </button>
+      </div>
+    </div>
+    <div class="scrub" aria-hidden="true"><span class="scrub__fill"></span></div>
+  </header>
+  <main id="main">
+    <section class="hero" id="top" aria-labelledby="hero-title">
+      <div class="wrap hero__text">
+        <p class="hero__notice"><span class="tag" data-release="version"></span><span><span data-release="date"></span> 發布</span><span class="dot" aria-hidden="true"></span><span>開源・MIT 授權</span></p>
+        <h1 class="hero__title" id="hero-title">在自己的電腦上，<br>把錄音轉成字幕與逐字稿</h1>
+        <p class="hero__lead">用 MediaTek Research 的 Breeze ASR 25／26 辨識臺灣華語、中英夾雜與臺灣台語，自動加標點、分辨說話者；在波形時間軸上校對，再匯出字幕檔或 Word 逐字稿。錄音不必上傳到任何雲端服務。</p>
+        <div class="hero__actions">
+          <a class="btn btn--primary btn--lg" href="#install" data-magnetic>安裝 Breeze ASR</a>
+          <a class="btn btn--ghost btn--lg" href="https://github.com/Scorpio-meow/Breeze-ASR">在 GitHub 查看原始碼</a>
+        </div>
+        <dl class="hero__facts">
+          <div><dt>系統</dt><dd>Windows・Linux・Docker</dd></div>
+          <div><dt>加速</dt><dd>Intel 內顯・NVIDIA・AMD・CPU</dd></div>
+          <div><dt>語言</dt><dd>臺灣華語・中英夾雜・臺灣台語</dd></div>
+        </dl>
+      </div>
+      <div class="wrap hero__zheng">
+        <div class="zheng" data-zheng data-notes="D2 F2 G2 A2 C3 D3 F3 G3 A3 C4 D4 F4 G4 A4 C5 D5 F5 G5 A5 C6 D6" role="group" tabindex="0" aria-labelledby="zheng-label" aria-describedby="zheng-help">
+          <canvas class="zheng__canvas" aria-hidden="true"></canvas>
+        </div>
+        <div class="zheng__meta">
+          <p class="zheng__label" id="zheng-label"><b>古箏</b> <span data-zheng-range>D 五聲定弦</span></p>
+          <p class="zheng__help" id="zheng-help"><span class="zheng__fine">滑鼠滑過弦就會撥動，快速刮過是刮奏</span><span class="zheng__touch">手指左右撥過弦，弦就會振動</span><span class="zheng__keys" aria-hidden="true">← → 撥弦，Home／End 刮奏</span><span class="sr">。聚焦後用左右方向鍵撥弦，Home 或 End 刮奏。</span></p>
+          <div class="zheng__status" aria-live="polite">
+            <p class="zheng__hint" data-zheng-hint hidden>古箏弦的聲音關著，<button class="link" type="button" data-zheng-sound>打開「古箏弦」</button>就聽得到撥弦聲</p>
+          </div>
+        </div>
+      </div>
+      <div class="wrap hero__stage">
+        <div class="appframe beam" data-demo role="group" tabindex="0" aria-label="Breeze ASR 編輯器：產品週會.m4a 的 7 段字幕與 2 位說話者" aria-describedby="demo-help">
+          <p class="sr" id="demo-help">按上下方向鍵切換字幕段落。</p>
+          <div class="ed" aria-hidden="true">
+            <div class="ed-toolbar">
+              <span class="ed-app"><img src="images/app-mark.svg" alt="" width="31" height="24">Breeze ASR</span>
+              <span class="ed-btn">開啟…</span>
+              <span class="ed-btn ed-hide-s"><span class="ed-rec"></span>錄音</span>
+              <span class="ed-sep ed-hide-s"></span>
+              <span class="ed-field ed-hide-m">模型<span class="ed-select">Breeze ASR 25</span></span>
+              <span class="ed-field ed-hide-m">說話者<span class="ed-select">自動</span></span>
+              <span class="ed-check ed-hide-m"><span class="ed-box is-on"></span>標點</span>
+              <span class="ed-check ed-hide-m"><span class="ed-box is-on"></span>熱詞</span>
+              <span class="ed-btn ed-primary">辨識</span>
+              <span class="ed-spacer"></span>
+              <span class="ed-btn ed-hide-m">詞彙</span>
+              <span class="ed-btn ed-hide-m">語者庫</span>
+              <span class="ed-btn ed-hide-s">硬體</span>
+            </div>
+            <div class="ed-transport">
+              <span class="ed-play-slot"></span>
+              <span class="ed-tc" data-tc>0:00:09.40</span>
+              <span class="ed-total ed-hide-s">/ 0:00:33.77</span>
+              <span class="ed-spacer"></span>
+              <span class="ed-file ed-hide-s">產品週會.m4a<span>387 KB</span></span>
+            </div>
+            <div class="ed-tracks" data-tracks>
+              <div class="ed-ruler">
+                <span class="ed-head"></span>
+                <div class="ed-ruler__body">
+                  <span style="--at:0">00:00</span><span style="--at:0.0592">00:02</span><span style="--at:0.1184">00:04</span><span style="--at:0.1777">00:06</span><span style="--at:0.2369">00:08</span><span style="--at:0.2961">00:10</span><span style="--at:0.3553">00:12</span><span style="--at:0.4145">00:14</span><span style="--at:0.4738">00:16</span><span style="--at:0.533">00:18</span><span style="--at:0.5922">00:20</span><span style="--at:0.6514">00:22</span><span style="--at:0.7107">00:24</span><span style="--at:0.7699">00:26</span><span style="--at:0.8291">00:28</span><span style="--at:0.8883">00:30</span><span style="--at:0.9475">00:32</span>
+                </div>
+              </div>
+              <div class="ed-wave">
+                <span class="ed-head">音訊</span>
+                <div class="ed-wave__body">
+                  <svg viewBox="0 0 2000 200" preserveAspectRatio="none"><path d="M0 99L5 99L10 99L14 99L19 99L24 99L29 99L33 88L38 57L43 56L48 71L53 66L57 77L62 87L67 71L72 68L76 84L81 73L86 66L91 77L95 72L100 76L105 85L110 82L115 75L119 75L124 64L129 61L134 71L138 74L143 74L148 90L153 57L158 60L162 88L167 78L172 69L177 86L181 88L186 81L191 83L196 85L200 75L205 85L210 91L215 99L220 99L224 99L229 99L234 99L239 99L243 99L248 99L253 99L258 99L263 99L267 99L272 99L277 99L282 99L286 99L291 99L296 82L301 65L305 66L310 82L315 70L320 53L325 58L329 59L334 53L339 80L344 50L348 46L353 77L358 56L363 55L368 86L372 49L377 77L382 62L387 65L391 86L396 54L401 73L406 42L411 51L415 65L420 91L425 99L430 99L434 90L439 50L444 63L449 98L453 62L458 62L463 47L468 67L473 59L477 55L482 71L487 51L492 61L496 66L501 59L506 60L511 78L516 99L520 99L525 99L530 99L535 99L539 99L544 99L549 99L554 99L558 99L563 99L568 99L573 99L578 99L582 99L587 99L592 99L597 99L601 99L606 90L611 53L616 66L621 94L625 51L630 38L635 94L640 71L644 59L649 58L654 82L659 77L663 82L668 74L673 38L678 73L683 89L687 47L692 82L697 93L702 68L706 61L711 75L716 72L721 38L726 61L730 94L735 60L740 63L745 89L749 42L754 57L759 93L764 81L768 85L773 98L778 99L783 99L788 99L792 99L797 99L802 99L807 99L811 99L816 99L821 99L826 99L831 99L835 99L840 99L845 99L850 99L854 99L859 99L864 71L869 66L874 89L878 85L883 80L888 85L893 9L897 32L902 89L907 17L912 4L916 80L921 74L926 81L931 77L936 58L940 63L945 87L950 84L955 97L959 90L964 67L969 83L974 95L979 86L983 96L988 66L993 62L998 92L1002 99L1007 99L1012 99L1017 99L1021 99L1026 99L1031 99L1036 99L1041 99L1045 99L1050 99L1055 99L1060 99L1064 99L1069 99L1074 99L1079 99L1084 99L1088 99L1093 99L1098 99L1103 74L1107 58L1112 59L1117 57L1122 62L1126 50L1131 68L1136 69L1141 53L1146 74L1150 55L1155 50L1160 81L1165 51L1169 59L1174 94L1179 58L1184 55L1189 61L1193 98L1198 45L1203 42L1208 58L1212 97L1217 64L1222 68L1227 85L1232 99L1236 99L1241 80L1246 59L1251 60L1255 72L1260 96L1265 56L1270 66L1274 66L1279 55L1284 52L1289 55L1294 84L1298 55L1303 59L1308 76L1313 76L1317 93L1322 62L1327 74L1332 52L1337 60L1341 95L1346 51L1351 52L1356 54L1360 72L1365 99L1370 99L1375 99L1379 99L1384 99L1389 99L1394 99L1399 99L1403 99L1408 99L1413 99L1418 99L1422 99L1427 99L1432 99L1437 99L1442 99L1446 99L1451 82L1456 50L1461 93L1465 99L1470 99L1475 57L1480 63L1484 74L1489 52L1494 82L1499 95L1504 78L1508 84L1513 65L1518 69L1523 79L1527 57L1532 76L1537 52L1542 74L1547 66L1551 62L1556 80L1561 80L1566 75L1570 93L1575 74L1580 87L1585 87L1589 88L1594 98L1599 90L1604 93L1609 91L1613 66L1618 78L1623 76L1628 69L1632 86L1637 99L1642 99L1647 99L1652 99L1656 99L1661 99L1666 99L1671 99L1675 99L1680 99L1685 99L1690 99L1695 99L1699 99L1704 99L1709 99L1714 99L1718 99L1723 99L1728 52L1733 51L1737 76L1742 77L1747 50L1752 67L1757 81L1761 74L1766 76L1771 62L1776 37L1780 56L1785 87L1790 99L1795 99L1800 98L1804 59L1809 41L1814 65L1819 93L1823 59L1828 63L1833 83L1838 82L1842 83L1847 68L1852 52L1857 68L1862 72L1866 61L1871 69L1876 91L1881 87L1885 90L1890 99L1895 79L1900 80L1905 94L1909 78L1914 86L1919 85L1924 74L1928 84L1933 98L1938 99L1943 99L1947 99L1952 99L1957 99L1962 99L1967 99L1971 99L1976 99L1981 99L1986 99L1990 99L1995 99L2000 99L2000 101L1995 101L1990 101L1986 101L1981 101L1976 101L1971 101L1967 101L1962 101L1957 101L1952 101L1947 101L1943 101L1938 101L1933 102L1928 116L1924 126L1919 115L1914 114L1909 122L1905 106L1900 120L1895 121L1890 101L1885 110L1881 113L1876 109L1871 131L1866 139L1862 128L1857 132L1852 148L1847 132L1842 117L1838 118L1833 117L1828 137L1823 141L1819 107L1814 135L1809 159L1804 141L1800 102L1795 101L1790 101L1785 113L1780 144L1776 163L1771 138L1766 124L1761 126L1757 119L1752 133L1747 150L1742 123L1737 124L1733 149L1728 148L1723 101L1718 101L1714 101L1709 101L1704 101L1699 101L1695 101L1690 101L1685 101L1680 101L1675 101L1671 101L1666 101L1661 101L1656 101L1652 101L1647 101L1642 101L1637 101L1632 114L1628 131L1623 124L1618 122L1613 134L1609 109L1604 107L1599 110L1594 102L1589 112L1585 113L1580 113L1575 126L1570 107L1566 125L1561 120L1556 120L1551 138L1547 134L1542 126L1537 148L1532 124L1527 143L1523 121L1518 131L1513 135L1508 116L1504 122L1499 105L1494 118L1489 148L1484 126L1480 137L1475 143L1470 101L1465 101L1461 107L1456 150L1451 118L1446 101L1442 101L1437 101L1432 101L1427 101L1422 101L1418 101L1413 101L1408 101L1403 101L1399 101L1394 101L1389 101L1384 101L1379 101L1375 101L1370 101L1365 101L1360 128L1356 146L1351 148L1346 149L1341 105L1337 140L1332 148L1327 126L1322 138L1317 107L1313 124L1308 124L1303 141L1298 145L1294 116L1289 145L1284 148L1279 145L1274 134L1270 134L1265 144L1260 104L1255 128L1251 140L1246 141L1241 120L1236 101L1232 101L1227 115L1222 132L1217 136L1212 103L1208 142L1203 158L1198 155L1193 102L1189 139L1184 145L1179 142L1174 106L1169 141L1165 149L1160 119L1155 150L1150 145L1146 126L1141 147L1136 131L1131 132L1126 150L1122 138L1117 143L1112 141L1107 142L1103 126L1098 101L1093 101L1088 101L1084 101L1079 101L1074 101L1069 101L1064 101L1060 101L1055 101L1050 101L1045 101L1041 101L1036 101L1031 101L1026 101L1021 101L1017 101L1012 101L1007 101L1002 101L998 108L993 138L988 134L983 104L979 114L974 105L969 117L964 133L959 110L955 103L950 116L945 113L940 137L936 142L931 123L926 119L921 126L916 120L912 196L907 183L902 111L897 168L893 191L888 115L883 120L878 115L874 111L869 134L864 129L859 101L854 101L850 101L845 101L840 101L835 101L831 101L826 101L821 101L816 101L811 101L807 101L802 101L797 101L792 101L788 101L783 101L778 101L773 102L768 115L764 119L759 107L754 143L749 158L745 111L740 137L735 140L730 106L726 139L721 162L716 128L711 125L706 139L702 132L697 107L692 118L687 153L683 111L678 127L673 162L668 126L663 118L659 123L654 118L649 142L644 141L640 129L635 106L630 162L625 149L621 106L616 134L611 147L606 110L601 101L597 101L592 101L587 101L582 101L578 101L573 101L568 101L563 101L558 101L554 101L549 101L544 101L539 101L535 101L530 101L525 101L520 101L516 101L511 122L506 140L501 141L496 134L492 139L487 149L482 129L477 145L473 141L468 133L463 153L458 138L453 138L449 102L444 137L439 150L434 110L430 101L425 101L420 109L415 135L411 149L406 158L401 127L396 146L391 114L387 135L382 138L377 123L372 151L368 114L363 145L358 144L353 123L348 154L344 150L339 120L334 147L329 141L325 142L320 147L315 130L310 118L305 134L301 135L296 118L291 101L286 101L282 101L277 101L272 101L267 101L263 101L258 101L253 101L248 101L243 101L239 101L234 101L229 101L224 101L220 101L215 101L210 109L205 115L200 125L196 115L191 117L186 119L181 112L177 114L172 131L167 122L162 112L158 140L153 143L148 110L143 126L138 126L134 129L129 139L124 136L119 125L115 125L110 118L105 115L100 124L95 128L91 123L86 134L81 127L76 116L72 132L67 129L62 113L57 123L53 134L48 129L43 144L38 143L33 112L29 101L24 101L19 101L14 101L10 101L5 101L0 101Z"/></svg>
+                </div>
+              </div>
+              <div class="ed-lane ed-lane--1">
+                <span class="ed-head">說話者 1</span>
+                <div class="ed-lane__body">
+                  <span class="ed-block" data-seg="0" style="--a:0;--b:0.1256"></span>
+                  <span class="ed-block" data-seg="2" style="--a:0.2783;--b:0.4075"></span>
+                  <span class="ed-block" data-seg="6" style="--a:0.8362;--b:1"></span>
+                </div>
+              </div>
+              <div class="ed-lane ed-lane--2">
+                <span class="ed-head">說話者 2</span>
+                <div class="ed-lane__body">
+                  <span class="ed-block" data-seg="1" style="--a:0.1256;--b:0.2783"></span>
+                  <span class="ed-block" data-seg="3" style="--a:0.4075;--b:0.5259"></span>
+                  <span class="ed-block" data-seg="4" style="--a:0.5259;--b:0.6988"></span>
+                  <span class="ed-block" data-seg="5" style="--a:0.6988;--b:0.8362"></span>
+                </div>
+              </div>
+              <span class="ed-playhead" data-playhead style="--at:0.2783"></span>
+              <span class="ed-ghost" data-ghost><span class="ed-ghost__tc" data-ghost-tc>0:00:00.00</span></span>
+            </div>
+            <div class="ed-work">
+              <div class="ed-grid">
+                <div class="ed-gridhead">
+                  <span class="ed-tab is-on">字幕</span><span class="ed-tab">全文</span><span class="ed-meta" data-count>7 段</span>
+                  <span class="ed-spacer"></span>
+                  <span class="ed-link ed-hide-s">復原</span><span class="ed-link ed-hide-s">重做</span><span class="ed-link ed-hide-m">尋找取代</span><span class="ed-link ed-hide-m">複製全文</span>
+                </div>
+                <div class="ed-table">
+                  <div class="ed-th"><span>#</span><span>開始</span><span class="ed-hide-s">結束</span><span class="ed-hide-xs">說話者</span><span>文字</span></div>
+                  <div class="ed-rows" data-rows>
+                    <div class="ed-row s1" data-seg="0"><span class="n">1</span><span class="t">0:00:00.00</span><span class="t2 ed-hide-s">0:00:04.24</span><span class="k ed-hide-xs">說話者 1</span><span class="x">我們先確認這週的上線時程。</span></div>
+                    <div class="ed-row s2" data-seg="1"><span class="n">2</span><span class="t">0:00:04.24</span><span class="t2 ed-hide-s">0:00:09.40</span><span class="k ed-hide-xs">說話者 2</span><span class="x">API 文件昨天更新了，熱詞也加好了。</span></div>
+                    <div class="ed-row s1 is-sel is-cur" data-seg="2"><span class="n">3</span><span class="t">0:00:09.40</span><span class="t2 ed-hide-s">0:00:13.76</span><span class="k ed-hide-xs">說話者 1</span><span class="x">那 Docker 映像檔就下週發佈。</span></div>
+                    <div class="ed-row s2" data-seg="3"><span class="n">4</span><span class="t">0:00:13.76</span><span class="t2 ed-hide-s">0:00:17.76</span><span class="k ed-hide-xs">說話者 2</span><span class="x">測試報告我週五前補上。</span></div>
+                    <div class="ed-row s2" data-seg="4"><span class="n">5</span><span class="t">0:00:17.76</span><span class="t2 ed-hide-s">0:00:23.60</span><span class="k ed-hide-xs">說話者 2</span><span class="x">字幕檔，我先匯出 SRT、Word 逐字稿，下午給大家。</span></div>
+                    <div class="ed-row s2" data-seg="5"><span class="n">6</span><span class="t">0:00:23.60</span><span class="t2 ed-hide-s">0:00:28.24</span><span class="k ed-hide-xs">說話者 2</span><span class="x">好，OpenVINO 的版本我也一起確認。</span></div>
+                    <div class="ed-row s1" data-seg="6"><span class="n">7</span><span class="t">0:00:28.24</span><span class="t2 ed-hide-s">0:00:33.77</span><span class="k ed-hide-xs">說話者 1</span><span class="x">那就這樣，下週一再對一次進度。</span></div>
+                  </div>
+                  <p class="ed-empty" data-empty>辨識中…</p>
+                </div>
+              </div>
+              <div class="ed-inspector">
+                <div class="ed-panel">
+                  <p class="ed-panelhead">字幕<span data-cue-no>#3</span></p>
+                  <div class="ed-cue">
+                    <span class="ed-label">開始</span><span class="ed-input" data-cue-start>0:00:09.40</span>
+                    <span class="ed-label">結束</span><span class="ed-input" data-cue-end>0:00:13.76</span>
+                    <span class="ed-label">說話者</span><span class="ed-input ed-input--sel" data-cue-spk>說話者 1</span>
+                  </div>
+                  <div class="ed-actions"><span class="ed-btn">分割</span><span class="ed-btn">與下一段合併</span><span class="ed-btn">刪除</span></div>
+                </div>
+                <div class="ed-panel">
+                  <p class="ed-panelhead">說話者</p>
+                  <ul class="ed-spk">
+                    <li class="s1"><span class="sw"></span>說話者 1<span class="sec">00:09</span><span class="ed-link">記住聲音</span></li>
+                    <li class="s2"><span class="sw"></span>說話者 2<span class="sec">00:13</span><span class="ed-link">記住聲音</span></li>
+                  </ul>
+                </div>
+                <div class="ed-panel">
+                  <p class="ed-panelhead">匯出</p>
+                  <div class="ed-chips"><span>SRT</span><span>VTT</span><span>ASS</span><span>TXT</span><span>MD</span><span>DOCX</span><span>JSON</span><span class="wide">燒錄字幕…</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="ed-status">
+              <span class="ed-status__main" data-status><b>完成</b><span>產品週會.m4a・7 段</span></span>
+              <span class="ed-spacer"></span>
+              <span class="ed-hide-s">Breeze ASR 25 已就緒</span>
+              <span class="ed-hide-xs">OpenVINO・GPU・int8</span>
+            </div>
+          </div>
+          <button class="ed-play" type="button" data-demo-toggle aria-pressed="false">
+            <svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 3h2.5v10H4.5zM9 3h2.5v10H9z"/></svg>
+            <svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 3v10l8-5z"/></svg>
+            <span class="sr" data-motion-label>暫停動畫</span>
+          </button>
+        </div>
+      </div>
+    </section>
+    <section class="section film" id="film" aria-labelledby="film-title">
+      <div class="wrap">
+        <header class="sec-head" data-reveal>
+          <p class="eyebrow"><span>01:01</span>介紹影片</p>
+          <h2 id="film-title">一分鐘看完 Breeze ASR</h2>
+          <p class="sec-lead" id="film-desc">從錄音、辨識、熱詞、校對到匯出，61 秒看完整個流程。影片沒有口播，只有配樂。</p>
+        </header>
+        <div class="film__frame" data-reveal style="--i:1" data-film>
+          <video class="film__video" controls playsinline preload="none" width="1920" height="1080" aria-label="Breeze ASR 介紹影片，1 分 1 秒" aria-describedby="film-desc" data-film-video>
+            <source src="media/breeze-asr-promo.mp4" type="video/mp4">
+          </video>
+          <button type="button" class="film__cover" aria-label="播放 Breeze ASR 介紹影片，1 分 1 秒" data-film-play>
+            <img src="media/breeze-asr-promo-poster.webp" alt="" width="1280" height="720" loading="lazy" decoding="async">
+            <span class="film__btn" aria-hidden="true"><span class="film__ico"><svg viewBox="0 0 16 16"><path d="M5 3.2v9.6l7.6-4.8z"/></svg></span><span class="film__label">播放影片</span><span class="film__dur">1:01</span></span>
+          </button>
+        </div>
+      </div>
+    </section>
+    <section class="section story" id="workflow" aria-labelledby="workflow-title">
+      <div class="wrap">
+        <header class="sec-head" data-reveal>
+          <p class="eyebrow"><span>01</span>流程</p>
+          <h2 id="workflow-title">從錄音到字幕，四個步驟</h2>
+          <p class="sec-lead">上傳、辨識、校對、匯出都在同一個網頁完成，服務跑在你自己的電腦上。</p>
+        </header>
+        <div class="story__grid">
+          <ol class="story__steps" data-steps>
+            <li class="step" data-step="1">
+              <p class="step__no">01</p>
+              <h3><button class="step__go" type="button" data-step-go="1" aria-current="step">錄音或影片</button></h3>
+              <p>上傳 m4a、mp3、wav、mp4 等常見格式，可以一次選多個排隊；也能拖進視窗、用瀏覽器錄音，或放進監看資料夾。</p>
+            </li>
+            <li class="step" data-step="2">
+              <p class="step__no">02</p>
+              <h3><button class="step__go" type="button" data-step-go="2">本機辨識</button></h3>
+              <p>Breeze ASR 25 辨識臺灣華語與中英夾雜，Breeze ASR 26 辨識臺灣台語、輸出華語漢字。可以加熱詞、自動標點、分辨說話者。</p>
+            </li>
+            <li class="step" data-step="3">
+              <p class="step__no">03</p>
+              <h3><button class="step__go" type="button" data-step-go="3">網頁校對</button></h3>
+              <p>在波形時間軸上直接改字、對時、分割合併、尋找取代；改錯了，按復原。</p>
+            </li>
+            <li class="step" data-step="4">
+              <p class="step__no">04</p>
+              <h3><button class="step__go" type="button" data-step-go="4">交付</button></h3>
+              <p>匯出 SRT、VTT、ASS、TXT、Markdown、DOCX、JSON，或把字幕燒錄到原始影片。</p>
+            </li>
+          </ol>
+          <div class="story__stage">
+            <div class="stage" data-stage data-active="1" aria-hidden="true">
+              <div class="stage__bar">
+                <span class="stage__dots"><i></i><i></i><i></i></span>
+                <span class="stage__title">產品週會.m4a</span>
+                <span class="stage__rail"><i data-rail></i></span>
+                <span class="stage__step" data-stage-no>01 / 04</span>
+              </div>
+              <div class="stage__body">
+                <div class="scene scene--1">
+                  <div class="files">
+                    <div class="file" style="--i:0"><span class="file__ext">M4A</span><span class="file__name">週會.m4a</span><span class="file__state">排隊中</span></div>
+                    <div class="file" style="--i:1"><span class="file__ext">MP4</span><span class="file__name">訪談.mp4</span><span class="file__state">排隊中</span></div>
+                    <div class="file file--rec" style="--i:2"><span class="file__ext"><span class="ed-rec"></span></span><span class="file__name">錄音</span><span class="file__state">00:42</span></div>
+                  </div>
+                  <div class="scene-wave"><svg viewBox="0 0 2000 200" preserveAspectRatio="none"><path d="M0 99L5 99L10 99L14 99L19 99L24 99L29 99L33 88L38 57L43 56L48 71L53 66L57 77L62 87L67 71L72 68L76 84L81 73L86 66L91 77L95 72L100 76L105 85L110 82L115 75L119 75L124 64L129 61L134 71L138 74L143 74L148 90L153 57L158 60L162 88L167 78L172 69L177 86L181 88L186 81L191 83L196 85L200 75L205 85L210 91L215 99L220 99L224 99L229 99L234 99L239 99L243 99L248 99L253 99L258 99L263 99L267 99L272 99L277 99L282 99L286 99L291 99L296 82L301 65L305 66L310 82L315 70L320 53L325 58L329 59L334 53L339 80L344 50L348 46L353 77L358 56L363 55L368 86L372 49L377 77L382 62L387 65L391 86L396 54L401 73L406 42L411 51L415 65L420 91L425 99L430 99L434 90L439 50L444 63L449 98L453 62L458 62L463 47L468 67L473 59L477 55L482 71L487 51L492 61L496 66L501 59L506 60L511 78L516 99L520 99L525 99L530 99L535 99L539 99L544 99L549 99L554 99L558 99L563 99L568 99L573 99L578 99L582 99L587 99L592 99L597 99L601 99L606 90L611 53L616 66L621 94L625 51L630 38L635 94L640 71L644 59L649 58L654 82L659 77L663 82L668 74L673 38L678 73L683 89L687 47L692 82L697 93L702 68L706 61L711 75L716 72L721 38L726 61L730 94L735 60L740 63L745 89L749 42L754 57L759 93L764 81L768 85L773 98L778 99L783 99L788 99L792 99L797 99L802 99L807 99L811 99L816 99L821 99L826 99L831 99L835 99L840 99L845 99L850 99L854 99L859 99L864 71L869 66L874 89L878 85L883 80L888 85L893 9L897 32L902 89L907 17L912 4L916 80L921 74L926 81L931 77L936 58L940 63L945 87L950 84L955 97L959 90L964 67L969 83L974 95L979 86L983 96L988 66L993 62L998 92L1002 99L1007 99L1012 99L1017 99L1021 99L1026 99L1031 99L1036 99L1041 99L1045 99L1050 99L1055 99L1060 99L1064 99L1069 99L1074 99L1079 99L1084 99L1088 99L1093 99L1098 99L1103 74L1107 58L1112 59L1117 57L1122 62L1126 50L1131 68L1136 69L1141 53L1146 74L1150 55L1155 50L1160 81L1165 51L1169 59L1174 94L1179 58L1184 55L1189 61L1193 98L1198 45L1203 42L1208 58L1212 97L1217 64L1222 68L1227 85L1232 99L1236 99L1241 80L1246 59L1251 60L1255 72L1260 96L1265 56L1270 66L1274 66L1279 55L1284 52L1289 55L1294 84L1298 55L1303 59L1308 76L1313 76L1317 93L1322 62L1327 74L1332 52L1337 60L1341 95L1346 51L1351 52L1356 54L1360 72L1365 99L1370 99L1375 99L1379 99L1384 99L1389 99L1394 99L1399 99L1403 99L1408 99L1413 99L1418 99L1422 99L1427 99L1432 99L1437 99L1442 99L1446 99L1451 82L1456 50L1461 93L1465 99L1470 99L1475 57L1480 63L1484 74L1489 52L1494 82L1499 95L1504 78L1508 84L1513 65L1518 69L1523 79L1527 57L1532 76L1537 52L1542 74L1547 66L1551 62L1556 80L1561 80L1566 75L1570 93L1575 74L1580 87L1585 87L1589 88L1594 98L1599 90L1604 93L1609 91L1613 66L1618 78L1623 76L1628 69L1632 86L1637 99L1642 99L1647 99L1652 99L1656 99L1661 99L1666 99L1671 99L1675 99L1680 99L1685 99L1690 99L1695 99L1699 99L1704 99L1709 99L1714 99L1718 99L1723 99L1728 52L1733 51L1737 76L1742 77L1747 50L1752 67L1757 81L1761 74L1766 76L1771 62L1776 37L1780 56L1785 87L1790 99L1795 99L1800 98L1804 59L1809 41L1814 65L1819 93L1823 59L1828 63L1833 83L1838 82L1842 83L1847 68L1852 52L1857 68L1862 72L1866 61L1871 69L1876 91L1881 87L1885 90L1890 99L1895 79L1900 80L1905 94L1909 78L1914 86L1919 85L1924 74L1928 84L1933 98L1938 99L1943 99L1947 99L1952 99L1957 99L1962 99L1967 99L1971 99L1976 99L1981 99L1986 99L1990 99L1995 99L2000 99L2000 101L1995 101L1990 101L1986 101L1981 101L1976 101L1971 101L1967 101L1962 101L1957 101L1952 101L1947 101L1943 101L1938 101L1933 102L1928 116L1924 126L1919 115L1914 114L1909 122L1905 106L1900 120L1895 121L1890 101L1885 110L1881 113L1876 109L1871 131L1866 139L1862 128L1857 132L1852 148L1847 132L1842 117L1838 118L1833 117L1828 137L1823 141L1819 107L1814 135L1809 159L1804 141L1800 102L1795 101L1790 101L1785 113L1780 144L1776 163L1771 138L1766 124L1761 126L1757 119L1752 133L1747 150L1742 123L1737 124L1733 149L1728 148L1723 101L1718 101L1714 101L1709 101L1704 101L1699 101L1695 101L1690 101L1685 101L1680 101L1675 101L1671 101L1666 101L1661 101L1656 101L1652 101L1647 101L1642 101L1637 101L1632 114L1628 131L1623 124L1618 122L1613 134L1609 109L1604 107L1599 110L1594 102L1589 112L1585 113L1580 113L1575 126L1570 107L1566 125L1561 120L1556 120L1551 138L1547 134L1542 126L1537 148L1532 124L1527 143L1523 121L1518 131L1513 135L1508 116L1504 122L1499 105L1494 118L1489 148L1484 126L1480 137L1475 143L1470 101L1465 101L1461 107L1456 150L1451 118L1446 101L1442 101L1437 101L1432 101L1427 101L1422 101L1418 101L1413 101L1408 101L1403 101L1399 101L1394 101L1389 101L1384 101L1379 101L1375 101L1370 101L1365 101L1360 128L1356 146L1351 148L1346 149L1341 105L1337 140L1332 148L1327 126L1322 138L1317 107L1313 124L1308 124L1303 141L1298 145L1294 116L1289 145L1284 148L1279 145L1274 134L1270 134L1265 144L1260 104L1255 128L1251 140L1246 141L1241 120L1236 101L1232 101L1227 115L1222 132L1217 136L1212 103L1208 142L1203 158L1198 155L1193 102L1189 139L1184 145L1179 142L1174 106L1169 141L1165 149L1160 119L1155 150L1150 145L1146 126L1141 147L1136 131L1131 132L1126 150L1122 138L1117 143L1112 141L1107 142L1103 126L1098 101L1093 101L1088 101L1084 101L1079 101L1074 101L1069 101L1064 101L1060 101L1055 101L1050 101L1045 101L1041 101L1036 101L1031 101L1026 101L1021 101L1017 101L1012 101L1007 101L1002 101L998 108L993 138L988 134L983 104L979 114L974 105L969 117L964 133L959 110L955 103L950 116L945 113L940 137L936 142L931 123L926 119L921 126L916 120L912 196L907 183L902 111L897 168L893 191L888 115L883 120L878 115L874 111L869 134L864 129L859 101L854 101L850 101L845 101L840 101L835 101L831 101L826 101L821 101L816 101L811 101L807 101L802 101L797 101L792 101L788 101L783 101L778 101L773 102L768 115L764 119L759 107L754 143L749 158L745 111L740 137L735 140L730 106L726 139L721 162L716 128L711 125L706 139L702 132L697 107L692 118L687 153L683 111L678 127L673 162L668 126L663 118L659 123L654 118L649 142L644 141L640 129L635 106L630 162L625 149L621 106L616 134L611 147L606 110L601 101L597 101L592 101L587 101L582 101L578 101L573 101L568 101L563 101L558 101L554 101L549 101L544 101L539 101L535 101L530 101L525 101L520 101L516 101L511 122L506 140L501 141L496 134L492 139L487 149L482 129L477 145L473 141L468 133L463 153L458 138L453 138L449 102L444 137L439 150L434 110L430 101L425 101L420 109L415 135L411 149L406 158L401 127L396 146L391 114L387 135L382 138L377 123L372 151L368 114L363 145L358 144L353 123L348 154L344 150L339 120L334 147L329 141L325 142L320 147L315 130L310 118L305 134L301 135L296 118L291 101L286 101L282 101L277 101L272 101L267 101L263 101L258 101L253 101L248 101L243 101L239 101L234 101L229 101L224 101L220 101L215 101L210 109L205 115L200 125L196 115L191 117L186 119L181 112L177 114L172 131L167 122L162 112L158 140L153 143L148 110L143 126L138 126L134 129L129 139L124 136L119 125L115 125L110 118L105 115L100 124L95 128L91 123L86 134L81 127L76 116L72 132L67 129L62 113L57 123L53 134L48 129L43 144L38 143L33 112L29 101L24 101L19 101L14 101L10 101L5 101L0 101Z"/></svg></div>
+                </div>
+                <div class="scene scene--2">
+                  <div class="models">
+                    <div class="model is-on"><span class="model__name">Breeze ASR 25</span><span class="model__tag">華語・中英夾雜</span></div>
+                    <div class="model"><span class="model__name">Breeze ASR 26</span><span class="model__tag">台語 → 華語漢字</span></div>
+                  </div>
+                  <ul class="switches">
+                    <li style="--i:0"><span class="switch"></span>熱詞</li>
+                    <li style="--i:1"><span class="switch"></span>自動標點</li>
+                    <li style="--i:2"><span class="switch"></span>分辨說話者</li>
+                  </ul>
+                  <div class="split">
+                    <div class="split__wave"><svg viewBox="0 0 2000 200" preserveAspectRatio="none"><path d="M0 99L5 99L10 99L14 99L19 99L24 99L29 99L33 88L38 57L43 56L48 71L53 66L57 77L62 87L67 71L72 68L76 84L81 73L86 66L91 77L95 72L100 76L105 85L110 82L115 75L119 75L124 64L129 61L134 71L138 74L143 74L148 90L153 57L158 60L162 88L167 78L172 69L177 86L181 88L186 81L191 83L196 85L200 75L205 85L210 91L215 99L220 99L224 99L229 99L234 99L239 99L243 99L248 99L253 99L258 99L263 99L267 99L272 99L277 99L282 99L286 99L291 99L296 82L301 65L305 66L310 82L315 70L320 53L325 58L329 59L334 53L339 80L344 50L348 46L353 77L358 56L363 55L368 86L372 49L377 77L382 62L387 65L391 86L396 54L401 73L406 42L411 51L415 65L420 91L425 99L430 99L434 90L439 50L444 63L449 98L453 62L458 62L463 47L468 67L473 59L477 55L482 71L487 51L492 61L496 66L501 59L506 60L511 78L516 99L520 99L525 99L530 99L535 99L539 99L544 99L549 99L554 99L558 99L563 99L568 99L573 99L578 99L582 99L587 99L592 99L597 99L601 99L606 90L611 53L616 66L621 94L625 51L630 38L635 94L640 71L644 59L649 58L654 82L659 77L663 82L668 74L673 38L678 73L683 89L687 47L692 82L697 93L702 68L706 61L711 75L716 72L721 38L726 61L730 94L735 60L740 63L745 89L749 42L754 57L759 93L764 81L768 85L773 98L778 99L783 99L788 99L792 99L797 99L802 99L807 99L811 99L816 99L821 99L826 99L831 99L835 99L840 99L845 99L850 99L854 99L859 99L864 71L869 66L874 89L878 85L883 80L888 85L893 9L897 32L902 89L907 17L912 4L916 80L921 74L926 81L931 77L936 58L940 63L945 87L950 84L955 97L959 90L964 67L969 83L974 95L979 86L983 96L988 66L993 62L998 92L1002 99L1007 99L1012 99L1017 99L1021 99L1026 99L1031 99L1036 99L1041 99L1045 99L1050 99L1055 99L1060 99L1064 99L1069 99L1074 99L1079 99L1084 99L1088 99L1093 99L1098 99L1103 74L1107 58L1112 59L1117 57L1122 62L1126 50L1131 68L1136 69L1141 53L1146 74L1150 55L1155 50L1160 81L1165 51L1169 59L1174 94L1179 58L1184 55L1189 61L1193 98L1198 45L1203 42L1208 58L1212 97L1217 64L1222 68L1227 85L1232 99L1236 99L1241 80L1246 59L1251 60L1255 72L1260 96L1265 56L1270 66L1274 66L1279 55L1284 52L1289 55L1294 84L1298 55L1303 59L1308 76L1313 76L1317 93L1322 62L1327 74L1332 52L1337 60L1341 95L1346 51L1351 52L1356 54L1360 72L1365 99L1370 99L1375 99L1379 99L1384 99L1389 99L1394 99L1399 99L1403 99L1408 99L1413 99L1418 99L1422 99L1427 99L1432 99L1437 99L1442 99L1446 99L1451 82L1456 50L1461 93L1465 99L1470 99L1475 57L1480 63L1484 74L1489 52L1494 82L1499 95L1504 78L1508 84L1513 65L1518 69L1523 79L1527 57L1532 76L1537 52L1542 74L1547 66L1551 62L1556 80L1561 80L1566 75L1570 93L1575 74L1580 87L1585 87L1589 88L1594 98L1599 90L1604 93L1609 91L1613 66L1618 78L1623 76L1628 69L1632 86L1637 99L1642 99L1647 99L1652 99L1656 99L1661 99L1666 99L1671 99L1675 99L1680 99L1685 99L1690 99L1695 99L1699 99L1704 99L1709 99L1714 99L1718 99L1723 99L1728 52L1733 51L1737 76L1742 77L1747 50L1752 67L1757 81L1761 74L1766 76L1771 62L1776 37L1780 56L1785 87L1790 99L1795 99L1800 98L1804 59L1809 41L1814 65L1819 93L1823 59L1828 63L1833 83L1838 82L1842 83L1847 68L1852 52L1857 68L1862 72L1866 61L1871 69L1876 91L1881 87L1885 90L1890 99L1895 79L1900 80L1905 94L1909 78L1914 86L1919 85L1924 74L1928 84L1933 98L1938 99L1943 99L1947 99L1952 99L1957 99L1962 99L1967 99L1971 99L1976 99L1981 99L1986 99L1990 99L1995 99L2000 99L2000 101L1995 101L1990 101L1986 101L1981 101L1976 101L1971 101L1967 101L1962 101L1957 101L1952 101L1947 101L1943 101L1938 101L1933 102L1928 116L1924 126L1919 115L1914 114L1909 122L1905 106L1900 120L1895 121L1890 101L1885 110L1881 113L1876 109L1871 131L1866 139L1862 128L1857 132L1852 148L1847 132L1842 117L1838 118L1833 117L1828 137L1823 141L1819 107L1814 135L1809 159L1804 141L1800 102L1795 101L1790 101L1785 113L1780 144L1776 163L1771 138L1766 124L1761 126L1757 119L1752 133L1747 150L1742 123L1737 124L1733 149L1728 148L1723 101L1718 101L1714 101L1709 101L1704 101L1699 101L1695 101L1690 101L1685 101L1680 101L1675 101L1671 101L1666 101L1661 101L1656 101L1652 101L1647 101L1642 101L1637 101L1632 114L1628 131L1623 124L1618 122L1613 134L1609 109L1604 107L1599 110L1594 102L1589 112L1585 113L1580 113L1575 126L1570 107L1566 125L1561 120L1556 120L1551 138L1547 134L1542 126L1537 148L1532 124L1527 143L1523 121L1518 131L1513 135L1508 116L1504 122L1499 105L1494 118L1489 148L1484 126L1480 137L1475 143L1470 101L1465 101L1461 107L1456 150L1451 118L1446 101L1442 101L1437 101L1432 101L1427 101L1422 101L1418 101L1413 101L1408 101L1403 101L1399 101L1394 101L1389 101L1384 101L1379 101L1375 101L1370 101L1365 101L1360 128L1356 146L1351 148L1346 149L1341 105L1337 140L1332 148L1327 126L1322 138L1317 107L1313 124L1308 124L1303 141L1298 145L1294 116L1289 145L1284 148L1279 145L1274 134L1270 134L1265 144L1260 104L1255 128L1251 140L1246 141L1241 120L1236 101L1232 101L1227 115L1222 132L1217 136L1212 103L1208 142L1203 158L1198 155L1193 102L1189 139L1184 145L1179 142L1174 106L1169 141L1165 149L1160 119L1155 150L1150 145L1146 126L1141 147L1136 131L1131 132L1126 150L1122 138L1117 143L1112 141L1107 142L1103 126L1098 101L1093 101L1088 101L1084 101L1079 101L1074 101L1069 101L1064 101L1060 101L1055 101L1050 101L1045 101L1041 101L1036 101L1031 101L1026 101L1021 101L1017 101L1012 101L1007 101L1002 101L998 108L993 138L988 134L983 104L979 114L974 105L969 117L964 133L959 110L955 103L950 116L945 113L940 137L936 142L931 123L926 119L921 126L916 120L912 196L907 183L902 111L897 168L893 191L888 115L883 120L878 115L874 111L869 134L864 129L859 101L854 101L850 101L845 101L840 101L835 101L831 101L826 101L821 101L816 101L811 101L807 101L802 101L797 101L792 101L788 101L783 101L778 101L773 102L768 115L764 119L759 107L754 143L749 158L745 111L740 137L735 140L730 106L726 139L721 162L716 128L711 125L706 139L702 132L697 107L692 118L687 153L683 111L678 127L673 162L668 126L663 118L659 123L654 118L649 142L644 141L640 129L635 106L630 162L625 149L621 106L616 134L611 147L606 110L601 101L597 101L592 101L587 101L582 101L578 101L573 101L568 101L563 101L558 101L554 101L549 101L544 101L539 101L535 101L530 101L525 101L520 101L516 101L511 122L506 140L501 141L496 134L492 139L487 149L482 129L477 145L473 141L468 133L463 153L458 138L453 138L449 102L444 137L439 150L434 110L430 101L425 101L420 109L415 135L411 149L406 158L401 127L396 146L391 114L387 135L382 138L377 123L372 151L368 114L363 145L358 144L353 123L348 154L344 150L339 120L334 147L329 141L325 142L320 147L315 130L310 118L305 134L301 135L296 118L291 101L286 101L282 101L277 101L272 101L267 101L263 101L258 101L253 101L248 101L243 101L239 101L234 101L229 101L224 101L220 101L215 101L210 109L205 115L200 125L196 115L191 117L186 119L181 112L177 114L172 131L167 122L162 112L158 140L153 143L148 110L143 126L138 126L134 129L129 139L124 136L119 125L115 125L110 118L105 115L100 124L95 128L91 123L86 134L81 127L76 116L72 132L67 129L62 113L57 123L53 134L48 129L43 144L38 143L33 112L29 101L24 101L19 101L14 101L10 101L5 101L0 101Z"/></svg></div>
+                    <div class="split__lane s1"><i style="--a:0;--b:0.1256"></i><i style="--a:0.2783;--b:0.4075"></i><i style="--a:0.8362;--b:1"></i></div>
+                    <div class="split__lane s2"><i style="--a:0.1256;--b:0.2783"></i><i style="--a:0.4075;--b:0.8362"></i></div>
+                  </div>
+                  <p class="engine">OpenVINO・GPU・int8</p>
+                </div>
+                <div class="scene scene--3">
+                  <div class="mini-head"><span class="is-on">字幕</span><span>全文</span><span class="sp"></span><span class="undo" data-undo>復原</span><span>重做</span><span>尋找取代</span></div>
+                  <div class="mini-rows">
+                    <div class="mini-row s2"><span class="t">0:00:04.24</span><span class="x">API 文件昨天更新了，熱詞也加好了。</span></div>
+                    <div class="mini-row s1 is-edit"><span class="t">0:00:09.40</span><span class="x">那 Docker <span class="type" data-type data-from="印象" data-to="映像">映像</span><span class="caret"></span>檔就下週發佈。</span></div>
+                    <div class="mini-row s2"><span class="t">0:00:13.76</span><span class="x">測試報告我週五前補上。</span></div>
+                    <div class="mini-row s2"><span class="t">0:00:17.76</span><span class="x">字幕檔，我先匯出 SRT、Word 逐字稿，下午給大家。</span></div>
+                  </div>
+                  <div class="mini-cue">
+                    <span class="lbl">開始</span><span class="val">0:00:09.40</span><span class="lbl">結束</span><span class="val">0:00:13.76</span>
+                    <span class="mini-act">分割</span><span class="mini-act">與下一段合併</span>
+                  </div>
+                </div>
+                <div class="scene scene--4">
+                  <div class="formats">
+                    <span style="--i:0">SRT</span><span style="--i:1">VTT</span><span style="--i:2">ASS</span><span style="--i:3">TXT</span><span style="--i:4">MD</span><span style="--i:5">DOCX</span><span style="--i:6">JSON</span>
+                  </div>
+                  <div class="burn">
+                    <div class="burn__frame">
+                      <div class="burn__scene"></div>
+                      <p class="burn__sub">那 Docker 映像檔就下週發佈。</p>
+                    </div>
+                    <div class="burn__bar"><span>燒錄字幕</span><span class="burn__track"><i></i></span><span class="burn__pct">libass・libx264</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="section" id="features" aria-labelledby="features-title">
+      <div class="wrap">
+        <header class="sec-head" data-reveal>
+          <p class="eyebrow"><span>02</span>功能</p>
+          <h2 id="features-title">校對與交付需要的工具</h2>
+          <p class="sec-lead">介面以 WCAG 2.2 AA 為目標，主要工作只用鍵盤就能完成。</p>
+        </header>
+        <div class="panels" data-spotlight>
+          <article class="card" data-reveal style="--i:0">
+            <div class="card__ui" aria-hidden="true">
+              <p class="ui-head">說話者</p>
+              <ul class="ui-spk">
+                <li class="s1"><span class="sw"></span><span class="nm">說話者 1</span><span class="sec">00:09</span><span class="act is-hot">記住聲音</span></li>
+                <li class="s2"><span class="sw"></span><span class="nm">說話者 2</span><span class="sec">00:13</span><span class="act">併入…</span></li>
+              </ul>
+              <div class="ui-lanes"><span class="s1" style="--a:0;--b:0.1256"></span><span class="s2" style="--a:0.1256;--b:0.2783"></span><span class="s1" style="--a:0.2783;--b:0.4075"></span><span class="s2" style="--a:0.4075;--b:0.8362"></span><span class="s1" style="--a:0.8362;--b:1"></span></div>
+            </div>
+            <h3>分辨說話者，記住聲音</h3>
+            <p>自動判斷或指定人數；取名後存進語者庫，之後自動認出。分錯時可以合併或改給別人。</p>
+          </article>
+          <article class="card" data-reveal style="--i:1">
+            <div class="card__ui" aria-hidden="true">
+              <p class="ui-head">字幕<span>#3</span></p>
+              <div class="ui-cue">
+                <span>開始</span><span class="in">0:00:09.40</span>
+                <span>結束</span><span class="in">0:00:13.76</span>
+              </div>
+              <div class="ui-keys"><span><kbd>Ctrl</kbd><kbd>Z</kbd>復原</span><span><kbd>Ctrl</kbd><kbd>Y</kbd>重做</span><span><kbd>Ctrl</kbd><kbd>F</kbd>尋找取代</span><span><kbd>Ctrl</kbd><kbd>Enter</kbd>分割</span></div>
+            </div>
+            <h3>改字、對時、分割合併</h3>
+            <p>每一步都能復原與重做；尋找取代可以一次套用詞彙表的取代規則。</p>
+          </article>
+          <article class="card card--phone" data-reveal style="--i:2">
+            <div class="card__ui card__ui--phone" aria-hidden="true">
+              <div class="phone">
+                <picture>
+                  <source srcset="images/mobile-dark.webp" media="(prefers-color-scheme: dark)">
+                  <img src="images/mobile-light.webp" alt="" width="468" height="660" loading="lazy" decoding="async">
+                </picture>
+              </div>
+            </div>
+            <h3>用手機或平板校對</h3>
+            <p>辨識照樣在這台電腦上跑，手機與平板用瀏覽器上傳、播放、校對與匯出；要錄音時用 HTTPS 連線。</p>
+          </article>
+          <article class="card" data-reveal style="--i:3">
+            <div class="card__ui" aria-hidden="true">
+              <p class="ui-head">自動標點</p>
+              <p class="ui-punct" data-punct>我們先確認這週的上線時程<b>。</b>API 文件昨天更新了<b>，</b>熱詞也加好了<b>。</b></p>
+            </div>
+            <h3>辨識完自動加標點</h3>
+            <p>用獨立的標點模型補上全形標點，在 CPU 上執行，和辨識分開處理。</p>
+          </article>
+          <article class="card" data-reveal style="--i:4">
+            <div class="card__ui" aria-hidden="true">
+              <pre class="ui-srt"><span class="dim">3</span>
+<span class="dim">00:00:09,400 --&gt; 00:00:13,760</span>
+說話者 1：那 Docker 映像檔就下週發佈。</pre>
+              <div class="ui-chips"><span class="is-on">SRT</span><span>VTT</span><span>ASS</span><span>TXT</span><span>MD</span><span>DOCX</span><span>JSON</span></div>
+            </div>
+            <h3>匯出七種格式，燒錄字幕</h3>
+            <p>字幕檔、Markdown、Word 與 JSON 都能下載，也能把字幕直接燒錄到原始影片。</p>
+          </article>
+          <article class="card" data-reveal style="--i:5">
+            <div class="card__ui" aria-hidden="true">
+              <p class="ui-head">監看資料夾</p>
+              <ul class="ui-files">
+                <li><span class="ico">♪</span>週會.m4a</li>
+                <li class="is-new"><span class="ico">≡</span>週會.m4a.srt</li>
+                <li class="is-new"><span class="ico">≡</span>週會.m4a.md</li>
+                <li class="is-new"><span class="ico">≡</span>週會.m4a.json</li>
+              </ul>
+            </div>
+            <h3>放進資料夾，自動辨識</h3>
+            <p>新的錄音或影片自動送出辨識，結果寫在原檔旁邊，也會出現在網頁的工作清單。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+    <section class="section hot" id="hotwords" aria-labelledby="hotwords-title">
+      <div class="wrap hot__grid">
+        <header class="sec-head" data-reveal>
+          <p class="eyebrow"><span>03</span>熱詞</p>
+          <h2 id="hotwords-title">先給熱詞，罕見詞比較容易寫對</h2>
+          <p class="sec-lead">把人名、公司名與術語寫成一句話交給模型；詞彙表的取代規則再自動修正同音字。</p>
+        </header>
+        <div class="hot__text">
+          <div class="hot__stats" data-reveal style="--i:1">
+            <div class="stat">
+              <p class="stat__label">罕見詞寫對</p>
+              <p class="stat__value"><span class="from">9</span><span class="arrow" aria-hidden="true">→</span><span data-count-to="18" data-count-from="9" data-decimals="0" data-suffix="">18</span><span class="unit">／23 處</span></p>
+            </div>
+            <div class="stat">
+              <p class="stat__label">字元錯誤率</p>
+              <p class="stat__value"><span class="from">14.94%</span><span class="arrow" aria-hidden="true">→</span><span data-count-to="6.64" data-count-from="14.94" data-decimals="2" data-suffix="%">6.64%</span></p>
+            </div>
+          </div>
+          <p class="footnote" data-reveal style="--i:2">66 秒的會議錄音，含 23 處罕見人名、公司名、地名與英文術語，以語音合成念出。見<a href="https://github.com/Scorpio-meow/Breeze-ASR/blob/main/docs/benchmarks.md#熱詞">效能實測</a>。</p>
+        </div>
+        <div class="hot__demo" data-reveal style="--i:1">
+          <div class="hw">
+            <p class="hw__label">熱詞</p>
+            <p class="hw__input">會中提到 Docker 映像檔、SRT 字幕檔、Word 逐字稿與 OpenVINO。</p>
+          </div>
+          <ol class="fix" data-fixes>
+            <li><span class="fix__t">0:00:09.40</span><span class="fix__x">那 <s>docker 印象檔</s><ins data-scramble>Docker 映像檔</ins>就下週發佈。</span></li>
+            <li><span class="fix__t">0:00:17.76</span><span class="fix__x">我先匯出 <s>srt word</s><ins data-scramble>SRT、Word</ins> 逐字稿</span></li>
+            <li><span class="fix__t">0:00:23.60</span><span class="fix__x">好，<s>openvino</s><ins data-scramble>OpenVINO</ins> 的版本</span></li>
+          </ol>
+          <ul class="fix-more" aria-label="實測修正的例子">
+            <li><s>細質</s>汐止</li>
+            <li><s>英歌</s>鶯歌</li>
+            <li><s>superbase</s>Supabase</li>
+            <li><s>Piano</s>pyannote</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+    <section class="section perf" id="performance" aria-labelledby="performance-title">
+      <div class="wrap">
+        <header class="sec-head" data-reveal>
+          <p class="eyebrow"><span>04</span>效能</p>
+          <h2 id="performance-title">自動調校，替每台電腦挑最快的設定</h2>
+          <p class="sec-lead">第一次啟動時，用內附的 29 秒範例語音實測每個裝置與權重格式，淘汰錯誤率過高的格式，再選出最快的一個。</p>
+        </header>
+        <div class="perf__grid">
+          <figure class="bars" data-reveal style="--i:1" aria-labelledby="bars-title">
+            <figcaption class="bars__head">
+              <span class="bars__title" id="bars-title">各機器自動調校選中的設定</span>
+              <span class="bars__unit">速度＝處理秒數 ÷ 音訊秒數，越小越快</span>
+            </figcaption>
+            <div class="bars__switch" role="group" aria-label="顯示方式">
+              <button type="button" aria-pressed="true" data-bars-view="chart">圖表</button>
+              <button type="button" aria-pressed="false" data-bars-view="table">表格</button>
+            </div>
+            <div class="bars__chart" data-bars-chart>
+              <div class="bars__scale" aria-hidden="true"><span style="--at:0">0</span><span style="--at:0.25">0.25</span><span style="--at:0.5">0.5</span><span style="--at:0.75">0.75</span><span style="--at:1">1.0</span></div>
+              <ul class="bars__list">
+                <li class="bars__row" tabindex="0" style="--v:0.021;--end:0.021;--i:0" data-tip-name="Ryzen 9 9950X3D＋RTX 5090・PyTorch fp16" data-tip-more="顯示記憶體 3.8 GB・整輪調校約 1.5–2 分鐘（含轉換）">
+                  <span class="bars__name">Ryzen 9 9950X3D＋RTX 5090<small>PyTorch fp16</small></span>
+                  <span class="bars__plot"><span class="bars__fill"></span><span class="bars__val" data-count-to="0.021" data-count-from="0" data-decimals="3" data-suffix="">0.021</span></span>
+                </li>
+                <li class="bars__row" tabindex="0" style="--v:0.34;--end:0.34;--i:1" data-tip-name="Core i5-12500H・Iris Xe 內顯・int8" data-tip-more="記憶體 3.1 GB・整輪調校約 6 分鐘（int8 已轉好）">
+                  <span class="bars__name">Core i5-12500H<small>Iris Xe 內顯・int8</small></span>
+                  <span class="bars__plot"><span class="bars__fill"></span><span class="bars__val" data-count-to="0.34" data-count-from="0" data-decimals="2" data-suffix="">0.34</span></span>
+                </li>
+                <li class="bars__row" tabindex="0" style="--v:0.38;--end:0.38;--i:2" data-tip-name="Core Ultra 7 155U・內顯・int8" data-tip-more="記憶體 2.8 GB・整輪調校約 7 分鐘（int8 已轉好）">
+                  <span class="bars__name">Core Ultra 7 155U<small>內顯・int8</small></span>
+                  <span class="bars__plot"><span class="bars__fill"></span><span class="bars__val" data-count-to="0.38" data-count-from="0" data-decimals="2" data-suffix="">0.38</span></span>
+                </li>
+                <li class="bars__row" tabindex="0" style="--v:0.66;--end:0.66;--i:3" data-tip-name="Core i7-9700・CPU・int8" data-tip-more="記憶體 2.2 GB・整輪調校約 35 分鐘（8 GB 記憶體不足，fp16 換頁）">
+                  <span class="bars__name">Core i7-9700<small>CPU・int8</small></span>
+                  <span class="bars__plot"><span class="bars__fill"></span><span class="bars__val" data-count-to="0.66" data-count-from="0" data-decimals="2" data-suffix="">0.66</span></span>
+                </li>
+              </ul>
+              <div class="bars__tip" data-bars-tip hidden><b></b><span></span><small></small></div>
+            </div>
+            <div class="bars__table-wrap" data-bars-table hidden>
+              <table class="bars__table" role="table">
+                <thead><tr role="row"><th role="columnheader" scope="col">機器與選中的設定</th><th role="columnheader" scope="col" class="num">速度</th><th role="columnheader" scope="col" class="num">記憶體</th><th role="columnheader" scope="col" class="num">整輪調校</th></tr></thead>
+                <tbody>
+                  <tr role="row"><th role="rowheader" scope="row">Ryzen 9 9950X3D＋RTX 5090<small>RTX 5090・PyTorch fp16</small></th><td role="cell" class="num" data-label="速度">0.021</td><td role="cell" class="num" data-label="記憶體">3.8 GB<small>顯示記憶體</small></td><td role="cell" class="num" data-label="整輪調校">約 1.5–2 分鐘</td></tr>
+                  <tr role="row"><th role="rowheader" scope="row">Core i5-12500H<small>Iris Xe 內顯・int8</small></th><td role="cell" class="num" data-label="速度">0.34</td><td role="cell" class="num" data-label="記憶體">3.1 GB</td><td role="cell" class="num" data-label="整輪調校">約 6 分鐘</td></tr>
+                  <tr role="row"><th role="rowheader" scope="row">Core Ultra 7 155U<small>內顯・int8</small></th><td role="cell" class="num" data-label="速度">0.38</td><td role="cell" class="num" data-label="記憶體">2.8 GB</td><td role="cell" class="num" data-label="整輪調校">約 7 分鐘</td></tr>
+                  <tr role="row"><th role="rowheader" scope="row">Core i7-9700<small>CPU・int8</small></th><td role="cell" class="num" data-label="速度">0.66</td><td role="cell" class="num" data-label="記憶體">2.2 GB</td><td role="cell" class="num" data-label="整輪調校">約 35 分鐘</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </figure>
+          <div class="perf__facts">
+            <div class="fact" data-reveal style="--i:2">
+              <p class="fact__value"><span data-count-to="74" data-count-from="0" data-decimals="0" data-suffix="">74</span><small>秒</small></p>
+              <p class="fact__text">RTX 5090 處理 1 小時錄音約 74 秒。</p>
+            </div>
+            <div class="fact" data-reveal style="--i:3">
+              <p class="fact__value"><span data-count-to="15" data-count-from="0" data-decimals="0" data-suffix="">15</span><small>秒</small></p>
+              <p class="fact__text">調校完寫出硬體設定檔，之後啟動約 15 秒就緒。</p>
+            </div>
+          </div>
+        </div>
+        <div class="tune" data-reveal style="--i:2">
+          <p class="tune__head"><span>Core Ultra 7 155U 的實測</span><span class="tune__sub">選中：和最快的內顯・fp16 相差 5% 以內，記憶體少 1.4 GB</span></p>
+          <div class="tune__scroll">
+            <table class="tune__table">
+              <thead><tr><th scope="col">組合</th><th scope="col" class="num">速度</th><th scope="col" class="num">字元錯誤率</th><th scope="col" class="num">記憶體</th><th scope="col">結果</th></tr></thead>
+              <tbody>
+                <tr><th scope="row">CPU・int4</th><td class="num">0.38</td><td class="num">2.8%</td><td class="num">1.6 GB</td><td><span class="chip chip--out">淘汰</span></td></tr>
+                <tr><th scope="row">CPU・int8</th><td class="num">0.41</td><td class="num">1.7%</td><td class="num">2.2 GB</td><td><span class="chip">可用</span></td></tr>
+                <tr><th scope="row">CPU・fp16</th><td class="num">0.69</td><td class="num">1.7%</td><td class="num">4.8 GB</td><td><span class="chip">可用</span></td></tr>
+                <tr class="is-pick"><th scope="row">內顯・int8</th><td class="num">0.382</td><td class="num">1.7%</td><td class="num">2.8 GB</td><td><span class="chip chip--pick">選中</span></td></tr>
+                <tr><th scope="row">內顯・fp16</th><td class="num">0.378</td><td class="num">1.7%</td><td class="num">4.2 GB</td><td><span class="chip">可用</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="section privacy" id="privacy" aria-labelledby="privacy-title">
+      <div class="wrap">
+        <header class="sec-head" data-reveal>
+          <p class="eyebrow"><span>05</span>隱私</p>
+          <h2 id="privacy-title">錄音與逐字稿留在這台電腦</h2>
+          <p class="sec-lead">開發者不經營任何伺服器，也不收集你的錄音、逐字稿與使用情形。沒有帳號、沒有分析追蹤、沒有廣告。</p>
+        </header>
+        <div class="flow" data-reveal style="--i:1">
+          <div class="flow__local">
+            <p class="flow__title">這台電腦</p>
+            <div class="flow__row">
+              <span class="node">瀏覽器</span>
+              <span class="wire wire--both" aria-hidden="true"><i></i></span>
+              <span class="node node--main">Breeze ASR 服務</span>
+              <span class="wire wire--both" aria-hidden="true"><i></i></span>
+              <span class="node">資料目錄<small>結果、詞彙表、語者庫、日誌</small></span>
+            </div>
+            <div class="flow__row flow__row--sub">
+              <span class="node">監看資料夾</span>
+              <span class="wire wire--up" aria-hidden="true"><i></i></span>
+            </div>
+          </div>
+          <ul class="flow__out">
+            <li><span class="node node--out">Hugging Face</span><span class="cond">只在下載模型時</span></li>
+            <li><span class="node node--out">手機、平板或其他電腦</span><span class="cond">只有開放其他裝置連線時，要帶存取權杖</span></li>
+            <li><span class="node node--out">既有的 Breeze ASR 服務</span><span class="cond">只有設成 remote 的模型</span></li>
+            <li><span class="node node--out">MCP 用戶端</span><span class="cond">只有使用 MCP server 時</span></li>
+          </ul>
+        </div>
+        <ul class="privacy__facts">
+          <li data-reveal style="--i:1"><b>上傳的音訊辨識完就刪除</b><span>辨識結果預設保留 1 天，從最後一次修改起算。</span></li>
+          <li data-reveal style="--i:2"><b>用量回報都關閉</b><span>OpenVINO、NNCF 與 Hugging Face 的用量統計不會送出。</span></li>
+          <li data-reveal style="--i:3"><b>聲紋需要同意</b><span>聲紋屬於個人生物特徵，記住別人的聲音前請先取得對方同意。</span></li>
+        </ul>
+        <p class="privacy__more" data-reveal><a class="link" href="https://github.com/Scorpio-meow/Breeze-ASR/blob/main/PRIVACY.md">閱讀隱私權政策</a></p>
+      </div>
+    </section>
+    <section class="section cli" id="cli" aria-labelledby="cli-title">
+      <div class="wrap cli__grid">
+        <div class="cli__text">
+          <header class="sec-head" data-reveal>
+            <p class="eyebrow"><span>06</span>命令列與 MCP</p>
+            <h2 id="cli-title">批次轉檔，或讓 AI 助理直接呼叫</h2>
+            <p class="sec-lead">命令列工具與 MCP server 都呼叫這台電腦上執行中的服務，檔案不經過其他地方。</p>
+          </header>
+          <ul class="cli__list" data-reveal style="--i:1">
+            <li><code>transcribe</code>一次送出多個檔案，結果寫在原檔旁邊</li>
+            <li><code>jobs</code>列出服務裡保留中的工作</li>
+            <li><code>export</code>下載某個工作的任一格式</li>
+            <li>MCP 提供 7 個工具與「整理會議紀錄」「校對逐字稿」兩個提示</li>
+          </ul>
+          <p class="cli__warn" data-reveal style="--i:2">逐字稿會進到 MCP 用戶端的對話裡，可能因此送到外部 AI 服務；不能交給外部 AI 的錄音，只用網頁或命令列工具。</p>
+        </div>
+        <div class="term" data-reveal style="--i:1">
+          <div class="term__tabs" role="tablist" aria-label="範例" data-tabs>
+            <button type="button" role="tab" id="tab-cli" aria-controls="panel-cli" aria-selected="true">命令列</button>
+            <button type="button" role="tab" id="tab-mcp" aria-controls="panel-mcp" aria-selected="false" tabindex="-1">MCP server</button>
+          </div>
+          <div class="term__panel" role="tabpanel" id="panel-cli" aria-labelledby="tab-cli" data-typewriter>
+            <pre class="term__pre"><span class="p">PS&gt;</span> <span class="cmd" data-type-cmd>uv run --no-sync --env-file .env python -m app.cli transcribe 週會.m4a --speakers auto --punctuation on --formats md,srt</span>
+<span class="out" style="--i:0">週會.m4a：已送出（工作 z3Nq8gjFtZ4y0v3H）</span>
+<span class="out" style="--i:1">週會.m4a：處理中</span>
+<span class="out" style="--i:2">週會.m4a：辨識中</span>
+<span class="out" style="--i:3">週會.m4a：<span class="ok">完成，8 段</span></span>
+<span class="out" style="--i:4">週會.m4a.md</span>
+<span class="out" style="--i:5">週會.m4a.srt</span></pre>
+          </div>
+          <div class="term__panel" role="tabpanel" id="panel-mcp" aria-labelledby="tab-mcp">
+<pre class="term__pre"><span class="p">PS&gt;</span> <span class="cmd">claude mcp add breeze-asr -- uv run --directory C:/code/Breeze-ASR --no-sync --env-file .env python -m app.mcp_server</span></pre>
+            <table class="tools">
+              <thead><tr><th scope="col">工具</th><th scope="col">用途</th></tr></thead>
+              <tbody>
+                <tr><td><code>list_models</code></td><td>可用的模型</td></tr>
+                <tr><td><code>transcribe</code></td><td>辨識這台電腦上的檔案</td></tr>
+                <tr><td><code>job_status</code></td><td>工作進度</td></tr>
+                <tr><td><code>get_transcript</code></td><td>取得逐字稿：md、txt、srt、vtt、ass、json</td></tr>
+                <tr><td><code>list_jobs</code></td><td>工作清單</td></tr>
+                <tr><td><code>cancel_job</code></td><td>取消工作</td></tr>
+                <tr><td><code>rename_speaker</code></td><td>替說話者改名</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="section install" id="install" aria-labelledby="install-title">
+      <div class="wrap">
+        <header class="sec-head" data-reveal>
+          <p class="eyebrow"><span>07</span>安裝</p>
+          <h2 id="install-title">安裝與系統需求</h2>
+          <p class="sec-lead">安裝腳本會自動安裝 uv 與符合顯示卡的 PyTorch。啟動後開啟 <code>http://127.0.0.1:7860</code>，把音訊或影片拖進視窗，再按「辨識」。</p>
+        </header>
+        <div class="install__grid">
+          <div class="steps" data-reveal style="--i:1">
+            <div class="steps__tabs" role="tablist" aria-label="安裝方式" data-tabs>
+              <button type="button" role="tab" id="tab-win" aria-controls="panel-win" aria-selected="true">Windows</button>
+              <button type="button" role="tab" id="tab-linux" aria-controls="panel-linux" aria-selected="false" tabindex="-1">Linux</button>
+              <button type="button" role="tab" id="tab-docker" aria-controls="panel-docker" aria-selected="false" tabindex="-1">Docker</button>
+            </div>
+            <div class="steps__panel" role="tabpanel" id="panel-win" aria-labelledby="tab-win">
+              <ol class="cmds">
+                <li><span class="cmds__label">取得程式碼</span><div class="cmd-line"><code>git clone https://github.com/Scorpio-meow/Breeze-ASR.git</code><button type="button" class="copy" data-copy>複製</button></div></li>
+                <li><span class="cmds__label">在專案根目錄開 PowerShell 執行</span><div class="cmd-line"><code>powershell -ExecutionPolicy Bypass -File scripts\install.ps1</code><button type="button" class="copy" data-copy>複製</button></div></li>
+              </ol>
+              <p class="steps__note">安裝完成後，桌面會有「Breeze ASR」捷徑。</p>
+            </div>
+            <div class="steps__panel" role="tabpanel" id="panel-linux" aria-labelledby="tab-linux">
+              <ol class="cmds">
+                <li><span class="cmds__label">取得程式碼</span><div class="cmd-line"><code>git clone https://github.com/Scorpio-meow/Breeze-ASR.git</code><button type="button" class="copy" data-copy>複製</button></div></li>
+                <li><span class="cmds__label">安裝</span><div class="cmd-line"><code>bash scripts/install.sh</code><button type="button" class="copy" data-copy>複製</button></div></li>
+                <li><span class="cmds__label">啟動</span><div class="cmd-line"><code>bash scripts/start.sh</code><button type="button" class="copy" data-copy>複製</button></div></li>
+              </ol>
+            </div>
+            <div class="steps__panel" role="tabpanel" id="panel-docker" aria-labelledby="tab-docker">
+              <ol class="cmds">
+                <li><span class="cmds__label">取得程式碼</span><div class="cmd-line"><code>git clone https://github.com/Scorpio-meow/Breeze-ASR.git</code><button type="button" class="copy" data-copy>複製</button></div></li>
+                <li><span class="cmds__label">建立設定檔</span><div class="cmd-line"><code>cp .env.example .env</code><button type="button" class="copy" data-copy>複製</button></div></li>
+                <li><span class="cmds__label">建置並啟動</span><div class="cmd-line"><code>docker compose up -d --build</code><button type="button" class="copy" data-copy>複製</button></div></li>
+              </ol>
+              <p class="steps__note">NVIDIA、AMD 顯示卡與 GitHub 發布的映像檔，見<a href="https://github.com/Scorpio-meow/Breeze-ASR/blob/main/docs/deployment.md#docker">部署</a>。</p>
+            </div>
+            <p class="first-run"><b>第一次啟動</b>會下載約 9 GB 的模型並自動調校，約需數分鐘到十幾分鐘；之後啟動約 15 秒就緒。</p>
+            <p class="sr" aria-live="polite" data-copy-status></p>
+          </div>
+          <div class="req" data-reveal style="--i:2">
+            <dl class="req__list">
+              <div><dt>作業系統</dt><dd>Windows（x64）、Linux，或任何能執行 Docker 的系統</dd></div>
+              <div><dt>記憶體</dt><dd>建議 16 GB 以上</dd></div>
+              <div><dt>磁碟</dt><dd>約 16 GB</dd></div>
+              <div><dt>加速</dt><dd>Intel 內顯（OpenVINO）、NVIDIA GPU（CUDA）、AMD GPU（ROCm，僅 Linux），沒有也能用 CPU</dd></div>
+            </dl>
+            <div class="models-list">
+              <a class="model-card" href="https://huggingface.co/MediaTek-Research/Breeze-ASR-25">
+                <span class="model-card__name">Breeze ASR 25</span>
+                <span class="model-card__text">臺灣華語、中英夾雜；時間戳記準，適合做字幕</span>
+              </a>
+              <a class="model-card" href="https://huggingface.co/MediaTek-Research/Breeze-ASR-26">
+                <span class="model-card__name">Breeze ASR 26</span>
+                <span class="model-card__text">臺灣台語，輸出華語漢字</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer class="closing">
+    <div class="closing__wave" aria-hidden="true"><svg viewBox="0 0 2000 200" preserveAspectRatio="none"><path d="M0 99L5 99L10 99L14 99L19 99L24 99L29 99L33 88L38 57L43 56L48 71L53 66L57 77L62 87L67 71L72 68L76 84L81 73L86 66L91 77L95 72L100 76L105 85L110 82L115 75L119 75L124 64L129 61L134 71L138 74L143 74L148 90L153 57L158 60L162 88L167 78L172 69L177 86L181 88L186 81L191 83L196 85L200 75L205 85L210 91L215 99L220 99L224 99L229 99L234 99L239 99L243 99L248 99L253 99L258 99L263 99L267 99L272 99L277 99L282 99L286 99L291 99L296 82L301 65L305 66L310 82L315 70L320 53L325 58L329 59L334 53L339 80L344 50L348 46L353 77L358 56L363 55L368 86L372 49L377 77L382 62L387 65L391 86L396 54L401 73L406 42L411 51L415 65L420 91L425 99L430 99L434 90L439 50L444 63L449 98L453 62L458 62L463 47L468 67L473 59L477 55L482 71L487 51L492 61L496 66L501 59L506 60L511 78L516 99L520 99L525 99L530 99L535 99L539 99L544 99L549 99L554 99L558 99L563 99L568 99L573 99L578 99L582 99L587 99L592 99L597 99L601 99L606 90L611 53L616 66L621 94L625 51L630 38L635 94L640 71L644 59L649 58L654 82L659 77L663 82L668 74L673 38L678 73L683 89L687 47L692 82L697 93L702 68L706 61L711 75L716 72L721 38L726 61L730 94L735 60L740 63L745 89L749 42L754 57L759 93L764 81L768 85L773 98L778 99L783 99L788 99L792 99L797 99L802 99L807 99L811 99L816 99L821 99L826 99L831 99L835 99L840 99L845 99L850 99L854 99L859 99L864 71L869 66L874 89L878 85L883 80L888 85L893 9L897 32L902 89L907 17L912 4L916 80L921 74L926 81L931 77L936 58L940 63L945 87L950 84L955 97L959 90L964 67L969 83L974 95L979 86L983 96L988 66L993 62L998 92L1002 99L1007 99L1012 99L1017 99L1021 99L1026 99L1031 99L1036 99L1041 99L1045 99L1050 99L1055 99L1060 99L1064 99L1069 99L1074 99L1079 99L1084 99L1088 99L1093 99L1098 99L1103 74L1107 58L1112 59L1117 57L1122 62L1126 50L1131 68L1136 69L1141 53L1146 74L1150 55L1155 50L1160 81L1165 51L1169 59L1174 94L1179 58L1184 55L1189 61L1193 98L1198 45L1203 42L1208 58L1212 97L1217 64L1222 68L1227 85L1232 99L1236 99L1241 80L1246 59L1251 60L1255 72L1260 96L1265 56L1270 66L1274 66L1279 55L1284 52L1289 55L1294 84L1298 55L1303 59L1308 76L1313 76L1317 93L1322 62L1327 74L1332 52L1337 60L1341 95L1346 51L1351 52L1356 54L1360 72L1365 99L1370 99L1375 99L1379 99L1384 99L1389 99L1394 99L1399 99L1403 99L1408 99L1413 99L1418 99L1422 99L1427 99L1432 99L1437 99L1442 99L1446 99L1451 82L1456 50L1461 93L1465 99L1470 99L1475 57L1480 63L1484 74L1489 52L1494 82L1499 95L1504 78L1508 84L1513 65L1518 69L1523 79L1527 57L1532 76L1537 52L1542 74L1547 66L1551 62L1556 80L1561 80L1566 75L1570 93L1575 74L1580 87L1585 87L1589 88L1594 98L1599 90L1604 93L1609 91L1613 66L1618 78L1623 76L1628 69L1632 86L1637 99L1642 99L1647 99L1652 99L1656 99L1661 99L1666 99L1671 99L1675 99L1680 99L1685 99L1690 99L1695 99L1699 99L1704 99L1709 99L1714 99L1718 99L1723 99L1728 52L1733 51L1737 76L1742 77L1747 50L1752 67L1757 81L1761 74L1766 76L1771 62L1776 37L1780 56L1785 87L1790 99L1795 99L1800 98L1804 59L1809 41L1814 65L1819 93L1823 59L1828 63L1833 83L1838 82L1842 83L1847 68L1852 52L1857 68L1862 72L1866 61L1871 69L1876 91L1881 87L1885 90L1890 99L1895 79L1900 80L1905 94L1909 78L1914 86L1919 85L1924 74L1928 84L1933 98L1938 99L1943 99L1947 99L1952 99L1957 99L1962 99L1967 99L1971 99L1976 99L1981 99L1986 99L1990 99L1995 99L2000 99L2000 101L1995 101L1990 101L1986 101L1981 101L1976 101L1971 101L1967 101L1962 101L1957 101L1952 101L1947 101L1943 101L1938 101L1933 102L1928 116L1924 126L1919 115L1914 114L1909 122L1905 106L1900 120L1895 121L1890 101L1885 110L1881 113L1876 109L1871 131L1866 139L1862 128L1857 132L1852 148L1847 132L1842 117L1838 118L1833 117L1828 137L1823 141L1819 107L1814 135L1809 159L1804 141L1800 102L1795 101L1790 101L1785 113L1780 144L1776 163L1771 138L1766 124L1761 126L1757 119L1752 133L1747 150L1742 123L1737 124L1733 149L1728 148L1723 101L1718 101L1714 101L1709 101L1704 101L1699 101L1695 101L1690 101L1685 101L1680 101L1675 101L1671 101L1666 101L1661 101L1656 101L1652 101L1647 101L1642 101L1637 101L1632 114L1628 131L1623 124L1618 122L1613 134L1609 109L1604 107L1599 110L1594 102L1589 112L1585 113L1580 113L1575 126L1570 107L1566 125L1561 120L1556 120L1551 138L1547 134L1542 126L1537 148L1532 124L1527 143L1523 121L1518 131L1513 135L1508 116L1504 122L1499 105L1494 118L1489 148L1484 126L1480 137L1475 143L1470 101L1465 101L1461 107L1456 150L1451 118L1446 101L1442 101L1437 101L1432 101L1427 101L1422 101L1418 101L1413 101L1408 101L1403 101L1399 101L1394 101L1389 101L1384 101L1379 101L1375 101L1370 101L1365 101L1360 128L1356 146L1351 148L1346 149L1341 105L1337 140L1332 148L1327 126L1322 138L1317 107L1313 124L1308 124L1303 141L1298 145L1294 116L1289 145L1284 148L1279 145L1274 134L1270 134L1265 144L1260 104L1255 128L1251 140L1246 141L1241 120L1236 101L1232 101L1227 115L1222 132L1217 136L1212 103L1208 142L1203 158L1198 155L1193 102L1189 139L1184 145L1179 142L1174 106L1169 141L1165 149L1160 119L1155 150L1150 145L1146 126L1141 147L1136 131L1131 132L1126 150L1122 138L1117 143L1112 141L1107 142L1103 126L1098 101L1093 101L1088 101L1084 101L1079 101L1074 101L1069 101L1064 101L1060 101L1055 101L1050 101L1045 101L1041 101L1036 101L1031 101L1026 101L1021 101L1017 101L1012 101L1007 101L1002 101L998 108L993 138L988 134L983 104L979 114L974 105L969 117L964 133L959 110L955 103L950 116L945 113L940 137L936 142L931 123L926 119L921 126L916 120L912 196L907 183L902 111L897 168L893 191L888 115L883 120L878 115L874 111L869 134L864 129L859 101L854 101L850 101L845 101L840 101L835 101L831 101L826 101L821 101L816 101L811 101L807 101L802 101L797 101L792 101L788 101L783 101L778 101L773 102L768 115L764 119L759 107L754 143L749 158L745 111L740 137L735 140L730 106L726 139L721 162L716 128L711 125L706 139L702 132L697 107L692 118L687 153L683 111L678 127L673 162L668 126L663 118L659 123L654 118L649 142L644 141L640 129L635 106L630 162L625 149L621 106L616 134L611 147L606 110L601 101L597 101L592 101L587 101L582 101L578 101L573 101L568 101L563 101L558 101L554 101L549 101L544 101L539 101L535 101L530 101L525 101L520 101L516 101L511 122L506 140L501 141L496 134L492 139L487 149L482 129L477 145L473 141L468 133L463 153L458 138L453 138L449 102L444 137L439 150L434 110L430 101L425 101L420 109L415 135L411 149L406 158L401 127L396 146L391 114L387 135L382 138L377 123L372 151L368 114L363 145L358 144L353 123L348 154L344 150L339 120L334 147L329 141L325 142L320 147L315 130L310 118L305 134L301 135L296 118L291 101L286 101L282 101L277 101L272 101L267 101L263 101L258 101L253 101L248 101L243 101L239 101L234 101L229 101L224 101L220 101L215 101L210 109L205 115L200 125L196 115L191 117L186 119L181 112L177 114L172 131L167 122L162 112L158 140L153 143L148 110L143 126L138 126L134 129L129 139L124 136L119 125L115 125L110 118L105 115L100 124L95 128L91 123L86 134L81 127L76 116L72 132L67 129L62 113L57 123L53 134L48 129L43 144L38 143L33 112L29 101L24 101L19 101L14 101L10 101L5 101L0 101Z"/></svg></div>
+    <div class="wrap">
+      <div class="closing__cta">
+        <picture class="closing__mark">
+          <source srcset="images/mark-dark.svg" media="(prefers-color-scheme: dark)">
+          <img src="images/mark.svg" alt="" width="160" height="160">
+        </picture>
+        <p class="closing__title">Breeze <span>ASR</span></p>
+        <p class="closing__text">開源、MIT 授權，在你自己的電腦上執行。</p>
+        <div class="closing__actions">
+          <a class="btn btn--primary btn--lg" href="#install" data-magnetic>安裝 Breeze ASR</a>
+          <a class="btn btn--ghost btn--lg" href="https://github.com/Scorpio-meow/Breeze-ASR">在 GitHub 查看原始碼</a>
+        </div>
+      </div>
+      <div class="closing__links">
+        <nav aria-label="文件">
+          <p class="closing__head">文件</p>
+          <ul>
+            <li><a href="https://github.com/Scorpio-meow/Breeze-ASR/blob/main/docs/deployment.md">部署</a></li>
+            <li><a href="https://github.com/Scorpio-meow/Breeze-ASR/blob/main/docs/configuration.md">設定</a></li>
+            <li><a href="https://github.com/Scorpio-meow/Breeze-ASR/blob/main/docs/how-it-works.md">運作方式</a></li>
+            <li><a href="https://github.com/Scorpio-meow/Breeze-ASR/blob/main/docs/api.md">API</a></li>
+            <li><a href="https://github.com/Scorpio-meow/Breeze-ASR/blob/main/docs/cli.md">命令列與 MCP</a></li>
+            <li><a href="https://github.com/Scorpio-meow/Breeze-ASR/blob/main/docs/benchmarks.md">效能實測</a></li>
+          </ul>
+        </nav>
+        <nav aria-label="專案">
+          <p class="closing__head">專案</p>
+          <ul>
+            <li><a href="https://github.com/Scorpio-meow/Breeze-ASR/blob/main/CHANGELOG.md">更新紀錄</a></li>
+            <li><a href="https://github.com/Scorpio-meow/Breeze-ASR/blob/main/PRIVACY.md">隱私權政策</a></li>
+            <li><a href="https://github.com/Scorpio-meow/Breeze-ASR/blob/main/SECURITY.md">安全性</a></li>
+            <li><a href="https://github.com/Scorpio-meow/Breeze-ASR/blob/main/ACCESSIBILITY.md">無障礙</a></li>
+            <li><a href="https://github.com/Scorpio-meow/Breeze-ASR/blob/main/CONTRIBUTING.md">參與開發</a></li>
+            <li><a href="https://github.com/Scorpio-meow/Breeze-ASR/blob/main/NOTICE.md">第三方聲明</a></li>
+          </ul>
+        </nav>
+      </div>
+      <div class="closing__legal">
+        <p>© 2026 Scorpio-meow・程式碼以 MIT 授權釋出</p>
+        <p>非官方專案，與 MediaTek 無關；Breeze ASR 是 MediaTek Research 的模型名稱。</p>
+        <p>字型：Noto Sans TC（<a href="fonts/OFL.txt">SIL Open Font License 1.1</a>）</p>
+      </div>
+    </div>
+  </footer>
+</body>
+
+</html>

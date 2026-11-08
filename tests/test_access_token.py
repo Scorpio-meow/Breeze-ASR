@@ -51,9 +51,20 @@ def _login(http: TestClient, token: str, **headers: str) -> httpx.Response:
 
 
 def test_page_and_health_check_stay_public(guarded):
-    for path in ("/", "/index.html", "/app.js", "/styles.css", "/icon.svg", "/api/health"):
+    pages = (
+        "/",
+        "/index.html",
+        "/app.js",
+        "/styles.css",
+        "/icon.svg",
+        "/favicon.ico",
+        "/apple-touch-icon.png",
+        "/manifest.webmanifest",
+    )
+    for path in (*pages, "/api/health"):
         assert guarded.get(path).status_code == 200, path
-    assert guarded.get("/favicon.ico", follow_redirects=False).status_code == 308
+    for icon in guarded.get("/manifest.webmanifest").json()["icons"]:
+        assert guarded.get(f"/{icon['src']}").status_code == 200, icon["src"]
 
 
 def test_api_and_unknown_paths_need_the_token(guarded):

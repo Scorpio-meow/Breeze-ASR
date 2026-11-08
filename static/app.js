@@ -1,5 +1,4 @@
 const $ = (id) => document.getElementById(id);
-
 const MODEL_STATE_LABELS = {
   waiting: "等待準備",
   downloading: "下載中",
@@ -9,7 +8,6 @@ const MODEL_STATE_LABELS = {
   ready: "已就緒",
   failed: "無法使用",
 };
-
 const STAGE_LABELS = {
   preparing: "準備模型",
   loading: "載入模型",
@@ -17,12 +15,10 @@ const STAGE_LABELS = {
   punctuating: "加標點",
   diarizing: "分辨說話者",
 };
-
 const STATUS_LABELS = { queued: "排隊中", running: "處理中", succeeded: "完成", failed: "失敗", cancelled: "已取消" };
 const RENDER_LABELS = { queued: "排隊中", running: "燒錄中", cancelling: "取消中", succeeded: "完成", failed: "失敗", cancelled: "已取消" };
 const CANDIDATE_STATUS = { ok: "可用", rejected: "錯誤率太高", failed: "無法執行" };
 const EXPORT_FORMATS = ["srt", "vtt", "ass", "txt", "md", "docx", "json"];
-
 const STORAGE_KEYS = {
   model: "breeze-asr:model",
   view: "breeze-asr:view",
@@ -51,7 +47,6 @@ const SEEK_STEP_SECONDS = 5;
 const SEEK_PAGE_SECONDS = 30;
 const TOUCH_SLOP_PX = 8;
 const RULER_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600];
-
 const state = {
   config: null,
   audio: null,
@@ -83,9 +78,7 @@ const state = {
   waveToken: 0,
   frame: 0,
 };
-
 const nameSaves = new WeakMap();
-
 function storageGet(key) {
   try {
     return localStorage.getItem(key);
@@ -93,7 +86,6 @@ function storageGet(key) {
     return null;
   }
 }
-
 function storageSet(key, value) {
   try {
     localStorage.setItem(key, value);
@@ -102,7 +94,6 @@ function storageSet(key, value) {
     return false;
   }
 }
-
 function storageRemove(key) {
   try {
     localStorage.removeItem(key);
@@ -110,10 +101,8 @@ function storageRemove(key) {
     return;
   }
 }
-
 const CLIENT_ERROR_LIMIT = 20;
 const reportedErrors = new Set();
-
 function reportClientError(kind, message, source) {
   const key = `${kind}|${message}|${source}`;
   if (reportedErrors.has(key) || reportedErrors.size >= CLIENT_ERROR_LIMIT) return;
@@ -123,9 +112,8 @@ function reportClientError(kind, message, source) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ kind, message: String(message), source: String(source) }),
     keepalive: true,
-  }).catch(() => {});
+  }).catch(() => { });
 }
-
 function bindErrorReports() {
   window.addEventListener("error", (event) => {
     reportClientError("error", event.message, event.error?.stack ?? `${event.filename}:${event.lineno}:${event.colno}`);
@@ -135,7 +123,6 @@ function bindErrorReports() {
     reportClientError("unhandledrejection", reason instanceof Error ? reason.message : String(reason), reason?.stack ?? "");
   });
 }
-
 function announce(message) {
   const node = $("announcer");
   node.textContent = "";
@@ -143,7 +130,6 @@ function announce(message) {
     node.textContent = message;
   });
 }
-
 function clock(seconds) {
   const total = Math.max(0, Math.floor(seconds));
   const h = Math.floor(total / 3600);
@@ -153,7 +139,6 @@ function clock(seconds) {
   const ss = String(s).padStart(2, "0");
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
-
 function timecode(seconds) {
   const centis = Math.max(0, Math.round(seconds * 100));
   const h = Math.floor(centis / 360000);
@@ -162,13 +147,11 @@ function timecode(seconds) {
   const c = centis % 100;
   return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}.${String(c).padStart(2, "0")}`;
 }
-
 function parseTimecode(text) {
   const parts = text.trim().split(/[:：]/);
   if (parts.length > 3 || parts.some((part) => !/^\d+(\.\d+)?$/.test(part))) return NaN;
   return parts.reduce((total, part) => total * 60 + Number(part), 0);
 }
-
 function duration(seconds) {
   const total = Math.round(seconds);
   if (total < 60) return `${total} 秒`;
@@ -178,28 +161,23 @@ function duration(seconds) {
   const h = Math.floor(m / 60);
   return m % 60 ? `${h} 小時 ${m % 60} 分` : `${h} 小時`;
 }
-
 function bytes(n) {
   if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024))} KB`;
   if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1)} MB`;
   return `${(n / 1024 ** 3).toFixed(1)} GB`;
 }
-
 function uploadLimit(mb) {
   return mb >= 1024 && mb % 1024 === 0 ? `${mb / 1024} GB` : `${mb} MB`;
 }
-
 function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
 }
-
 function escapeRegExp(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
-
 async function api(url, options = {}) {
   const init = { method: options.method ?? "GET", cache: "no-store" };
   if (options.body !== undefined) {
@@ -216,7 +194,6 @@ async function api(url, options = {}) {
   }
   return data;
 }
-
 function twoStepButton(button, confirmLabel, onConfirm) {
   const label = button.textContent;
   let timer = 0;
@@ -237,7 +214,6 @@ function twoStepButton(button, confirmLabel, onConfirm) {
     onConfirm();
   });
 }
-
 function setStatus(line, detail, tone) {
   const node = $("status-line");
   node.textContent = line;
@@ -245,16 +221,13 @@ function setStatus(line, detail, tone) {
   else delete node.dataset.tone;
   $("status-detail").textContent = detail ?? "";
 }
-
 function setEta(ratio) {
   $("eta-wrap").hidden = ratio === null;
   if (ratio !== null) $("eta").style.transform = `scaleX(${Math.min(1, Math.max(0, ratio))})`;
 }
-
 function loginOpen() {
   return $("login-dialog").open;
 }
-
 function requireLogin() {
   const dialog = $("login-dialog");
   if (dialog.open) return;
@@ -262,7 +235,6 @@ function requireLogin() {
   dialog.showModal();
   $("login-token").focus();
 }
-
 function bindLogin() {
   const dialog = $("login-dialog");
   const form = $("login-form");
@@ -305,7 +277,6 @@ function bindLogin() {
     refreshConfig();
   });
 }
-
 async function refreshConfig() {
   if (loginOpen()) return;
   let config;
@@ -338,15 +309,12 @@ async function refreshConfig() {
   renderWatch(config.watch);
   refreshJobs();
 }
-
 function selectedModelId() {
   return $("model-select").value || null;
 }
-
 function modelById(id) {
   return state.config?.models.find((m) => m.id === id) || null;
 }
-
 function renderModels(config) {
   const select = $("model-select");
   select.replaceChildren(...config.models.map((model) => new Option(model.name, model.id)));
@@ -359,7 +327,6 @@ function renderModels(config) {
   });
   updateModelStates(config);
 }
-
 function updateModelStates(config) {
   const select = $("model-select");
   for (const model of config.models) {
@@ -371,7 +338,6 @@ function updateModelStates(config) {
   }
   updateModelStatus();
 }
-
 function updateModelStatus() {
   const model = modelById(selectedModelId());
   const node = $("model-status");
@@ -385,12 +351,10 @@ function updateModelStatus() {
     : `${model.name} ${MODEL_STATE_LABELS[model.state] || model.state}`;
   node.dataset.tone = model.error ? "error" : model.state === "ready" ? "" : "busy";
 }
-
 function renderStaticInfo(config) {
   $("open-btn").title =
     `mp3、wav、m4a、flac、ogg、webm、mp4，可一次選多個檔案\n上限 ${uploadLimit(config.max_upload_mb)}、${duration(config.max_audio_seconds)}`;
 }
-
 function renderSpeakersOption(info) {
   $("speakers-group").hidden = !info;
   $("voices-btn").hidden = !info;
@@ -402,7 +366,6 @@ function renderSpeakersOption(info) {
   select.addEventListener("change", () => storageSet(STORAGE_KEYS.speakers, select.value));
   loadVoices();
 }
-
 function renderPunctuationOption(info) {
   $("punct-group").hidden = !info;
   if (!info) return;
@@ -410,15 +373,12 @@ function renderPunctuationOption(info) {
   check.checked = storageGet(STORAGE_KEYS.punctuation) === "on";
   check.addEventListener("change", () => storageSet(STORAGE_KEYS.punctuation, check.checked ? "on" : "off"));
 }
-
 function selectedSpeakers() {
   return $("speakers-group").hidden ? "off" : $("speakers-select").value;
 }
-
 function selectedPunctuation() {
   return !$("punct-group").hidden && $("punct-check").checked ? "on" : "off";
 }
-
 function updateHotwordsOption() {
   const check = $("hotwords-check");
   const group = $("hotwords-group");
@@ -432,11 +392,9 @@ function updateHotwordsOption() {
   group.classList.toggle("is-disabled", !!reason);
   group.title = reason || `辨識時參考：${hotwords}`;
 }
-
 function selectedHotwords() {
   return $("hotwords-check").checked && !$("hotwords-check").disabled ? state.glossary.hotwords : "";
 }
-
 function renderNotice(config) {
   const hardware = config.hardware;
   const speakers = config.speakers;
@@ -475,7 +433,6 @@ function renderNotice(config) {
   node.dataset.tone = tone;
   node.hidden = !text;
 }
-
 function renderWatch(watch) {
   const node = $("watch-summary");
   node.textContent = watch ? `監看中${watch.active ? `（${watch.active} 個處理中）` : ""}` : "";
@@ -483,7 +440,6 @@ function renderWatch(watch) {
     ? `${watch.directory}\n格式：${watch.formats.join("、")}\n說話者：${watch.speakers}，標點：${watch.punctuation ? "開" : "關"}`
     : "";
 }
-
 function hardwareLabel(hardware) {
   switch (hardware.state) {
     case "ready":
@@ -498,7 +454,6 @@ function hardwareLabel(hardware) {
       return "啟動中";
   }
 }
-
 function renderHardware(hardware) {
   $("runtime").textContent = hardwareLabel(hardware);
   $("hardware-btn").hidden = !(hardware.state === "ready" || hardware.state === "failed");
@@ -517,7 +472,6 @@ function renderHardware(hardware) {
   $("hardware-manual").hidden = !!tuning;
   if (tuning) renderTuning(tuning, hardware.settings);
 }
-
 function renderProps(list, pairs) {
   list.replaceChildren(
     ...pairs.map(([term, value, title]) => {
@@ -529,7 +483,6 @@ function renderProps(list, pairs) {
     }),
   );
 }
-
 function renderHardwareFacts(hardware) {
   const facts = [
     ["設定", hardware.summary],
@@ -544,7 +497,6 @@ function renderHardwareFacts(hardware) {
   facts.push(["設定檔", hardware.path]);
   renderProps($("hardware-facts"), facts);
 }
-
 function benchRow(item, settings) {
   const chosen =
     item.engine === settings.engine &&
@@ -571,7 +523,6 @@ function benchRow(item, settings) {
   );
   return row;
 }
-
 async function useCandidate(item, button) {
   button.disabled = true;
   try {
@@ -584,7 +535,6 @@ async function useCandidate(item, button) {
     button.disabled = false;
   }
 }
-
 function renderTuning(tuning, settings) {
   const rows = $("bench-rows");
   const key = JSON.stringify([tuning.candidates, settings]);
@@ -601,7 +551,6 @@ function renderTuning(tuning, settings) {
     }),
   );
 }
-
 function bindRetune() {
   const button = $("retune-btn");
   const hint = $("retune-hint");
@@ -639,7 +588,6 @@ function bindRetune() {
     }
   });
 }
-
 function bindDialogs() {
   $("voices-btn").addEventListener("click", () => {
     loadVoices();
@@ -652,7 +600,6 @@ function bindDialogs() {
     });
   }
 }
-
 async function refreshJobs() {
   try {
     const data = await api("/api/jobs");
@@ -662,13 +609,11 @@ async function refreshJobs() {
   }
   renderJobs();
 }
-
 function jobStatusText(job) {
   if (job.status === "running") return STAGE_LABELS[job.stage] || "處理中";
   if (job.status === "succeeded") return `${job.segments} 段`;
   return STATUS_LABELS[job.status] ?? job.status;
 }
-
 function jobItem(job) {
   const item = el("li", "");
   const button = el("button", "job-item");
@@ -689,7 +634,6 @@ function jobItem(job) {
   item.append(button);
   return item;
 }
-
 function renderJobs() {
   const list = $("job-list");
   $("jobs-empty").hidden = state.jobs.length > 0;
@@ -698,11 +642,9 @@ function renderJobs() {
   list.dataset.key = key;
   list.replaceChildren(...state.jobs.map(jobItem));
 }
-
 function unsentRecording() {
   return !!state.audio?.recorded && ![...state.blobs.values()].some((known) => known.blob === state.audio.blob);
 }
-
 async function openJob(id, quiet = false) {
   if (state.job?.id === id) return;
   if (state.uploading) return setStatus("上傳中，請等上傳完成再切換工作", "", "error");
@@ -727,20 +669,16 @@ async function openJob(id, quiet = false) {
   }
   startJob(job, known?.blob ?? null, true);
 }
-
 function restoreLastJob() {
   const id = storageGet(STORAGE_KEYS.job);
   if (id && !state.job) openJob(id, true);
 }
-
 function audioEl() {
   return $("media");
 }
-
 function hasVideo() {
   return audioEl().videoWidth > 0;
 }
-
 function timelineDuration() {
   const audio = audioEl();
   if (state.audio && Number.isFinite(audio.duration) && audio.duration > 0) return audio.duration;
@@ -748,11 +686,9 @@ function timelineDuration() {
   if (previewHoldsJobAudio()) return state.job.audioSeconds ?? 0;
   return 0;
 }
-
 function previewHoldsJobAudio() {
   return !!state.job && !!state.audio && state.audio.blob === state.job.blob;
 }
-
 function setAudio(blob, name) {
   const limit = state.config ? state.config.max_upload_mb * 1024 * 1024 : null;
   if (limit !== null && blob.size > limit) {
@@ -776,7 +712,6 @@ function setAudio(blob, name) {
   updateSubmit();
   updateRelink();
 }
-
 function setFiles(files) {
   if (!files.length) return;
   if (files.length === 1) {
@@ -799,13 +734,11 @@ function setFiles(files) {
   setStatus(`已選擇 ${files.length} 個檔案`, "按「辨識」全部送出排隊");
   updateSubmit();
 }
-
 function updateSubmit() {
   const busy = !!state.job && !state.job.done && !!state.audio && state.job.blob === state.audio.blob;
   $("submit-btn").disabled = !!state.recording || state.uploading || busy;
   $("submit-btn").textContent = state.batch ? `辨識 ${state.batch.length} 個` : "辨識";
 }
-
 function clearAudio() {
   if (state.uploading) return setStatus("上傳中，請等上傳完成再關閉音訊", "", "error");
   const audio = audioEl();
@@ -830,14 +763,12 @@ function clearAudio() {
   refreshTimeline();
   updateRelink();
 }
-
 function updateRelink() {
   const unlinked = !!state.result && !previewHoldsJobAudio();
   $("relink-btn").hidden = !unlinked;
   if (unlinked && !state.audio) $("selected-name").textContent = "這份字幕沒有對應的音訊";
   renderCuePanel();
 }
-
 async function linkSource(file) {
   const job = state.job;
   if (!job) return;
@@ -862,7 +793,6 @@ async function linkSource(file) {
   updateRelink();
   updateSubmit();
 }
-
 function bindUpload() {
   const input = $("file-input");
   input.addEventListener("change", () => setFiles([...(input.files ?? [])]));
@@ -900,7 +830,6 @@ function bindUpload() {
   });
   $("clear-audio").addEventListener("click", clearAudio);
 }
-
 function waitForMetadata(audio) {
   if (Number.isFinite(audio.duration)) return Promise.resolve(true);
   return new Promise((resolve) => {
@@ -915,7 +844,6 @@ function waitForMetadata(audio) {
     audio.addEventListener("error", onError);
   });
 }
-
 async function loadPeaks(blob) {
   const token = ++state.waveToken;
   const note = $("wave-note");
@@ -951,7 +879,6 @@ async function loadPeaks(blob) {
   }
   refreshTimeline();
 }
-
 function applyServerPeaks(job, blob) {
   if (state.peaks || state.audio?.blob !== blob || !job.waveform?.length) return;
   state.waveToken += 1;
@@ -960,7 +887,6 @@ function applyServerPeaks(job, blob) {
   $("wave-note").textContent = "";
   refreshTimeline();
 }
-
 function computePeaks(buffer) {
   const peaks = new Float32Array(WAVEFORM_BUCKETS);
   const length = buffer.length;
@@ -983,7 +909,6 @@ function computePeaks(buffer) {
   if (max > 0) for (let b = 0; b < WAVEFORM_BUCKETS; b += 1) peaks[b] /= max;
   return peaks;
 }
-
 function drawWaveform() {
   const canvas = $("waveform");
   const rect = canvas.getBoundingClientRect();
@@ -1008,7 +933,6 @@ function drawWaveform() {
     g.fillRect(x, mid - bar / 2, step, bar);
   }
 }
-
 function renderRuler() {
   const ruler = $("ruler");
   ruler.replaceChildren();
@@ -1022,16 +946,13 @@ function renderRuler() {
     ruler.append(tick);
   }
 }
-
 function speakerName(id) {
   return state.speakers.find((s) => s.id === id)?.name ?? null;
 }
-
 function speakerColor(id) {
   const index = state.speakers.findIndex((s) => s.id === id);
   return index >= 0 ? String((index % SPEAKER_COLORS) + 1) : null;
 }
-
 function renderLanes() {
   const lanes = $("timeline-lanes");
   lanes.replaceChildren();
@@ -1061,18 +982,15 @@ function renderLanes() {
     lanes.append(lane);
   }
 }
-
 function refreshTimeline() {
   renderRuler();
   renderLanes();
   drawWaveform();
   updateTransport();
 }
-
 function setAttr(node, name, value) {
   if (node.getAttribute(name) !== value) node.setAttribute(name, value);
 }
-
 function updatePlayhead() {
   const total = timelineDuration();
   const head = $("playhead");
@@ -1086,7 +1004,6 @@ function updatePlayhead() {
   setAttr(tracks, "aria-valuenow", String(Math.floor(now)));
   setAttr(tracks, "aria-valuetext", head.hidden ? "未載入音訊" : `${clock(now)} / ${clock(total)}`);
 }
-
 function updateTransport() {
   const audio = audioEl();
   const toggle = $("player-toggle");
@@ -1099,17 +1016,14 @@ function updateTransport() {
   $("player-total").textContent = total > 0 ? timecode(total) : "";
   updatePlayhead();
 }
-
 function segmentIndexAt(t) {
   return state.segments.findIndex((s) => t >= s.start && t < s.end);
 }
-
 function updateVideoCue() {
   const segment = previewHoldsJobAudio() ? state.segments[state.activeIndex] : null;
   const name = segment?.speaker ? speakerName(segment.speaker) : null;
   $("video-cue").textContent = segment ? `${name ? `${name}：` : ""}${segment.text}` : "";
 }
-
 function setActive(index, follow) {
   if (index === state.activeIndex) return;
   for (const node of document.querySelectorAll(".is-active[data-index]")) {
@@ -1125,31 +1039,26 @@ function setActive(index, follow) {
   $("timeline-lanes").querySelector(`.lane-block[data-index="${index}"]`)?.classList.add("is-active");
   if (follow && row) row.scrollIntoView({ block: "nearest" });
 }
-
 function syncPlayback(follow) {
   updateTransport();
   if (previewHoldsJobAudio() && state.segments.length) setActive(segmentIndexAt(audioEl().currentTime), follow);
 }
-
 function playbackLoop() {
   syncPlayback(true);
   if (!audioEl().paused) state.frame = requestAnimationFrame(playbackLoop);
 }
-
 function seek(seconds) {
   const audio = audioEl();
   if (!state.audio) return;
   audio.currentTime = Math.max(0, Math.min(seconds, timelineDuration()));
   syncPlayback(false);
 }
-
 function togglePlay() {
   const audio = audioEl();
   if (!state.audio) return;
-  if (audio.paused) audio.play().catch(() => {});
+  if (audio.paused) audio.play().catch(() => { });
   else audio.pause();
 }
-
 function bindPlayback() {
   const audio = audioEl();
   audio.addEventListener("play", () => {
@@ -1174,7 +1083,6 @@ function bindPlayback() {
     updateTransport();
   });
   $("player-toggle").addEventListener("click", togglePlay);
-
   const tracks = $("tracks");
   const body = () => $("ruler").getBoundingClientRect();
   const seekToX = (clientX) => {
@@ -1229,7 +1137,6 @@ function bindPlayback() {
     else return;
     event.preventDefault();
   });
-
   document.addEventListener("keydown", (event) => {
     if (event.code !== "Space" || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.target.closest("input, select, textarea, button, a, [contenteditable], dialog")) return;
@@ -1237,18 +1144,15 @@ function bindPlayback() {
     event.preventDefault();
     togglePlay();
   });
-
   new ResizeObserver(() => {
     renderRuler();
     drawWaveform();
   }).observe(tracks);
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawWaveform);
 }
-
 function recordingSupported() {
   return window.isSecureContext && !!navigator.mediaDevices?.getUserMedia && "MediaRecorder" in window;
 }
-
 function showRecordingUnsupported() {
   if (window.isSecureContext) {
     setStatus("這個瀏覽器不支援錄音", "請改用上傳檔案", "error");
@@ -1259,7 +1163,6 @@ function showRecordingUnsupported() {
   setStatus("瀏覽器只允許 HTTPS 或 localhost 錄音", detail, "error");
   announce(`瀏覽器只允許 HTTPS 或 localhost 錄音，${detail}`);
 }
-
 function bindRecorder() {
   $("record-btn").addEventListener("click", () => {
     if (!recordingSupported()) showRecordingUnsupported();
@@ -1270,7 +1173,6 @@ function bindRecorder() {
     if (state.recording || unsentRecording()) event.preventDefault();
   });
 }
-
 function recordingName(type) {
   const now = new Date();
   const pad = (n) => String(n).padStart(2, "0");
@@ -1278,7 +1180,6 @@ function recordingName(type) {
   const ext = type.includes("mp4") ? "m4a" : type.includes("ogg") ? "ogg" : "webm";
   return `錄音-${stamp}.${ext}`;
 }
-
 async function startRecording() {
   if (state.uploading) return setStatus("上傳中，請等上傳完成再錄音", "", "error");
   let stream;
@@ -1297,17 +1198,15 @@ async function startRecording() {
   const recorder = new MediaRecorder(stream, preferred ? { mimeType: preferred } : undefined);
   const chunks = [];
   const audioContext = new AudioContext();
-  audioContext.resume().catch(() => {});
+  audioContext.resume().catch(() => { });
   const analyser = audioContext.createAnalyser();
   analyser.fftSize = 1024;
   audioContext.createMediaStreamSource(stream).connect(analyser);
   const samples = new Float32Array(analyser.fftSize);
   const startedAt = performance.now();
   const maxSeconds = state.config?.max_audio_seconds ?? Infinity;
-
   const rec = { recorder, stream, audioContext, frame: 0 };
   state.recording = rec;
-
   const tick = () => {
     analyser.getFloatTimeDomainData(samples);
     let peak = 0;
@@ -1321,7 +1220,6 @@ async function startRecording() {
     }
     rec.frame = requestAnimationFrame(tick);
   };
-
   recorder.addEventListener("dataavailable", (event) => {
     if (event.data.size) chunks.push(event.data);
   });
@@ -1334,7 +1232,6 @@ async function startRecording() {
     }
     announce("錄音完成");
   });
-
   recorder.start(1000);
   tick();
   $("record-btn").setAttribute("aria-pressed", "true");
@@ -1345,7 +1242,6 @@ async function startRecording() {
   $("file-input").disabled = true;
   setStatus("錄音中", "");
 }
-
 function stopRecording() {
   const rec = state.recording;
   if (!rec) return;
@@ -1362,7 +1258,6 @@ function stopRecording() {
   $("open-btn").classList.remove("is-disabled");
   $("file-input").disabled = false;
 }
-
 function upload(url, fields, file, name, onProgress) {
   return new Promise((resolve, reject) => {
     const body = new FormData();
@@ -1387,7 +1282,6 @@ function upload(url, fields, file, name, onProgress) {
     xhr.send(body);
   });
 }
-
 function bindForm() {
   const form = $("transcribe-form");
   form.addEventListener("submit", async (event) => {
@@ -1397,7 +1291,6 @@ function bindForm() {
     if (state.recording) return setStatus("請先停止錄音", "", "error");
     const items = state.batch ? state.batch.map((file) => ({ blob: file, name: file.name })) : state.audio ? [state.audio] : [];
     if (!items.length) return setStatus("請先開啟音訊", "", "error");
-
     const fields = {
       model,
       speakers: selectedSpeakers(),
@@ -1445,7 +1338,6 @@ function bindForm() {
     if (failure) setStatus(failure, "前面的檔案已送出，可在「工作」查看", "error");
   });
 }
-
 function startJob(job, blob, opened) {
   clearTimeout(state.pollTimer);
   state.job = {
@@ -1465,7 +1357,6 @@ function startJob(job, blob, opened) {
   if (!opened) announce("已送出");
   if (job.status === "queued" || job.status === "running") state.pollTimer = setTimeout(pollJob, JOB_POLL_MS);
 }
-
 async function pollJob() {
   const current = state.job;
   if (!current) return;
@@ -1507,7 +1398,6 @@ async function pollJob() {
     refreshJobs();
   }
 }
-
 function renderMeta(job) {
   const meta = [
     ["檔案", job.filename],
@@ -1526,14 +1416,12 @@ function renderMeta(job) {
   renderProps($("result-meta"), meta);
   $("meta-empty").hidden = true;
 }
-
 function renderJob(job, opened) {
   state.job.audioSeconds = job.audio_seconds;
   state.job.status = job.status;
   renderMeta(job);
   $("cancel-btn").hidden = job.status !== "queued" && job.status !== "running";
   setEta(null);
-
   switch (job.status) {
     case "queued":
       setStatus("排隊中", job.jobs_ahead > 0 ? `前面 ${job.jobs_ahead} 筆` : "即將開始", "busy");
@@ -1584,7 +1472,6 @@ function renderJob(job, opened) {
       break;
   }
 }
-
 function showJobError(message) {
   clearTimeout(state.pollTimer);
   if (state.job) state.job.done = true;
@@ -1594,7 +1481,6 @@ function showJobError(message) {
   setStatus(message, "", "error");
   setGridEmpty(message);
 }
-
 function bindCancel() {
   twoStepButton($("cancel-btn"), "確定取消", async () => {
     if (!state.job) return;
@@ -1608,13 +1494,11 @@ function bindCancel() {
     }
   });
 }
-
 function setGridEmpty(message) {
   const node = $("grid-empty");
   node.textContent = message;
   node.hidden = !message;
 }
-
 function clearResult() {
   state.result = null;
   state.revision = 0;
@@ -1646,7 +1530,6 @@ function clearResult() {
   renderLanes();
   updateRelink();
 }
-
 function fullText(result) {
   if (!result.segments.length) return result.text;
   if (!state.speakers.length) return result.segments.map((s) => s.text).join("\n");
@@ -1659,11 +1542,9 @@ function fullText(result) {
   }
   return blocks.map((lines) => lines.join("\n")).join("\n\n");
 }
-
 function editable() {
   return !!state.result && !!state.job?.done && state.job.status === "succeeded";
 }
-
 function segmentRow(index) {
   const row = el("tr", "");
   row.dataset.index = String(index);
@@ -1681,7 +1562,6 @@ function segmentRow(index) {
   row.addEventListener("focusin", () => selectSegment(index));
   return row;
 }
-
 function fillRow(row, segment) {
   const start = row.querySelector(".cue-time");
   start.textContent = timecode(segment.start);
@@ -1700,7 +1580,6 @@ function fillRow(row, segment) {
   const editor = row.querySelector(".cue-edit");
   if (document.activeElement !== editor && editor.textContent !== segment.text) editor.textContent = segment.text;
 }
-
 function renderRows() {
   const rows = $("segments");
   const existing = rows.children;
@@ -1718,7 +1597,6 @@ function renderRows() {
   rows.querySelector(`tr[data-index="${state.activeIndex}"]`)?.classList.add("is-active");
   rows.querySelector(`tr[data-index="${state.selected}"]`)?.classList.add("is-selected");
 }
-
 function renderTranscript(job) {
   const { result } = job;
   state.result = result;
@@ -1737,7 +1615,6 @@ function renderTranscript(job) {
   $("find-btn").disabled = !result.segments.length;
   if (result.segments.length) $("grid-empty").hidden = true;
   else setGridEmpty("沒有辨識到語音");
-
   for (const fmt of EXPORT_FORMATS) {
     const link = $(`dl-${fmt}`);
     link.href = `/api/jobs/${encodeURIComponent(job.id)}/export/${fmt}`;
@@ -1752,12 +1629,10 @@ function renderTranscript(job) {
   updateRelink();
   syncPlayback(false);
 }
-
 function playSegment(index) {
   seek(state.segments[index].start);
-  audioEl().play().catch(() => {});
+  audioEl().play().catch(() => { });
 }
-
 function selectSegment(index, scroll) {
   if (index === state.selected && !scroll) return;
   state.selected = index;
@@ -1768,7 +1643,6 @@ function selectSegment(index, scroll) {
   if (scroll && row) row.scrollIntoView({ block: "nearest" });
   renderCuePanel();
 }
-
 function cueEditor(index) {
   const node = el("span", "cue-edit");
   node.contentEditable = "plaintext-only";
@@ -1794,7 +1668,6 @@ function cueEditor(index) {
   node.addEventListener("blur", () => saveSegmentText(index, node));
   return node;
 }
-
 function rememberCaret() {
   const selection = getSelection();
   const editor = selection?.anchorNode && (selection.anchorNode.nodeType === Node.TEXT_NODE ? selection.anchorNode.parentElement : selection.anchorNode)?.closest?.(".cue-edit");
@@ -1808,11 +1681,9 @@ function rememberCaret() {
         : editor.textContent.length;
   state.caret = { index, offset, text: editor.textContent };
 }
-
 function settle() {
   return state.pendingSave ?? Promise.resolve();
 }
-
 function saveSegmentText(index, node) {
   const saved = state.segments[index]?.text;
   if (saved === undefined || !editable()) return Promise.resolve();
@@ -1838,7 +1709,6 @@ function saveSegmentText(index, node) {
   state.pendingSave = saving;
   return saving;
 }
-
 function currentDraft() {
   return {
     segments: state.segments.map((s) => ({ start: s.start, end: s.end, text: s.text, speaker: s.speaker })),
@@ -1847,12 +1717,10 @@ function currentDraft() {
       : null,
   };
 }
-
 async function reloadResult() {
   const job = await api(`/api/jobs/${encodeURIComponent(state.job.id)}`);
   if (state.job?.id === job.id && job.result) renderTranscript(job);
 }
-
 async function saveDraft(draft, message) {
   if (state.saving) {
     setStatus("上一個修改還在儲存，請稍候", "", "error");
@@ -1877,7 +1745,7 @@ async function saveDraft(draft, message) {
     if (err.status === 409) {
       state.history = { past: [], future: [] };
       updateHistoryButtons();
-      await reloadResult().catch(() => {});
+      await reloadResult().catch(() => { });
     }
     setStatus(`無法儲存：${err.message}`, "", "error");
     announce(`無法儲存：${err.message}`);
@@ -1886,21 +1754,18 @@ async function saveDraft(draft, message) {
     state.saving = false;
   }
 }
-
 function remember(before) {
   state.history.past.push(before);
   if (state.history.past.length > HISTORY_LIMIT) state.history.past.shift();
   state.history.future = [];
   updateHistoryButtons();
 }
-
 async function commit(draft, message) {
   const before = currentDraft();
   if (!(await saveDraft(draft, message))) return false;
   remember(before);
   return true;
 }
-
 function withCurrentVoices(draft) {
   if (!draft.speakers) return draft;
   const current = new Map(state.speakers.map((s) => [s.id, s]));
@@ -1910,7 +1775,6 @@ function withCurrentVoices(draft) {
   });
   return { ...draft, speakers };
 }
-
 async function undo() {
   await settle();
   const history = state.history;
@@ -1921,7 +1785,6 @@ async function undo() {
   else history.past.push(draft);
   updateHistoryButtons();
 }
-
 async function redo() {
   await settle();
   const history = state.history;
@@ -1932,12 +1795,10 @@ async function redo() {
   else history.future.push(draft);
   updateHistoryButtons();
 }
-
 function updateHistoryButtons() {
   $("undo-btn").disabled = !state.history.past.length;
   $("redo-btn").disabled = !state.history.future.length;
 }
-
 function renderCuePanel() {
   const segment = state.segments[state.selected];
   const shown = editable() && !!segment;
@@ -1960,7 +1821,6 @@ function renderCuePanel() {
   $("cue-end-now").disabled = !linked;
   $("cue-merge").disabled = state.selected >= state.segments.length - 1;
 }
-
 async function setCueTime(which, seconds) {
   await settle();
   const index = state.selected;
@@ -1982,7 +1842,6 @@ async function setCueTime(which, seconds) {
   if (await commit(draft, `已調整第 ${index + 1} 段的時間`)) selectSegment(draft.segments.indexOf(moved), true);
   else renderCuePanel();
 }
-
 async function setCueSpeaker(value) {
   await settle();
   const index = state.selected;
@@ -1999,7 +1858,6 @@ async function setCueSpeaker(value) {
   const name = draft.speakers.find((s) => s.id === speakerId).name;
   if (!(await commit(draft, `第 ${index + 1} 段改為「${name}」`))) renderCuePanel();
 }
-
 async function splitCue() {
   await settle();
   const index = state.selected;
@@ -2034,7 +1892,6 @@ async function splitCue() {
     selectSegment(index + 1, true);
   }
 }
-
 async function mergeCue() {
   await settle();
   const index = state.selected;
@@ -2051,7 +1908,6 @@ async function mergeCue() {
   draft.segments.splice(index, 2, { ...draft.segments[index], end: Math.max(a.end, b.end), text });
   if (await commit(draft, `已合併第 ${index + 1}、${index + 2} 段`)) selectSegment(index, true);
 }
-
 async function deleteCue() {
   await settle();
   const index = state.selected;
@@ -2062,7 +1918,6 @@ async function deleteCue() {
     selectSegment(Math.min(index, draft.segments.length - 1), true);
   }
 }
-
 async function mergeSpeaker(from, into) {
   await settle();
   const fromName = speakerName(from);
@@ -2072,7 +1927,6 @@ async function mergeSpeaker(from, into) {
   draft.speakers = draft.speakers.filter((s) => s.id !== from);
   await commit(draft, `已把「${fromName}」併入「${intoName}」`);
 }
-
 function bindCueEditor() {
   document.addEventListener("selectionchange", () => {
     const anchor = getSelection()?.anchorNode;
@@ -2123,7 +1977,6 @@ function bindCueEditor() {
     }
   });
 }
-
 function renderSpeakers(result) {
   const notice = $("speakers-error");
   const message = result.speakers_error ? `${result.speakers_error}（字幕不受影響）` : "";
@@ -2142,12 +1995,10 @@ function renderSpeakers(result) {
   list.dataset.key = key;
   list.replaceChildren(...state.speakers.map(speakerItem));
 }
-
 function speakerItem(speaker) {
   const item = el("li", "speaker-item");
   item.dataset.speakerId = speaker.id;
   item.dataset.speakerColor = speakerColor(speaker.id);
-
   const swatch = el("span", "swatch");
   swatch.setAttribute("aria-hidden", "true");
   const input = el("input", "speaker-name");
@@ -2170,12 +2021,10 @@ function speakerItem(speaker) {
     }
   });
   input.addEventListener("change", () => saveSpeakerName(speaker.id, input, status));
-
   const remember = el("button", "link-btn speaker-remember", "記住聲音");
   remember.type = "button";
   remember.title = "存進語者庫，之後自動認出";
   remember.addEventListener("click", () => rememberVoice(speaker.id, input, status, remember));
-
   const merge = el("select", "speaker-merge");
   merge.hidden = state.speakers.length < 2;
   merge.addEventListener("change", () => {
@@ -2183,14 +2032,12 @@ function speakerItem(speaker) {
     merge.value = "";
     if (into) mergeSpeaker(speaker.id, into);
   });
-
   const line = el("span", "speaker-line");
   line.append(el("span", "speaker-meta"), el("span", "speaker-badge"), merge, remember);
   item.append(swatch, input, line, status);
   updateSpeakerItem(item, speaker);
   return item;
 }
-
 function updateSpeakerItem(item, speaker) {
   const input = item.querySelector(".speaker-name");
   input.dataset.saved = speaker.name;
@@ -2212,19 +2059,16 @@ function updateSpeakerItem(item, speaker) {
     ...state.speakers.filter((s) => s.id !== speaker.id).map((s) => new Option(s.name, s.id)),
   );
 }
-
 function applySpeakerUpdate(job) {
   if (state.job?.id !== job.id || !job.result) return;
   renderTranscript(job);
 }
-
 function setSpeakerStatus(status, message, tone) {
   status.textContent = message;
   if (tone) status.dataset.tone = tone;
   else delete status.dataset.tone;
   if (tone === "error") announce(message);
 }
-
 function saveSpeakerName(speakerId, input, status) {
   const name = input.value.trim();
   if (!name || name === input.dataset.saved) {
@@ -2253,7 +2097,6 @@ function saveSpeakerName(speakerId, input, status) {
   nameSaves.set(input, saving);
   return saving;
 }
-
 async function rememberVoice(speakerId, input, status, button) {
   if (nameSaves.has(input) && !(await nameSaves.get(input))) return;
   if (input.value.trim() !== input.dataset.saved && !(await saveSpeakerName(speakerId, input, status))) return;
@@ -2275,7 +2118,6 @@ async function rememberVoice(speakerId, input, status, button) {
     button.disabled = false;
   }
 }
-
 async function loadVoices() {
   try {
     const data = await api("/api/voices");
@@ -2284,13 +2126,11 @@ async function loadVoices() {
     $("voices-status").textContent = `無法讀取語者庫：${err.message}`;
   }
 }
-
 function renderVoices(voices) {
   $("voices-summary").textContent = voices.length ? String(voices.length) : "";
   $("voices-empty").hidden = voices.length > 0;
   $("voice-list").replaceChildren(...voices.map(voiceItem));
 }
-
 function voiceItem(voice) {
   const item = el("li", "voice-item");
   const updated = new Date(voice.updated_at * 1000).toLocaleString("zh-TW");
@@ -2303,7 +2143,6 @@ function voiceItem(voice) {
   item.append(remove);
   return item;
 }
-
 async function forgetVoice(voice) {
   const status = $("voices-status");
   try {
@@ -2323,7 +2162,6 @@ async function forgetVoice(voice) {
     status.textContent = `無法刪除：${err.message}`;
   }
 }
-
 function openFind() {
   $("find-bar").hidden = false;
   $("find-btn").setAttribute("aria-expanded", "true");
@@ -2331,19 +2169,16 @@ function openFind() {
   $("find-input").select();
   updateMatches();
 }
-
 function closeFind() {
   $("find-bar").hidden = true;
   $("find-btn").setAttribute("aria-expanded", "false");
   state.find = { matches: [], current: -1 };
   for (const row of $("segments").querySelectorAll(".is-match")) row.classList.remove("is-match");
 }
-
 function findPattern() {
   const query = $("find-input").value;
   return query ? new RegExp(escapeRegExp(query), "gi") : null;
 }
-
 function updateMatches() {
   const pattern = findPattern();
   const matches = pattern ? state.segments.flatMap((s, i) => (s.text.match(pattern) ? [i] : [])) : [];
@@ -2355,7 +2190,6 @@ function updateMatches() {
   count.textContent = !pattern ? "" : matches.length ? `${state.find.current + 1}／${matches.length}` : "沒有符合";
   for (const id of ["find-prev", "find-next", "replace-one", "replace-all"]) $(id).disabled = !matches.length;
 }
-
 function stepMatch(delta) {
   const { matches } = state.find;
   if (!matches.length) return;
@@ -2363,7 +2197,6 @@ function stepMatch(delta) {
   selectSegment(matches[state.find.current], true);
   updateMatches();
 }
-
 async function replaceIn(indices, message) {
   await settle();
   const pattern = findPattern();
@@ -2380,7 +2213,6 @@ async function replaceIn(indices, message) {
   if (!changed) return;
   if (await commit(draft, message(changed))) updateMatches();
 }
-
 async function applyGlossary() {
   await settle();
   let glossary;
@@ -2410,7 +2242,6 @@ async function applyGlossary() {
   }
   if (await commit(draft, `套用詞彙表：改了 ${changed} 段`)) updateMatches();
 }
-
 function bindFind() {
   $("find-btn").addEventListener("click", () => ($("find-bar").hidden ? openFind() : closeFind()));
   $("find-close").addEventListener("click", () => {
@@ -2442,7 +2273,6 @@ function bindFind() {
   $("replace-all").addEventListener("click", () => replaceIn(state.find.matches, (n) => `已取代 ${n} 段`));
   $("apply-glossary").addEventListener("click", applyGlossary);
 }
-
 async function loadGlossary() {
   try {
     state.glossary = await api("/api/glossary");
@@ -2452,13 +2282,11 @@ async function loadGlossary() {
   renderGlossarySummary();
   updateHotwordsOption();
 }
-
 function renderGlossarySummary() {
   const rules = state.glossary.replacements.length;
   $("glossary-summary").textContent = rules ? String(rules) : "";
   $("glossary-btn").title = `${state.glossary.hotwords ? "已設定熱詞" : "沒有熱詞"}，取代規則 ${rules} 條`;
 }
-
 function ruleRow(rule) {
   const row = el("tr", "");
   const find = el("input", "tb-input");
@@ -2484,9 +2312,7 @@ function ruleRow(rule) {
   row.append(...cells);
   return row;
 }
-
 let hotwordsTimer = 0;
-
 function countHotwords() {
   clearTimeout(hotwordsTimer);
   const node = $("hotwords-count");
@@ -2514,7 +2340,6 @@ function countHotwords() {
     }
   }, HOTWORDS_COUNT_DELAY_MS);
 }
-
 async function openGlossary() {
   await loadGlossary();
   $("hotwords-input").value = state.glossary.hotwords;
@@ -2524,7 +2349,6 @@ async function openGlossary() {
   $("glossary-dialog").showModal();
   countHotwords();
 }
-
 async function saveGlossary() {
   const replacements = [...$("rule-rows").children]
     .map((row) => {
@@ -2550,7 +2374,6 @@ async function saveGlossary() {
     announce(status.textContent);
   }
 }
-
 function bindGlossary() {
   $("glossary-btn").addEventListener("click", openGlossary);
   $("hotwords-input").addEventListener("input", countHotwords);
@@ -2564,7 +2387,6 @@ function bindGlossary() {
     storageSet(STORAGE_KEYS.hotwords, event.target.checked ? "on" : "off"),
   );
 }
-
 function renderBurn() {
   const render = state.render;
   const running = !!render && !["succeeded", "failed", "cancelled"].includes(render.status);
@@ -2585,7 +2407,6 @@ function renderBurn() {
   if (render.status === "failed") status.dataset.tone = "error";
   else delete status.dataset.tone;
 }
-
 async function pollRender() {
   const render = state.render;
   if (!render) return;
@@ -2601,13 +2422,11 @@ async function pollRender() {
   }
   state.renderTimer = setTimeout(pollRender, RENDER_POLL_MS);
 }
-
 function chooseBurnFile(file, name) {
   state.burnFile = { blob: file, name };
   $("burn-name").textContent = name;
   renderBurn();
 }
-
 async function startBurn() {
   const source = state.burnFile;
   if (!source || !editable()) return;
@@ -2636,7 +2455,6 @@ async function startBurn() {
   renderBurn();
   state.renderTimer = setTimeout(pollRender, RENDER_POLL_MS);
 }
-
 function openBurn() {
   if (state.render && state.render.job_id !== state.job?.id) {
     clearTimeout(state.renderTimer);
@@ -2651,7 +2469,6 @@ function openBurn() {
   renderBurn();
   $("burn-dialog").showModal();
 }
-
 function bindBurn() {
   $("burn-btn").addEventListener("click", openBurn);
   $("burn-current").addEventListener("click", () => chooseBurnFile(state.audio.blob, state.audio.name));
@@ -2671,13 +2488,11 @@ function bindBurn() {
     }
   });
 }
-
 function applyView(view) {
   $(view === "full" ? "view-full" : "view-segments").checked = true;
   $("sub-grid").hidden = view === "full";
   $("fulltext").hidden = view !== "full" || !state.result;
 }
-
 async function copyText(text) {
   if (navigator.clipboard && window.isSecureContext) {
     const copied = await navigator.clipboard.writeText(text).then(
@@ -2698,7 +2513,6 @@ async function copyText(text) {
   area.remove();
   if (!ok) throw new Error("copy failed");
 }
-
 function bindResultTools() {
   for (const input of document.querySelectorAll('input[name="view"]')) {
     input.addEventListener("change", () => {
@@ -2722,7 +2536,6 @@ function bindResultTools() {
     }, 2000);
   });
 }
-
 bindErrorReports();
 bindLogin();
 bindUpload();

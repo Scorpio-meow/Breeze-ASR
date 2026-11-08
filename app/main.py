@@ -18,7 +18,7 @@ from urllib.parse import quote
 from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -176,7 +176,7 @@ def session_value(token: str) -> str:
 
 def public_paths(static_dir: Path) -> frozenset[str]:
     files = {f"/{path.name}" for path in static_dir.iterdir() if path.is_file()}
-    return frozenset({"/", "/favicon.ico", *_PUBLIC_API_PATHS, *files})
+    return frozenset({"/", *_PUBLIC_API_PATHS, *files})
 
 
 class AccessTokenMiddleware:
@@ -566,10 +566,6 @@ def create_app(settings: Settings) -> FastAPI:
             _one_line(request.headers.get("user-agent")),
         )
         return Response(status_code=204)
-
-    @app.get("/favicon.ico", include_in_schema=False)
-    def favicon() -> RedirectResponse:
-        return RedirectResponse("/icon.svg", status_code=308)
 
     @app.get("/api/config")
     def config() -> dict:
