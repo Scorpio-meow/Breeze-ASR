@@ -4,8 +4,8 @@ import hashlib
 import hmac
 import logging
 import re
+import secrets
 import shutil
-import tempfile
 import threading
 import time
 from collections import deque
@@ -337,6 +337,13 @@ def _save_upload(file: UploadFile, target: Path, limit_bytes: int, limit_mb: int
         raise HTTPException(status_code=413, detail=f"檔案超過上限 {limit_mb} MB")
 
 
+def _discard(path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except OSError as exc:
+        log.warning("暫存檔 %s 刪不掉，下次啟動服務時會清掉：%s", path.name, exc)
+
+
 def create_app(settings: Settings) -> FastAPI:
     catalog = load_catalog(settings.models_file)
     inference = InferenceClient(settings, catalog)
@@ -386,18 +393,23 @@ def create_app(settings: Settings) -> FastAPI:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return mode, punctuation, text
 
+    def _scratch(suffix: str) -> Path:
+        return settings.jobs_dir / f"{secrets.token_urlsafe(12)}{suffix}"
+
     def _submit_file(
         source: Path,
-        workdir: Path,
         filename: str,
         options: tuple[str, str, bool, str],
         with_peaks: bool,
     ) -> tuple[Job, list[float] | None]:
         model, mode, punctuation, hotwords = options
-        decoded = workdir / "audio.f32"
-        seconds, problems = decode_to_file(source, settings.max_audio_seconds, decoded)
-        peaks = waveform(decoded, _WAVEFORM_BUCKETS) if with_peaks else None
-        job = queue.submit(model, filename, decoded, seconds, mode, punctuation, hotwords)
+        decoded = _scratch(".decoding")
+        try:
+            seconds, problems = decode_to_file(source, settings.max_audio_seconds, decoded)
+            peaks = waveform(decoded, _WAVEFORM_BUCKETS) if with_peaks else None
+            job = queue.submit(model, filename, decoded, seconds, mode, punctuation, hotwords)
+        finally:
+            _discard(decoded)
         if problems:
             log.warning(
                 "工作 %s（%s）解碼時 ffmpeg 回報 %d 行錯誤，音訊可能不完整，最後幾行：\n%s",
@@ -427,9 +439,8 @@ def create_app(settings: Settings) -> FastAPI:
             if spec.local is None:
                 hotwords = ""
             counter.check(spec, hotwords)
-            with tempfile.TemporaryDirectory(dir=settings.jobs_dir) as tmp:
-                options = (watch.model, watch.speakers, watch.punctuation, hotwords)
-                job, _ = _submit_file(source, Path(tmp), source.name, options, with_peaks=False)
+            options = (watch.model, watch.speakers, watch.punctuation, hotwords)
+            job, _ = _submit_file(source, source.name, options, with_peaks=False)
             return job
 
         watcher = FolderWatcher(watch, queue, enqueue, settings.subtitle_font)
@@ -654,15 +665,16 @@ def create_app(settings: Settings) -> FastAPI:
     ) -> dict:
         mode, punctuate, text = _job_options(model, speakers, _switch(punctuation, "punctuation"), hotwords)
         filename = _clean_filename(file.filename)
-        with tempfile.TemporaryDirectory(dir=settings.jobs_dir) as tmp:
-            upload = Path(tmp) / "upload"
+        upload = _scratch(".upload")
+        try:
             _save_upload(file, upload, settings.max_upload_bytes, settings.max_upload_mb)
-            try:
-                job, peaks = _submit_file(upload, Path(tmp), filename, (model, mode, punctuate, text), with_peaks=True)
-            except AudioDecodeError as exc:
-                raise HTTPException(status_code=422, detail=str(exc)) from exc
-            except QueueFull as exc:
-                raise HTTPException(status_code=503, detail=str(exc)) from exc
+            job, peaks = _submit_file(upload, filename, (model, mode, punctuate, text), with_peaks=True)
+        except AudioDecodeError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except QueueFull as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        finally:
+            _discard(upload)
         return {**queue.describe(job), "waveform": peaks}
 
     @app.get("/api/jobs/{job_id}")

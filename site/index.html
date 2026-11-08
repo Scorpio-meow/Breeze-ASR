@@ -568,7 +568,7 @@
             <li><span class="node node--out">Hugging Face</span><span class="cond">只在下載模型時</span></li>
             <li><span class="node node--out">手機、平板或其他電腦</span><span class="cond">只有開放其他裝置連線時，要帶存取權杖</span></li>
             <li><span class="node node--out">既有的 Breeze ASR 服務</span><span class="cond">只有設成 remote 的模型</span></li>
-            <li><span class="node node--out">MCP 用戶端</span><span class="cond">只有使用 MCP server 時</span></li>
+            <li><span class="node node--out">AI 工具</span><span class="cond">只有使用 MCP server 或 Agent Skill 時</span></li>
           </ul>
         </div>
         <ul class="privacy__facts">
@@ -583,17 +583,19 @@
       <div class="wrap cli__grid">
         <div class="cli__text">
           <header class="sec-head" data-reveal>
-            <p class="eyebrow"><span>06</span>命令列與 MCP</p>
+            <p class="eyebrow"><span>06</span>命令列、MCP 與 Skill</p>
             <h2 id="cli-title">批次轉檔，或讓 AI 助理直接呼叫</h2>
-            <p class="sec-lead">命令列工具與 MCP server 都呼叫這台電腦上執行中的服務，檔案不經過其他地方。</p>
+            <p class="sec-lead">命令列工具、MCP server 與 Agent Skill 都呼叫這台電腦上執行中的服務，檔案不經過其他地方。</p>
           </header>
           <ul class="cli__list" data-reveal style="--i:1">
             <li><code>transcribe</code>一次送出多個檔案，結果寫在原檔旁邊</li>
             <li><code>jobs</code>列出服務裡保留中的工作</li>
             <li><code>export</code>下載某個工作的任一格式</li>
+            <li><code>render</code>把字幕燒進原始影片，下載 MP4</li>
             <li>MCP 提供 7&nbsp;個工具與「整理會議紀錄」「校對逐字稿」兩個提示</li>
+            <li>裝上 <a class="link" href="https://github.com/Scorpio-meow/Breeze-ASR/blob/main/docs/cli.md#安裝-skill">Agent Skill</a>，Claude Code、Codex 等 AI 工具會自己轉逐字稿、替說話者改名、整理會議紀錄</li>
           </ul>
-          <p class="cli__warn" data-reveal style="--i:2">逐字稿會進到 MCP 用戶端的對話裡，可能因此送到外部 AI 服務；不能交給外部 AI 的錄音，只用網頁或命令列工具。</p>
+          <p class="cli__warn" data-reveal style="--i:2">逐字稿會進到 AI 工具的對話裡，可能因此送到外部 AI 服務；不能交給外部 AI 的錄音，只用網頁或命令列工具。</p>
         </div>
         <div class="term" data-reveal style="--i:1">
           <div class="term__tabs" role="tablist" aria-label="範例" data-tabs>
@@ -605,7 +607,7 @@
 <span class="out" style="--i:0">週會.m4a：已送出（工作 z3Nq8gjFtZ4y0v3H）</span>
 <span class="out" style="--i:1">週會.m4a：處理中</span>
 <span class="out" style="--i:2">週會.m4a：辨識中</span>
-<span class="out" style="--i:3">週會.m4a：<span class="ok">完成，8&nbsp;段</span></span>
+<span class="out" style="--i:3">週會.m4a：<span class="ok">完成，8&nbsp;段，說話者 2&nbsp;位</span></span>
 <span class="out" style="--i:4">週會.m4a.md</span>
 <span class="out" style="--i:5">週會.m4a.srt</span></pre>
           </div>
@@ -711,7 +713,7 @@
             <li><a href="https://github.com/Scorpio-meow/Breeze-ASR/blob/main/docs/configuration.md">設定</a></li>
             <li><a href="https://github.com/Scorpio-meow/Breeze-ASR/blob/main/docs/how-it-works.md">運作方式</a></li>
             <li><a href="https://github.com/Scorpio-meow/Breeze-ASR/blob/main/docs/api.md">API</a></li>
-            <li><a href="https://github.com/Scorpio-meow/Breeze-ASR/blob/main/docs/cli.md">命令列與 MCP</a></li>
+            <li><a href="https://github.com/Scorpio-meow/Breeze-ASR/blob/main/docs/cli.md">命令列、MCP 與 Skill</a></li>
             <li><a href="https://github.com/Scorpio-meow/Breeze-ASR/blob/main/docs/benchmarks.md">效能實測</a></li>
           </ul>
         </nav>

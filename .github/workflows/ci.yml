@@ -22,8 +22,8 @@ jobs:
           enable-cache: true
           python-version: "3.12"
       - run: uv sync --frozen --group dev
-      - run: uv run --frozen ruff check app tests
-      - run: uv run --frozen ruff format --check app tests
+      - run: uv run --frozen ruff check app tests skills
+      - run: uv run --frozen ruff format --check app tests skills
 
   test:
     strategy:

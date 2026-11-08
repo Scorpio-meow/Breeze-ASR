@@ -6,3 +6,5 @@ Dockerfile
 compose*.yaml
 README.md
 private/
+skills/
+evals/

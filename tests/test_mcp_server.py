@@ -55,7 +55,7 @@ SUCCEEDED_OUTPUT = {
     "model": "breeze-25",
     "audio_seconds": 61.5,
     "status": "succeeded",
-    "progress": "完成，2 段",
+    "progress": "完成，2 段，說話者 1 位",
     "speakers": [{"id": "S1", "name": "說話者 1", "seconds": 30.2}],
     "transcript_uri": "breeze-asr://jobs/job1/transcript.md",
 }
@@ -275,7 +275,10 @@ def test_transcribe_with_waiting_reports_progress_and_returns_the_markdown(servi
     result = _run(lambda client: client.call_tool("transcribe", arguments, progress_callback=report))
     assert _structured(result) == SUCCEEDED_OUTPUT | {"markdown": "md:job1"}
     assert service.submitted == [(recording, "breeze-26", "3", False, "")]
-    assert [(total, message) for _, total, message in updates] == [(None, "辨識中 42%"), (None, "完成，2 段")]
+    assert [(total, message) for _, total, message in updates] == [
+        (None, "辨識中 42%"),
+        (None, "完成，2 段，說話者 1 位"),
+    ]
     assert updates[0][0] < updates[1][0]
 
 

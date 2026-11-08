@@ -2,7 +2,7 @@
 
 最後更新：2026-11-08
 
-Breeze ASR is self-hosted, open-source software. The developer runs no servers and collects no data: audio, transcripts, the glossary and voiceprints stay in the data directory of the computer that runs the service. Data leaves that computer only when it downloads models from Hugging Face, when you let other devices connect, when you configure a remote Breeze ASR service, or when an MCP client you use (such as Claude) receives transcripts. OpenVINO, NNCF and Hugging Face telemetry is turned off.
+Breeze ASR is self-hosted, open-source software. The developer runs no servers and collects no data: audio, transcripts, the glossary and voiceprints stay in the data directory of the computer that runs the service. Data leaves that computer only when it downloads models from Hugging Face, when you let other devices connect, when you configure a remote Breeze ASR service, or when an AI tool you connect through the MCP server or the Agent Skill (such as Claude) receives transcripts. OpenVINO, NNCF and Hugging Face telemetry is turned off.
 
 Breeze ASR 是在你自己電腦上執行的開源軟體，與 MediaTek 無關。開發者不經營任何伺服器，也不收集、接收或看到你的錄音、逐字稿與使用情形；沒有帳號、沒有分析追蹤、沒有廣告。以下說明服務在你的電腦上存了什麼、什麼情況下會連到外面，以及怎麼刪除。
 
@@ -21,12 +21,12 @@ flowchart LR
         phone["手機、平板或其他電腦<br/>要帶存取權杖"]
         hf["Hugging Face"]
         remote["既有的 Breeze ASR 服務"]
-        mcp["MCP 用戶端<br/>例如 Claude"]
+        mcp["AI 工具<br/>例如 Claude"]
     end
     phone <-.->|只有開放其他裝置連線時| service
     hf -->|只在下載模型時| service
     service -.->|只有設成 remote 的模型| remote
-    service -.->|只有使用 MCP server 時| mcp
+    service -.->|只有使用 MCP server 或 Agent Skill 時| mcp
 ```
 
 圖的文字說明：瀏覽器、監看資料夾、Breeze ASR 服務與資料目錄都在這台電腦上，錄音與結果不會離開這台電腦。對外連線只有下面「會連到外面的情況」列的幾種。
@@ -61,8 +61,8 @@ flowchart LR
 1. **下載模型**：第一次啟動或 `models.json` 換了模型時，從 [Hugging Face](https://huggingface.co/privacy) 下載辨識、分辨說話者與標點的模型。Hugging Face 會看到你的 IP 位址與下載的檔案；錄音與逐字稿不會上傳。
 2. **讓其他裝置連線**：你開放手機、平板或其他電腦連線時，錄音與逐字稿在那台裝置與服務之間傳送。用 http 連線時都是明文，離開這台電腦的連線請用 HTTPS（見 [SECURITY.md](SECURITY.md)）。
 3. **轉呼叫遠端服務**：`models.json` 裡設成 `remote` 的模型，會把音訊（WAV）送到你指定的 Breeze ASR 服務，由那個服務的政策規範。
-4. **MCP server**：AI 助理透過 MCP server 取得的逐字稿、檔名、說話者名字與工作清單，會交給你的 MCP 用戶端（例如 Claude），可能因此送到該 AI 服務，由該服務的政策規範。MCP server 本身只連 `.env` 指定的 Breeze ASR 服務。
-5. **安裝與更新**：安裝腳本從 astral.sh 下載 uv，再從 PyPI 與 PyTorch 的套件庫下載套件；Docker 版從 GitHub Container Registry 下載映像檔，自己建置時還會下載基底映像檔與系統套件。
+4. **MCP server 與 Agent Skill**：AI 助理透過 MCP server 或 Agent Skill 取得的逐字稿、檔名、說話者名字與工作清單，會進到你的 AI 工具（例如 Claude）的對話，可能因此送到該 AI 服務，由該服務的政策規範。MCP server 本身只連 `.env` 指定的 Breeze ASR 服務；Skill 附的腳本只連你用 `--url` 或 `ASR_HOST`、`ASR_PORT` 指定的 Breeze ASR 服務。
+5. **安裝與更新**：安裝腳本從 astral.sh 下載 uv，再從 PyPI 與 PyTorch 的套件庫下載套件；Docker 版從 GitHub Container Registry 下載映像檔，自己建置時還會下載基底映像檔與系統套件。用 `bunx skills add` 安裝 Agent Skill 時，會從 npm 下載 `skills` 指令，再從 GitHub 下載 Skill。
 
 除此之外，服務不會連到任何地方，也不會把資料送給開發者。
 

@@ -134,7 +134,7 @@ class Job(BaseModel):
         description="queued 排隊中、running 處理中、succeeded 完成、failed 失敗、cancelled 已取消"
     )
     progress: str = Field(
-        description="目前進度，例如「排隊中（前面 2 筆）」「辨識中 42%」「完成，120 段」；失敗時是原因"
+        description="目前進度，例如「排隊中（前面 2 筆）」「辨識中 42%」「完成，120 段，說話者 3 位」；失敗時是原因"
     )
     speakers: list[Speaker] | None = Field(description="完成且有分辨說話者時的說話者清單，其他情況是 null")
     transcript_uri: str | None = Field(description="完成後 Markdown 逐字稿的資源 URI，其他情況是 null")

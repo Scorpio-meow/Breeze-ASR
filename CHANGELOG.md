@@ -4,6 +4,23 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-08
+
+### Added
+
+- Agent Skill `skills/breeze-asr/`：讓 Claude Code 等 AI 工具操作 Breeze ASR，包括選模型與說話者人數、先問人名與術語再帶熱詞、替說話者改名、整理會議紀錄、燒錄字幕、詞彙表與語者庫，以及服務沒開或出錯時的排除方式。用 `bunx skills add Scorpio-meow/Breeze-ASR --skill breeze-asr -g`（或 `npx`）安裝，Codex、GitHub Copilot、Cursor、Gemini CLI 等支援 Agent Skills 的工具也能用；各工具的資料夾、手動安裝與更新方式見 `docs/cli.md` 的「安裝 Skill」。
+- Skill 附的 `scripts/breeze_asr.py`：只用 Python 標準函式庫，指令與參數和 `python -m app.cli` 相同，給只用 Docker 或服務在另一台電腦、沒有專案資料夾的情況。
+- 命令列工具新增 `status`（服務、模型狀態與實測速度、上限）、`cancel`、`rename`（替說話者改名）、`render`（燒錄字幕並下載 MP4）、`glossary`（顯示或以 JSON 檔取代詞彙表）與 `voices list`／`remember`／`forget`（語者庫）。中文名字以 UTF-8 送出，Windows PowerShell 不會變成亂碼。
+
+### Changed
+
+- 命令列工具與 MCP `job_status` 的完成訊息加上說話者人數，例如「完成，25 段，說話者 2 位」；分辨說話者失敗時改附原因。
+- CI 與提交前檢查的 `ruff` 也檢查 `skills/`。
+
+### Fixed
+
+- Windows 上 `POST /api/jobs` 偶爾回 500，工作其實已經排入佇列並照常跑完：命令列工具、MCP 與 Skill 以為送出失敗，`data/jobs/` 還留下一個空的 `tmp…` 資料夾。監看資料夾也會遇到，而且下一輪會把同一個檔案再送一次。原因是每次送出都在 `data/jobs/` 建一個暫存資料夾，工作排入佇列後才刪；有程式監看專案資料夾（例如編輯器）時，會在資料夾剛建好時短暫打開它，Windows 在這段時間刪不掉資料夾，這個錯誤就蓋過了已經成功的送出。現在上傳與解碼的暫存檔直接放在 `data/jobs/`，不另建資料夾；工作排入佇列後暫存檔就算刪不掉也照樣回 202，只在日誌記一筆警告，下次啟動服務時清掉。
+
 ## [0.3.4] - 2026-11-08
 
 ### Added
@@ -235,7 +252,8 @@
 - 在不能錄音的網址按「錄音」，狀態列說明原因與瀏覽器的設定方式。
 - 所有回應加上 `Cache-Control: no-cache`，更新版本後瀏覽器不會繼續使用舊的前端程式。
 
-[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.4...HEAD
+[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.4...v0.4.0
 [0.3.4]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.1...v0.3.2

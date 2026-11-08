@@ -13,6 +13,14 @@ _CONNECT_SECONDS = 10.0
 _REQUEST_SECONDS = 60.0
 POLL_SECONDS = 2.0
 FINISHED = ("succeeded", "failed", "cancelled")
+RENDER_STATES = {
+    "queued": "燒錄排隊中",
+    "running": "燒錄中",
+    "cancelling": "燒錄取消中",
+    "succeeded": "燒錄完成",
+    "failed": "燒錄失敗",
+    "cancelled": "燒錄已取消",
+}
 
 
 class ServiceError(RuntimeError):
@@ -59,20 +67,23 @@ class AsrClient:
             response = self._http.request(method, path, **kwargs)
         except httpx.HTTPError as exc:
             raise ServiceError(f"連不上 Breeze ASR 服務 {self.base_url}：{exc}") from exc
+        if response.status_code >= 400:
+            self._raise_for(response)
+        return response
+
+    def _raise_for(self, response: httpx.Response) -> None:
         if response.status_code == 401:
             raise ServiceError(
                 f"{self.base_url} 需要存取權杖：請把環境變數 ASR_ACCESS_TOKEN 設成和服務 .env 相同的值"
                 if not self.uses_token
                 else f"{self.base_url} 拒絕這個存取權杖：請確認 ASR_ACCESS_TOKEN 和服務 .env 的值相同"
             )
-        if response.status_code >= 400:
-            try:
-                detail = response.json().get("detail")
-            except ValueError:
-                detail = None
-            error = NotFoundError if response.status_code == 404 else ServiceError
-            raise error(detail if isinstance(detail, str) else f"HTTP {response.status_code}")
-        return response
+        try:
+            detail = response.json().get("detail")
+        except ValueError:
+            detail = None
+        error = NotFoundError if response.status_code == 404 else ServiceError
+        raise error(detail if isinstance(detail, str) else f"HTTP {response.status_code}")
 
     def config(self) -> dict:
         return self._send("GET", "/api/config").json()
@@ -94,6 +105,49 @@ class AsrClient:
 
     def rename_speaker(self, job_id: str, speaker_id: str, name: str) -> dict:
         return self._send("PATCH", f"/api/jobs/{job_id}/speakers/{speaker_id}", json={"name": name}).json()
+
+    def save_glossary(self, glossary: dict) -> dict:
+        return self._send("PUT", "/api/glossary", json=glossary).json()
+
+    def voices(self) -> list[dict]:
+        return self._send("GET", "/api/voices").json()["voices"]
+
+    def remember_voice(self, job_id: str, speaker_id: str) -> dict:
+        return self._send("POST", "/api/voices", json={"job_id": job_id, "speaker_id": speaker_id}).json()["voice"]
+
+    def forget_voice(self, voice_id: str) -> list[dict]:
+        return self._send("DELETE", f"/api/voices/{voice_id}").json()["voices"]
+
+    def start_render(self, job_id: str, video: Path) -> dict:
+        with video.open("rb") as file:
+            return self._send("POST", f"/api/jobs/{job_id}/renders", files={"file": (video.name, file)}).json()
+
+    def render(self, render_id: str) -> dict:
+        return self._send("GET", f"/api/renders/{render_id}").json()
+
+    def wait_render(self, render_id: str, on_update: Callable[[dict], None]) -> dict:
+        while True:
+            render = self.render(render_id)
+            on_update(render)
+            if render["status"] in FINISHED:
+                return render
+            time.sleep(POLL_SECONDS)
+
+    def download_render(self, render_id: str, target: Path) -> None:
+        partial = target.with_name(f"{target.name}.part")
+        try:
+            with self._http.stream("GET", f"/api/renders/{render_id}/file") as response:
+                if response.status_code >= 400:
+                    response.read()
+                    self._raise_for(response)
+                with partial.open("wb") as file:
+                    for chunk in response.iter_bytes():
+                        file.write(chunk)
+            partial.replace(target)
+        except httpx.HTTPError as exc:
+            raise ServiceError(f"連不上 Breeze ASR 服務 {self.base_url}：{exc}") from exc
+        finally:
+            partial.unlink(missing_ok=True)
 
     def submit(self, path: Path, model: str, speakers: str, punctuation: bool, hotwords: str) -> dict:
         data = {
@@ -129,5 +183,19 @@ def describe_progress(job: dict) -> str:
         progress = job.get("progress")
         return f"{stage} {round(progress * 100)}%" if progress is not None else stage
     if status == "succeeded":
-        return f"完成，{len(job['result']['segments'])} 段"
+        result = job["result"]
+        return "，".join(["完成", f"{len(result['segments'])} 段", *_speaker_summary(result)])
     return job.get("error") or ("已取消" if status == "cancelled" else "失敗")
+
+
+def describe_render(render: dict) -> str:
+    label = RENDER_STATES[render["status"]]
+    return f"{label} {round(render['progress'] * 100)}%" if render["status"] == "running" else label
+
+
+def _speaker_summary(result: dict) -> list[str]:
+    if result.get("speakers_error"):
+        return [f"分辨說話者失敗：{result['speakers_error']}"]
+    if result.get("speakers"):
+        return [f"說話者 {len(result['speakers'])} 位"]
+    return []

@@ -1,0 +1,12 @@
+schema_version: "1.1"
+name: meeting-minutes-two-speakers
+expected_outcome: |
+  The meeting is transcribed by Breeze ASR with speaker diarization (2 or auto) and hotwords that
+  name the participants. The speaker who opens the meeting and asks 小明 for an update is identified
+  as 陳美玲 and the other as 王小明, with the evidence written out, and both names are written back to
+  the service. 會議紀錄.md lists the decision to upgrade Supabase to the Pro plan on the 1st of next
+  month and the action items (王小明: send the quarterly report to the client by next Wednesday and a
+  refund-process FAQ draft by this Friday; 陳美玲: apply to finance for the fee), each with a
+  timestamp, and is marked as an unreviewed draft from an automatic transcript.
+context:
+  scaffold_script: place-files.sh

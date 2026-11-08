@@ -1,0 +1,8 @@
+schema_version: "1.1"
+name: burn-subtitles-into-video
+expected_outcome: |
+  The video is transcribed by Breeze ASR without speaker labels and with punctuation, then the
+  subtitles are burned in with Breeze ASR's own render feature, producing an MP4 of the same
+  length (about 29 seconds) next to the original, whose path is given in the reply.
+context:
+  scaffold_script: place-files.sh

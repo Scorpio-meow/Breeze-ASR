@@ -17,8 +17,8 @@ NVIDIA GPU 環境改用 `uv sync --frozen --no-default-groups --group cu130 --gr
 ## 提交前
 
 ```powershell
-uv run --frozen ruff format app tests
-uv run --frozen ruff check app tests
+uv run --frozen ruff format app tests skills
+uv run --frozen ruff check app tests skills
 uv run --frozen pytest
 ```
 

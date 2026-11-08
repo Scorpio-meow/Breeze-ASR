@@ -27,10 +27,12 @@
 
 用 MediaTek Research 的 Breeze ASR 25／26 模型辨識臺灣華語、中英夾雜與臺灣台語，自動加標點、分辨說話者，在網頁上校對後匯出字幕檔或 Word 逐字稿。可以完全在本機執行，錄音不必上傳到任何雲端服務。
 
+https://github.com/user-attachments/assets/1ec6d0b1-a5ce-4cbf-af34-6fc77d05f32b
+
 > [!NOTE]
 > 這是使用 MediaTek Research 釋出的 [Breeze ASR](https://huggingface.co/MediaTek-Research/Breeze-ASR-25) 模型的非官方專案，與 MediaTek 無關。
 
-A local web app for transcribing speech with the Breeze ASR 25/26 models: waveform timeline, subtitle editor with undo, hotwords, automatic punctuation, speaker diarization with a voice library, video preview and subtitle burn-in, a watched folder, a CLI and an MCP server, and SRT/VTT/ASS/TXT/Markdown/DOCX/JSON export. Unofficial; not affiliated with MediaTek.
+A local web app for transcribing speech with the Breeze ASR 25/26 models: waveform timeline, subtitle editor with undo, hotwords, automatic punctuation, speaker diarization with a voice library, video preview and subtitle burn-in, a watched folder, a CLI, an MCP server and an Agent Skill, and SRT/VTT/ASS/TXT/Markdown/DOCX/JSON export. Unofficial; not affiliated with MediaTek.
 
 ![工具列、波形時間軸與說話者軌道、加了標點的字幕列表，右側是工作清單、字幕編輯、說話者與匯出面板](docs/screenshot.png)
 
@@ -65,6 +67,14 @@ NVIDIA、AMD 顯示卡與 GitHub 發布的映像檔，見[部署](docs/deploymen
 > [!IMPORTANT]
 > 第一次啟動會下載約 9 GB 的模型並[自動調校](docs/how-it-works.md#自動調校)，約需數分鐘到十幾分鐘，進度顯示在底部狀態列；之後啟動約 15 秒就緒。見[第一次啟動](docs/deployment.md#第一次啟動)。
 
+**讓 AI 工具使用**：服務啟動後，安裝 [Agent Skill](docs/cli.md#agent-skill)，Claude Code、Codex 等 AI 工具就能幫你轉逐字稿、替說話者改名、整理會議紀錄與燒錄字幕。
+
+```bash
+bunx skills add Scorpio-meow/Breeze-ASR --skill breeze-asr -g
+```
+
+沒有 [Bun](https://bun.sh) 的話，把 `bunx` 換成 `npx`。各工具的資料夾、手動安裝與更新方式見[安裝 Skill](docs/cli.md#安裝-skill)。
+
 ## 功能
 
 <picture>
@@ -80,7 +90,7 @@ NVIDIA、AMD 顯示卡與 GitHub 發布的映像檔，見[部署](docs/deploymen
 - **[分辨說話者](docs/how-it-works.md#分辨說話者)**：自動判斷或指定人數；取名後存進語者庫，之後自動認出；分錯時可以合併或改給別人
 - **匯出**：SRT、VTT、ASS、TXT、Markdown、DOCX、JSON，也能把字幕燒錄到原始影片
 - **[監看資料夾](docs/deployment.md#監看資料夾)**：放進去的錄音自動辨識，結果寫在原檔旁邊
-- **[命令列工具與 MCP server](docs/cli.md)**：批次轉檔，或讓 Claude 等 AI 工具直接呼叫
+- **[命令列工具、MCP server 與 Agent Skill](docs/cli.md)**：批次轉檔，或讓 Claude 等 AI 工具直接呼叫；裝上 [Skill](skills/breeze-asr/SKILL.md) 後，AI 會自己轉逐字稿、替說話者改名、整理會議紀錄與燒錄字幕
 - **硬體**：[自動調校](docs/how-it-works.md#自動調校)選用 OpenVINO（CPU、Intel 內顯）或 PyTorch（NVIDIA CUDA、AMD ROCm），也能在工具列的「硬體」改用其他實測過的設定，或在 `models.json` 把模型設成 [`remote`](docs/configuration.md#remote) 轉呼叫既有的 Breeze ASR 服務
 
 ## 支援的模型
@@ -110,7 +120,7 @@ NVIDIA、AMD 顯示卡與 GitHub 發布的映像檔，見[部署](docs/deploymen
 | [設定](docs/configuration.md) | `.env`、`models.json`、硬體設定檔 |
 | [運作方式](docs/how-it-works.md) | 架構、自動調校、句子分段、分辨說話者與語者庫、熱詞、自動標點、編輯與燒錄字幕 |
 | [API](docs/api.md) | 各端點的參數與回應 |
-| [命令列工具與 MCP server](docs/cli.md) | 批次轉檔、讓 MCP 用戶端呼叫 |
+| [命令列工具、MCP server 與 Agent Skill](docs/cli.md) | 批次轉檔、讓 MCP 用戶端呼叫、安裝給 AI 工具用的 Skill |
 | [效能實測](docs/benchmarks.md) | 辨識速度、自動調校、句子分段、分辨說話者、熱詞 |
 | [更新紀錄](CHANGELOG.md) | 各版本的變更 |
 
