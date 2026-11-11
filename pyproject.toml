@@ -12,7 +12,7 @@ dependencies = [
     "uvicorn==0.54.0",
     "python-multipart==0.0.33",
     "httpx==0.28.1",
-    "imageio-ffmpeg==0.7.0",
+    "imageio-ffmpeg==0.8.1",
     "numpy==2.4.6",
     "sherpa-onnx==2.0.1",
     "sherpa-onnx-core==2.0.1",
