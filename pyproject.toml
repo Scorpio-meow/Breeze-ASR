@@ -1,12 +1,46 @@
 [project]
 name = "breeze-asr-webapp"
-version = "0.6.0"
-description = "Breeze ASR 25 / 26 語音辨識網頁 APP（OpenVINO 或 PyTorch 推論，可切換模型）"
+version = "0.6.1"
+description = "Breeze ASR 25／26 的本機網頁 APP：把台灣華語、中英夾雜與台語錄音轉成字幕與逐字稿，錄音不上傳"
 requires-python = ">=3.12,<3.13"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE", "NOTICE.md"]
 authors = [{ name = "Scorpio-meow" }]
+keywords = [
+    "breeze-asr",
+    "speech-recognition",
+    "speech-to-text",
+    "asr",
+    "whisper",
+    "transcription",
+    "subtitles",
+    "subtitle-editor",
+    "speaker-diarization",
+    "meeting-transcription",
+    "taiwanese-mandarin",
+    "taiwanese-hokkien",
+    "traditional-chinese",
+    "taiwan",
+    "openvino",
+    "pytorch",
+    "self-hosted",
+    "local-first",
+    "mcp-server",
+    "agent-skills",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Framework :: FastAPI",
+    "Intended Audience :: End Users/Desktop",
+    "Natural Language :: Chinese (Traditional)",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
 dependencies = [
     "fastapi==0.162.2",
     "uvicorn==0.54.0",
@@ -30,6 +64,12 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/Scorpio-meow/Breeze-ASR"
+Website = "https://scorpio-meow.github.io/Breeze-ASR/"
+Documentation = "https://github.com/Scorpio-meow/Breeze-ASR/tree/main/docs"
+Repository = "https://github.com/Scorpio-meow/Breeze-ASR.git"
+Issues = "https://github.com/Scorpio-meow/Breeze-ASR/issues"
+Changelog = "https://github.com/Scorpio-meow/Breeze-ASR/blob/main/CHANGELOG.md"
+Releases = "https://github.com/Scorpio-meow/Breeze-ASR/releases"
 
 [dependency-groups]
 cpu = ["torch==2.14.1", "torchvision==0.29.1"]

@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-12
+
+### Changed
+
+- `pyproject.toml` 補上專案說明、關鍵字與分類，以及官網、文件、原始碼、Issues、CHANGELOG、Releases 的網址；`Homepage` 維持指向 GitHub repo，更新程式靠它找到下載位置。
+
 ## [0.6.0] - 2026-11-12
 
 ### Added
@@ -302,7 +308,8 @@
 - 在不能錄音的網址按「錄音」，狀態列說明原因與瀏覽器的設定方式。
 - 所有回應加上 `Cache-Control: no-cache`，更新版本後瀏覽器不會繼續使用舊的前端程式。
 
-[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.4...v0.4.0
