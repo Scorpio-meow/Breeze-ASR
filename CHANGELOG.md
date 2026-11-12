@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-12
+
+### Added
+
+- 不用 git 的檢查更新與自動更新：網頁右下角顯示版本號，按下後可以「檢查更新」（這時才連到 GitHub）與「立即更新」。服務關閉後由啟動腳本下載新版 zip、核對 SHA-256、備份並換上新版的檔案、重裝套件，再重新啟動；`.env`、資料目錄與改過的檔案都保留，改過的檔案的新版另存成 `.new`，套件裝不起來時還原。版本發布超過 90 天時，版本號旁顯示發布了幾天。
+- `scripts/update.ps1`、`scripts/update.sh`：服務沒開時也能更新；0.6.0 以前的版本下載這支腳本後就能更新，靠檔案指紋認出裝的是哪一版、哪些檔案改過。
+- 推 tag 時建立 GitHub Release，附上只含執行所需檔案的 zip、SHA-256、檔案清單與更新程式；手動觸發時替還沒有 Release 的舊 tag 補建。
+- 安裝腳本最後問你要不要裝上 Agent Skill（不需要 git，直接按 Enter 就是安裝），放到 `~/.claude/skills` 與 `~/.agents/skills`（Codex、Cline 等工具共用）；更新 Breeze ASR 時，用安裝腳本裝的 Skill 一起換成新版；用 `bunx` 或 `npx` 裝的，照樣用 `bunx skills update`（或 `npx`）更新。
+- `GET /api/update`、`POST /api/update`；`GET /api/config` 多了 `version`。
+- `python -m app` 多了 `--updatable`，由啟動腳本加上。
+
 ## [0.5.0] - 2026-11-12
 
 ### Added
@@ -291,7 +302,8 @@
 - 在不能錄音的網址按「錄音」，狀態列說明原因與瀏覽器的設定方式。
 - 所有回應加上 `Cache-Control: no-cache`，更新版本後瀏覽器不會繼續使用舊的前端程式。
 
-[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.4...v0.4.0
 [0.3.4]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.3...v0.3.4

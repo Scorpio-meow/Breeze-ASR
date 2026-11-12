@@ -31,6 +31,7 @@
 - `Host` 標頭不在 `ASR_ALLOWED_HOSTS` 裡的請求一律回 400（包括網頁本身與健康檢查），用來擋 DNS rebinding：惡意網站把自己的網域改指向 `127.0.0.1` 後，瀏覽器把請求當成同一個網站（`Sec-Fetch-Site` 是 `same-origin`），上一條擋不住，`ASR_ACCESS_TOKEN=off` 時對方的網頁就能讀取、修改資料；這種請求的 `Host` 是對方的網域，所以會被拒絕。設了權杖時，權杖與 cookie 也不會帶給對方的網域。
 - 單檔大小、音訊長度與排隊數量都有上限（`ASR_MAX_UPLOAD_MB`、`ASR_MAX_AUDIO_SECONDS`、`ASR_MAX_QUEUE`）。
 - Docker 映像檔以非 root 使用者執行。
+- 更新只會下載 GitHub Releases 上最新的正式版，不能指定其他網址或檔案；下載後先核對 SHA-256，不符就不動任何檔案。檢查碼和 zip 放在同一個 Release 頁面，所以只能擋下載損壞，擋不了 GitHub 帳號被盜後兩者一起被換掉。按「立即更新」需要和其他寫入操作一樣的權杖，且有辨識、燒錄工作在進行時會拒絕。
 
 ## 回報漏洞
 

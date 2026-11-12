@@ -39,6 +39,10 @@ const HISTORY_LIMIT = 100;
 const DURATION_TOLERANCE_SECONDS = 2;
 const SPLIT_MARGIN_SECONDS = 0.05;
 const WAVEFORM_MAX_SECONDS = 1800;
+const STALE_RELEASE_DAYS = 90;
+const DAY_MS = 86_400_000;
+const RESTART_POLL_MS = 2000;
+const RESTART_TIMEOUT_MS = 15 * 60_000;
 const WAVEFORM_MAX_BYTES = 512 * 1024 * 1024;
 const WAVEFORM_SAMPLE_RATE = 8000;
 const WAVEFORM_BUCKETS = 4000;
@@ -354,6 +358,90 @@ function updateModelStatus() {
 function renderStaticInfo(config) {
   $("open-btn").title =
     `mp3、wav、m4a、flac、ogg、webm、mp4，可一次選多個檔案\n上限 ${uploadLimit(config.max_upload_mb)}、${duration(config.max_audio_seconds)}`;
+  renderVersion(config.version);
+}
+function renderVersion(version) {
+  const days = version.released ? Math.floor((Date.now() - Date.parse(version.released)) / DAY_MS) : null;
+  const stale = days !== null && days >= STALE_RELEASE_DAYS;
+  const button = $("version-btn");
+  button.textContent = stale ? `v${version.current}・已發布 ${days} 天` : `v${version.current}`;
+  button.hidden = false;
+  $("about-version").textContent = `v${version.current}`;
+  $("about-released").textContent = !version.released
+    ? ""
+    : stale
+      ? `${version.released} 發布，已經 ${days} 天，可以檢查有沒有新版。`
+      : `${version.released} 發布。`;
+}
+async function checkUpdate() {
+  const button = $("update-check");
+  const result = $("update-result");
+  const apply = $("update-apply");
+  button.disabled = true;
+  apply.hidden = true;
+  result.textContent = "查詢中…";
+  try {
+    const found = await api("/api/update");
+    const notes = $("update-notes");
+    notes.href = found.url;
+    notes.hidden = false;
+    if (!found.newer) {
+      result.textContent = `已是最新版（GitHub 上最新是 v${found.latest}）。`;
+      return;
+    }
+    result.textContent = found.how
+      ? `有新版 v${found.latest}（${found.published} 發布）。${found.how}。`
+      : `有新版 v${found.latest}（${found.published} 發布）。更新時服務會先關閉，下載並套用新版後自動重新啟動，期間無法使用；你改過的檔案會保留。`;
+    apply.hidden = Boolean(found.how);
+  } catch (err) {
+    result.textContent = `無法檢查更新：${err.message}`;
+  } finally {
+    button.disabled = false;
+  }
+}
+async function waitForRestart() {
+  const deadline = Date.now() + RESTART_TIMEOUT_MS;
+  let down = false;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, RESTART_POLL_MS));
+    let config;
+    try {
+      const res = await fetch("/api/config", { cache: "no-store" });
+      if (!res.ok) continue;
+      config = await res.json();
+    } catch {
+      down = true;
+      continue;
+    }
+    if (down) return config.version.current;
+  }
+  return null;
+}
+async function applyUpdate() {
+  const button = $("update-apply");
+  const result = $("update-result");
+  const before = state.config.version.current;
+  button.disabled = true;
+  try {
+    await api("/api/update", { method: "POST" });
+  } catch (err) {
+    result.textContent = `無法更新：${err.message}`;
+    button.disabled = false;
+    return;
+  }
+  result.textContent = "服務已關閉，正在下載並套用新版，完成後這個頁面會自動重新載入…";
+  setStatus("更新中", "服務重新啟動前無法使用", "busy");
+  const restarted = await waitForRestart();
+  if (restarted !== null && restarted !== before) {
+    location.reload();
+    return;
+  }
+  result.textContent =
+    restarted === null
+      ? `服務超過 ${RESTART_TIMEOUT_MS / 60_000} 分鐘還沒重新啟動，可能還在下載套件，或啟動失敗；請看啟動服務的視窗，啟動後重新整理這個頁面。`
+      : `更新沒有完成，服務已用原本的 v${before} 重新啟動；原因在啟動服務的視窗裡。`;
+  setStatus("更新沒有完成", "原因在啟動服務的視窗裡", "error");
+  button.disabled = false;
 }
 function renderSpeakersOption(info) {
   $("speakers-group").hidden = !info;
@@ -594,6 +682,9 @@ function bindDialogs() {
     $("voices-dialog").showModal();
   });
   $("hardware-btn").addEventListener("click", () => $("hardware-dialog").showModal());
+  $("version-btn").addEventListener("click", () => $("about-dialog").showModal());
+  $("update-check").addEventListener("click", checkUpdate);
+  $("update-apply").addEventListener("click", applyUpdate);
   for (const dialog of document.querySelectorAll("dialog:not(#login-dialog)")) {
     dialog.addEventListener("click", (event) => {
       if (event.target === dialog) dialog.close();

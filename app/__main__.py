@@ -1,3 +1,4 @@
+import argparse
 import contextlib
 import logging
 import os
@@ -52,7 +53,18 @@ class _QuietPolling(logging.Filter):
         return True
 
 
+def _arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="python -m app", description="啟動 Breeze ASR 服務")
+    parser.add_argument(
+        "--updatable",
+        action="store_true",
+        help="由啟動腳本啟動：網頁上按「立即更新」時服務會關閉，由啟動腳本套用新版後重新啟動",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = _arguments()
     setup_logging(None)
     try:
         settings = load_settings()
@@ -100,8 +112,11 @@ def main() -> None:
     for name in ("uvicorn", "uvicorn.access"):
         logging.getLogger(name).addHandler(file_log)
     sockets = _bind(settings.host, settings.port)
+    server = uvicorn.Server(config)
+    if args.updatable:
+        app.state.exit_for_update = lambda: setattr(server, "should_exit", True)
     with contextlib.suppress(KeyboardInterrupt):
-        uvicorn.Server(config).run(sockets=sockets)
+        server.run(sockets=sockets)
 
 
 def _url(sock: socket.socket) -> str:

@@ -162,6 +162,8 @@ bunx skills add Scorpio-meow/Breeze-ASR --skill breeze-asr -g
 
 第一次執行指令時，多數工具會先請你同意。
 
+`skills` 指令要用 git 下載 Skill。電腦沒有 git 時，安裝腳本最後會問你要不要直接把專案裡的 `skills/breeze-asr` 複製到 `~/.claude/skills/` 與 `~/.agents/skills/`（直接按 Enter 就是安裝；已經有 `breeze-asr` 的資料夾會略過）；已經裝好 Breeze ASR 的，也可以在專案資料夾執行 `uv run --no-sync python -m app.update --root . skills` 做同樣的事，或照下一節手動複製。`~/.agents/skills/` 是多個工具共用的資料夾，Codex、Cline 等都會讀。之後在網頁上更新 Breeze ASR 時，用安裝腳本裝的 Skill 會一起換成新版（你改過的保留不動）；用 `bunx` 或 `npx` 裝的，請用 `bunx skills update breeze-asr`（或把 `bunx` 換成 `npx`）更新。
+
 #### 各工具的 Skill 資料夾
 
 手動安裝就是把 `breeze-asr` 資料夾複製到工具讀取的 Skill 資料夾，讓 `SKILL.md` 落在 `<Skill 資料夾>/breeze-asr/SKILL.md`。個人資料夾給這台電腦上的所有專案用；專案資料夾放在專案根目錄下。
@@ -176,7 +178,7 @@ bunx skills add Scorpio-meow/Breeze-ASR --skill breeze-asr -g
 | Google Antigravity | `antigravity` | `~/.gemini/config/skills/` | `.agents/skills/` | — |
 | Devin Desktop（原 Windsurf） | `devin` | `~/.config/devin/skills/` | `.devin/skills/` | `@breeze-asr` |
 | OpenCode | `opencode` | `~/.config/opencode/skills/` | `.opencode/skills/` | — |
-| Cline | `cline` | `~/.cline/skills/` | `.cline/skills/` | `/breeze-asr` |
+| Cline | `cline` | `~/.cline/skills/`，也會讀 `~/.agents/skills/` | `.cline/skills/` | `/breeze-asr` |
 | Kiro | `kiro-cli` | `~/.kiro/skills/` | `.kiro/skills/` | 輸入 `/` 選擇 |
 | JetBrains Junie | `junie` | `~/.junie/skills/` | `.junie/skills/` | `/breeze-asr` 或 `$breeze-asr` |
 | Roo Code | `roo` | `~/.roo/skills/` | `.roo/skills/` | — |

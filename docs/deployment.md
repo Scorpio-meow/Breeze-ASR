@@ -15,7 +15,7 @@
 
 ## Windows 安裝腳本
 
-下載或 clone 本專案後，在專案根目錄的 PowerShell 執行：
+從 [Releases](https://github.com/Scorpio-meow/Breeze-ASR/releases/latest) 下載 `breeze-asr-<版本>.zip` 解壓縮（不需要 git；也可以 clone 本專案）後，在專案根目錄的 PowerShell 執行：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1
@@ -146,7 +146,41 @@ docker compose up -d --no-build
 
 ## 更新版本
 
-原生執行：
+從 [Releases](https://github.com/Scorpio-meow/Breeze-ASR/releases/latest) 下載 zip 安裝的，不需要 git 就能更新。
+
+**在網頁上更新**：用桌面捷徑或 `scripts/start` 啟動時，按右下角的版本號，再按「檢查更新」。有新版會出現「立即更新」，按下後：
+
+1. 服務關閉，啟動腳本從 GitHub 下載新版的 zip，核對 SHA-256 檢查碼；不符就停下，不動任何檔案。
+2. 把要換掉或刪掉的檔案備份到 `.update/backup/`，換上新版，再依你原本的顯示卡重裝套件（`uv sync`）。
+3. 重新啟動服務，網頁自動重新載入。套件裝不起來時還原成更新前的檔案，用原本的版本啟動，原因顯示在啟動視窗。
+
+`.env`、資料目錄（辨識結果、語者庫、詞彙表、日誌）、模型與 `.venv` 都不會動。你改過的檔案（例如 `models.json`）保留你的版本，新版另存成同名的 `.new` 檔，啟動視窗會列出來。版本發布超過 90 天時，版本號旁會顯示發布了幾天，提醒你檢查。
+
+**服務沒開或起不來時**：關閉服務後執行更新腳本，會先問要不要更新：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\update.ps1
+```
+
+```bash
+bash scripts/update.sh
+```
+
+**0.6.0 以前的版本**沒有更新腳本，先在專案資料夾下載一次，再照上面執行（之後就能在網頁上更新）：
+
+```powershell
+Invoke-WebRequest https://github.com/Scorpio-meow/Breeze-ASR/releases/latest/download/update.ps1 -OutFile scripts\update.ps1
+```
+
+```bash
+curl -fsSL -o scripts/update.sh https://github.com/Scorpio-meow/Breeze-ASR/releases/latest/download/update.sh
+```
+
+更新程式會比對檔案指紋，認出你裝的是哪一版、哪些檔案改過。0.3.0 以前的版本沒有記錄下載位置，要到 Releases 手動下載新版，再把 `.env` 與資料目錄搬過去。
+
+要退回更新前的檔案：關閉服務後執行 `uv run --no-sync python -m app.update --root . rollback`，再執行 `uv run --no-sync python -m app.update --root . group` 印出套件組別，用 `uv sync --frozen --no-default-groups --group <組別>` 重裝套件。
+
+**用 git 取得的**：
 
 ```powershell
 git pull
@@ -155,7 +189,7 @@ uv sync --frozen
 
 NVIDIA 顯示卡改用 `uv sync --frozen --no-default-groups --group cu130`（AMD 換成 `rocm72`），或重跑安裝腳本。
 
-Docker：`git pull` 後 `docker compose up -d --build`；用發布的映像檔則是 `docker compose pull`、`docker compose up -d --no-build`。
+**Docker**：`git pull` 後 `docker compose up -d --build`；用發布的映像檔則是 `docker compose pull`、`docker compose up -d --no-build`。
 
 > [!IMPORTANT]
 > 新版本可能新增 `.env` 變數，見 [CHANGELOG](../CHANGELOG.md)。安裝腳本只在 `.env` 不存在時才建立它；已有 `.env` 時，安裝與啟動腳本會把還沒有的變數依 `.env.example` 補在檔尾並列出來，已經設定的值不會被改。Docker 不經過啟動腳本，缺少新的變數時服務會拒絕啟動並說出缺少哪一個；照 `.env.example` 手動補上，或在主機上執行 `uv run --no-sync python -m app.envfile .env.example .env`。

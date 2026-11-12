@@ -3,7 +3,7 @@ $self: https://raw.githubusercontent.com/Scorpio-meow/Breeze-ASR/main/docs/opena
 info:
   title: Breeze ASR
   summary: 本機語音辨識服務的 HTTP API：上傳錄音、取得逐字稿、編輯字幕、匯出檔案與燒錄字幕。
-  version: 0.5.0
+  version: 0.6.0
   license:
     name: MIT
     identifier: MIT
@@ -290,6 +290,70 @@ paths:
                   $ref: "#/components/examples/ConfigReady"
         "401":
           $ref: "#/components/responses/Unauthorized"
+
+  /api/update:
+    get:
+      operationId: checkUpdate
+      tags: [service]
+      summary: 檢查有沒有新版
+      description: |
+        服務這時才連到 GitHub 查詢最新的正式版；平常不會連線。`how` 不是 `null` 時，不能從網頁更新，照它說的做法更新。
+      responses:
+        "200":
+          summary: 目前與最新的版本
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateCheck"
+              examples:
+                newer:
+                  dataValue:
+                    current: 0.6.0
+                    latest: 0.6.1
+                    newer: true
+                    published: "2026-12-01"
+                    url: https://github.com/Scorpio-meow/Breeze-ASR/releases/tag/v0.6.1
+                    how: null
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "502":
+          summary: 連不上 GitHub，或 GitHub 回應錯誤
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      operationId: startUpdate
+      tags: [service]
+      summary: 關閉服務並更新到最新版
+      description: |
+        記下更新要求後關閉服務；啟動腳本接著下載最新版的 zip、核對 SHA-256、換上新版的檔案並重裝套件，再重新啟動服務。`.env`、資料目錄與改過的檔案都會保留。只有用桌面捷徑或 `scripts/start` 啟動、以 Releases 的 zip 安裝時可以使用。
+      responses:
+        "202":
+          summary: 服務即將關閉並更新
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [restarting]
+                properties:
+                  restarting:
+                    type: boolean
+                    const: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CrossSite"
+        "409":
+          summary: 不能從網頁更新，或還有辨識、燒錄工作在進行
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                busy:
+                  dataValue:
+                    detail: 還有辨識或燒錄工作在進行，請等全部完成後再更新
 
   /api/hardware/retune:
     post:
@@ -1916,6 +1980,9 @@ components:
         max_audio_seconds: 10800
         max_text_length: 500
         max_hotwords_length: 1000
+        version:
+          current: 0.6.0
+          released: "2026-12-01"
 
   securitySchemes:
     accessToken:
@@ -1929,6 +1996,29 @@ components:
       description: "`POST /api/session` 設定的 cookie，網頁用這個。"
 
   schemas:
+    UpdateCheck:
+      type: object
+      required: [current, latest, newer, published, url, how]
+      properties:
+        current:
+          type: string
+          description: 目前的版本
+        latest:
+          type: string
+          description: GitHub 上最新正式版的版本
+        newer:
+          type: boolean
+          description: 最新版是否比目前的版本新
+        published:
+          type: string
+          format: date
+          description: 最新版的發布日期
+        url:
+          type: string
+          description: 最新版的 Release 頁面，含更新內容
+        how:
+          type: [string, "null"]
+          description: 不能從網頁更新時的原因與做法（用 git 取得、Docker、不是由啟動腳本啟動）；可以更新時是 `null`
     Error:
       type: object
       description: 服務判斷的錯誤。
@@ -2016,6 +2106,7 @@ components:
         - max_audio_seconds
         - max_text_length
         - max_hotwords_length
+        - version
       properties:
         default_model:
           type: string
@@ -2059,6 +2150,18 @@ components:
         max_hotwords_length:
           type: integer
           description: 熱詞的字數上限
+        version:
+          type: object
+          description: 服務的版本
+          required: [current, released]
+          properties:
+            current:
+              type: string
+              description: 版本號，例如 `0.6.0`
+            released:
+              type: [string, "null"]
+              format: date
+              description: CHANGELOG 記載的發布日期；找不到 CHANGELOG 或沒有這一版的段落時是 `null`
 
     ModelStatus:
       type: object

@@ -40,6 +40,8 @@ A local web app for transcribing speech with the Breeze ASR 25/26 models: wavefo
 
 不確定用哪一種，見[部署](docs/deployment.md)開頭的比較表。
 
+從 [Releases](https://github.com/Scorpio-meow/Breeze-ASR/releases/latest) 下載 `breeze-asr-<版本>.zip` 並解壓縮，不需要 git；之後按網頁右下角的版本號就能檢查與套用更新，見[更新版本](docs/deployment.md#更新版本)。
+
 **Windows**：在專案根目錄開 PowerShell。
 
 ```powershell

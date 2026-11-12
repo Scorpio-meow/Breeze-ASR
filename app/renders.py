@@ -96,6 +96,10 @@ class RenderQueue:
         log.info("燒錄字幕 %s 排入佇列（工作 %s，%.1f 秒）", render_id, job_id, seconds)
         return render
 
+    def busy(self) -> bool:
+        with self._cond:
+            return any(not r.done for r in self._renders.values())
+
     def log_unfinished(self) -> None:
         with self._cond:
             unfinished = [(r.id, r.job_id, r.status) for r in self._renders.values() if not r.done]

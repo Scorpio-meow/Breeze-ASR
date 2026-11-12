@@ -49,4 +49,6 @@ else
   uv run --no-sync python -m app.envfile .env.example .env
 fi
 
+uv run --no-sync python -m app.update --root . skills
+
 echo "安裝完成。執行 scripts/start.sh 啟動；第一次啟動會下載並轉換約 9 GB 的模型。"

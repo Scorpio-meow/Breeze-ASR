@@ -1183,6 +1183,12 @@ th.c-num {
   color: var(--muted);
 }
 
+.sb-version {
+  min-height: 0;
+  color: var(--muted);
+  font-size: inherit;
+}
+
 [data-tone="busy"] {
   color: var(--busy);
 }

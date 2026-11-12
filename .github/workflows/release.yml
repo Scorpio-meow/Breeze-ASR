@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - run: python3 tools/release.py check "$GITHUB_REF_NAME"
+      - run: python3 tools/release.py build "$GITHUB_REF_NAME" dist
+      - name: 解壓到空資料夾，裝好套件並載入服務
+        run: |
+          mkdir smoke
+          unzip -q dist/breeze-asr-*.zip -d smoke
+          cd smoke/breeze-asr-*
+          uv sync --frozen
+          uv run --no-sync python -c "import app.main"
+          test -f static/index.html
+          test "$(uv run --no-sync python -m app.update --root . group)" = cpu
+      - run: python3 tools/release.py notes "$GITHUB_REF_NAME" > notes.md
+      - run: >-
+          gh release create "$GITHUB_REF_NAME" dist/* app/update.py scripts/update.ps1 scripts/update.sh
+          --title "$GITHUB_REF_NAME" --notes-file notes.md --latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  backfill:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: |
+          for tag in $(git tag -l 'v*' --sort=v:refname); do
+            if gh release view "$tag" > /dev/null 2>&1; then
+              continue
+            fi
+            python3 tools/release.py build "$tag" "dist/$tag"
+            python3 tools/release.py notes "$tag" > "dist/$tag.md"
+            gh release create "$tag" dist/"$tag"/* --title "$tag" --notes-file "dist/$tag.md" --latest=false
+          done
+        env:
+          GH_TOKEN: ${{ github.token }}

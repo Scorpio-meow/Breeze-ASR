@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import BackgroundTasks, Body, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -25,6 +25,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import cookie_parser
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from . import update
 from .audio import AudioDecodeError, decode_to_file, probe_media, waveform
 from .catalog import load_catalog
 from .config import SWITCH, ConfigError, Settings, host_name
@@ -474,15 +475,18 @@ def create_app(settings: Settings) -> FastAPI:
         log_unfinished()
         inference.stop()
 
+    version = project()["version"]
+    released = update.released(update.ROOT, version)
     app = FastAPI(
         title="Breeze ASR",
-        version=project()["version"],
+        version=version,
         lifespan=lifespan,
         docs_url=None,
         redoc_url=None,
         openapi_url="/api/openapi.json",
     )
     app.state.log_unfinished = log_unfinished
+    app.state.exit_for_update = None
 
     @app.exception_handler(StarletteHTTPException)
     async def log_http_rejection(request: Request, exc: StarletteHTTPException) -> Response:
@@ -600,7 +604,29 @@ def create_app(settings: Settings) -> FastAPI:
             "max_audio_seconds": settings.max_audio_seconds,
             "max_text_length": _MAX_TEXT_LENGTH,
             "max_hotwords_length": MAX_HOTWORDS_LENGTH,
+            "version": {"current": version, "released": released},
         }
+
+    @app.get("/api/update")
+    def check_update(request: Request) -> dict:
+        try:
+            found = update.check(update.ROOT)
+        except update.UpdateError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return {**found, "how": update.how_to_update(update.ROOT, request.app.state.exit_for_update is not None)}
+
+    @app.post("/api/update", status_code=202)
+    def start_update(request: Request, background: BackgroundTasks) -> dict:
+        exit_for_update = request.app.state.exit_for_update
+        how = update.how_to_update(update.ROOT, exit_for_update is not None)
+        if how is not None:
+            raise HTTPException(status_code=409, detail=how)
+        if queue.busy() or renders.busy():
+            raise HTTPException(status_code=409, detail="還有辨識或燒錄工作在進行，請等全部完成後再更新")
+        update.request_update(update.ROOT)
+        log.info("收到更新要求，服務即將關閉，由啟動腳本下載並套用新版後重新啟動")
+        background.add_task(exit_for_update)
+        return {"restarting": True}
 
     @app.post("/api/hardware/retune", status_code=202)
     def retune() -> dict:

@@ -46,6 +46,8 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 | `POST` | [`/api/session`](#post-apisession) | 用存取權杖登入網頁 |
 | `POST` | [`/api/client-errors`](#post-apiclient-errors) | 網頁回報錯誤到日誌 |
 | `GET` | [`/api/config`](#get-apiconfig) | 模型、硬體與各項功能的狀態，匯出格式與上限 |
+| `GET` | [`/api/update`](#get-apiupdate) | 檢查有沒有新版 |
+| `POST` | [`/api/update`](#post-apiupdate) | 關閉服務並更新到最新版 |
 | `POST` | [`/api/hardware/retune`](#post-apihardwareretune) | 重新調校 |
 | `POST` | [`/api/hardware/settings`](#post-apihardwaresettings) | 改用另一個實測過的設定 |
 | `GET` | [`/api/glossary`](#get-apiglossary) | 讀取詞彙表（熱詞與取代規則） |
@@ -106,6 +108,23 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 | `formats` | 可匯出的格式 |
 | `max_upload_mb`、`max_audio_seconds` | 上傳上限 |
 | `max_text_length`、`max_hotwords_length` | 一段字幕、熱詞的字數上限 |
+| `version` | `current`：服務的版本；`released`：CHANGELOG 記載的發布日期，找不到時是 `null` |
+
+## GET /api/update
+
+服務這時才連到 GitHub 查詢最新的正式版，平常不會連線。
+
+**回應：**
+- 200：`current`、`latest`、`newer`（最新版是否比較新）、`published`、`url`（Release 頁面）、`how`（不能從網頁更新時的原因與做法：用 git 取得、Docker、不是由啟動腳本啟動；可以更新時是 `null`）
+- 502：連不上 GitHub，或 GitHub 回應錯誤
+
+## POST /api/update
+
+記下更新要求後關閉服務，由啟動腳本下載新版、核對 SHA-256、換上新版的檔案並重裝套件，再重新啟動。過程與保留哪些檔案見[更新版本](deployment.md#更新版本)。
+
+**回應：**
+- 202：`{"restarting": true}`，服務隨即關閉
+- 409：不能從網頁更新（原因同 `GET /api/update` 的 `how`），或還有辨識、燒錄工作在進行
 
 ## POST /api/hardware/retune
 

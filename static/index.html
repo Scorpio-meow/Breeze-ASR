@@ -221,6 +221,7 @@
       <span class="tb-spacer"></span>
       <span class="sb-item sb-muted" id="model-status"></span>
       <span class="sb-item sb-muted" id="runtime"></span>
+      <button type="button" class="link-btn sb-version" id="version-btn" title="版本與檢查更新" hidden></button>
     </footer>
   </div>
   <dialog class="dialog wide" id="glossary-dialog" aria-labelledby="glossary-title">
@@ -319,6 +320,25 @@
       <div class="dialog-foot">
         <span class="dialog-note" id="retune-hint">約 5–15 分鐘，依硬體而定，期間無法辨識</span>
         <button type="button" class="tb-btn" id="retune-btn">重新調校</button>
+      </div>
+    </div>
+  </dialog>
+  <dialog class="dialog narrow" id="about-dialog" aria-labelledby="about-title">
+    <form method="dialog" class="dialog-head">
+      <h2 id="about-title">Breeze ASR</h2>
+      <span class="head-meta" id="about-version"></span>
+      <span class="tb-spacer"></span>
+      <button class="link-btn" value="close">關閉</button>
+    </form>
+    <div class="dialog-body">
+      <p class="dialog-note" id="about-released"></p>
+      <p class="dialog-note">按「檢查更新」時才會連到 GitHub 查詢最新版本，平常不會連線。</p>
+      <p class="dialog-note" id="update-result" role="status"></p>
+      <div class="dialog-foot">
+        <a class="link-btn" id="update-notes" target="_blank" rel="noopener" hidden>更新內容</a>
+        <span class="tb-spacer"></span>
+        <button type="button" class="tb-btn" id="update-check">檢查更新</button>
+        <button type="button" class="tb-btn primary" id="update-apply" hidden>立即更新</button>
       </div>
     </div>
   </dialog>

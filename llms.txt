@@ -46,7 +46,8 @@
 - [tests/](tests/): 不需要模型的單元測試
 - [models.json](models.json): 模型清單、分辨說話者與自動標點的設定
 - [.env.example](.env.example): 所有環境設定的範例值
-- [scripts/](scripts/): Windows、Linux 與 macOS 的安裝、啟動腳本
+- [scripts/](scripts/): Windows、Linux 與 macOS 的安裝、啟動、更新腳本
+- [app/update.py](app/update.py): 檢查與套用更新（只用標準函式庫）；[tools/release.py](tools/release.py) 與 [release-files.txt](release-files.txt) 打包 GitHub Release 的附件
 - [compose.yaml](compose.yaml): Docker 部署；`compose.cuda.yaml`、`compose.rocm.yaml`、`compose.cpuset.yaml`、`compose.remote-net.yaml`、`compose.watch.yaml` 為疊加檔
 
 ## Key Concepts
