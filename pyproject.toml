@@ -1,6 +1,6 @@
 [project]
 name = "breeze-asr-webapp"
-version = "0.4.0"
+version = "0.5.0"
 description = "Breeze ASR 25 / 26 語音辨識網頁 APP（OpenVINO 或 PyTorch 推論，可切換模型）"
 requires-python = ">=3.12,<3.13"
 readme = "README.md"
@@ -8,11 +8,11 @@ license = "MIT"
 license-files = ["LICENSE", "NOTICE.md"]
 authors = [{ name = "Scorpio-meow" }]
 dependencies = [
-    "fastapi==0.162.0",
+    "fastapi==0.162.2",
     "uvicorn==0.54.0",
     "python-multipart==0.0.33",
     "httpx==0.28.1",
-    "imageio-ffmpeg==0.7.0",
+    "imageio-ffmpeg==0.8.1",
     "numpy==2.4.6",
     "sherpa-onnx==2.0.1",
     "sherpa-onnx-core==2.0.1",
@@ -35,7 +35,7 @@ Homepage = "https://github.com/Scorpio-meow/Breeze-ASR"
 cpu = ["torch==2.14.1", "torchvision==0.29.1"]
 cu130 = ["torch==2.14.1", "torchvision==0.29.1"]
 rocm72 = ["torch==2.14.1", "torchvision==0.29.1", "triton-rocm==3.8.0; sys_platform == 'linux'"]
-dev = ["pytest==9.2.0", "pyyaml==6.0.3", "ruff==0.17.3"]
+dev = ["pytest==9.2.0", "pyyaml==6.0.3", "ruff==0.17.4"]
 site = ["fonttools[woff]==4.68.0"]
 
 [tool.uv]

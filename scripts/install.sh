@@ -2,6 +2,18 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+if [ "$(uname -s)" = Darwin ]; then
+  if [ "$(uname -m)" != arm64 ]; then
+    echo "這台 Mac 不是 Apple Silicon，或終端機正以 Rosetta 執行：OpenVINO 與 PyTorch 都沒有 Intel Mac 版，請改用 Docker（見 docs/deployment.md 的 macOS 安裝腳本）" >&2
+    exit 1
+  fi
+  macos="$(sw_vers -productVersion)"
+  if [ "${macos%%.*}" -lt 14 ]; then
+    echo "需要 macOS 14 以上（PyTorch 的 Mac 版要求），這台是 macOS $macos" >&2
+    exit 1
+  fi
+fi
+
 device="${1:-}"
 if [ -z "$device" ]; then
   if command -v nvidia-smi >/dev/null 2>&1; then
@@ -32,7 +44,7 @@ uv sync --frozen --no-default-groups --group "$group"
 
 if [ ! -f .env ]; then
   cp .env.example .env
-  echo "已建立 .env，可依需要修改"
+  echo "已建立 .env。字幕字型預設是 Windows 的微軟正黑體，啟動前請改成這台電腦的中文字型（見 docs/deployment.md 的字幕字型）"
 else
   uv run --no-sync python -m app.envfile .env.example .env
 fi

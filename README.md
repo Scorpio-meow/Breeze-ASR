@@ -46,14 +46,14 @@ A local web app for transcribing speech with the Breeze ASR 25/26 models: wavefo
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 ```
 
-**Linux**：
+**Linux、macOS（Apple Silicon）**：
 
 ```bash
 bash scripts/install.sh
 bash scripts/start.sh
 ```
 
-安裝腳本會自動安裝 [uv](https://docs.astral.sh/uv/) 與符合顯示卡的 PyTorch（CPU、CUDA 或 ROCm），Windows 另外在桌面建立「Breeze ASR」捷徑。啟動後開啟 <http://127.0.0.1:7860>，把音訊或影片拖進視窗（或按「開啟…」），再按「辨識」。
+安裝腳本會自動安裝 [uv](https://docs.astral.sh/uv/) 與符合顯示卡的 PyTorch（CPU、CUDA 或 ROCm），Windows 另外在桌面建立「Breeze ASR」捷徑。Linux 與 macOS 第一次啟動前，要先把 `.env` 的字幕字型改成系統裡有的中文字型，見[字幕字型](docs/deployment.md#字幕字型)。啟動後開啟 <http://127.0.0.1:7860>，把音訊或影片拖進視窗（或按「開啟…」），再按「辨識」。
 
 **Docker**：
 
@@ -106,7 +106,7 @@ bunx skills add Scorpio-meow/Breeze-ASR --skill breeze-asr -g
 
 | 項目 | 需求 |
 | --- | --- |
-| 作業系統 | Windows（x64）、Linux，或任何能執行 Docker 的系統；Windows ARM64 無法安裝，見[不支援或未實測的硬體](docs/deployment.md#不支援或未實測的硬體) |
+| 作業系統 | Windows（x64）、Linux、macOS 14 以上（Apple Silicon，未實機實測），或任何能執行 Docker 的系統；Windows ARM64 與 Intel Mac 無法原生安裝，見[不支援或未實測的硬體](docs/deployment.md#不支援或未實測的硬體) |
 | Python | 3.12（uv 會自動下載） |
 | 記憶體 | 建議 16 GB 以上；第一次轉換模型時峰值約 9.5 GB，8 GB 也能完成，但會大量使用分頁檔 |
 | 磁碟 | 約 16 GB（原始權重、轉換後的模型、編譯快取）；第一次自動調校期間暫時多約 4–7 GB |

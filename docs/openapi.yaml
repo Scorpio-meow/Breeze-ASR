@@ -3,7 +3,7 @@ $self: https://raw.githubusercontent.com/Scorpio-meow/Breeze-ASR/main/docs/opena
 info:
   title: Breeze ASR
   summary: 本機語音辨識服務的 HTTP API：上傳錄音、取得逐字稿、編輯字幕、匯出檔案與燒錄字幕。
-  version: 0.4.0
+  version: 0.5.0
   license:
     name: MIT
     identifier: MIT
@@ -2328,7 +2328,7 @@ components:
           type: [integer, "null"]
         usable_threads:
           type: integer
-          description: 這個行程可用的執行緒數（受 CPU 親和性限制）
+          description: 這個行程可用的執行緒數（受 CPU 親和性限制；macOS 沒有 CPU 親和性，是邏輯核心數）
         memory_total_gb:
           type: number
         memory_available_gb:

@@ -10,7 +10,7 @@ Installing, updating and reconfiguring change the user's machine. Explain what y
 
 | Item | Requirement |
 | --- | --- |
-| OS | Windows x64 or Linux natively; anything that runs Docker. Windows on ARM64 cannot install it. |
+| OS | Windows x64, Linux, or macOS 14+ on Apple Silicon (not yet tested on a real Mac) natively; anything that runs Docker. Windows on ARM64 and Intel Macs cannot install it natively (Intel Macs use Docker). |
 | Memory | 16 GB recommended. Converting models peaks around 9.5 GB; 8 GB works but swaps heavily. |
 | Disk | About 16 GB, plus 4–7 GB temporarily during the first auto-tune. |
 | Acceleration | Optional: Intel iGPU or Arc (OpenVINO, native only), NVIDIA (CUDA), AMD (ROCm, Linux only). Intel NPU and Qualcomm NPUs/GPUs are not used. Docker Desktop is CPU only. |
@@ -24,6 +24,7 @@ The repository is <https://github.com/Scorpio-meow/Breeze-ASR>. Clone or downloa
 | --- | --- | --- |
 | Windows | `powershell -ExecutionPolicy Bypass -File scripts\install.ps1` | Installs uv, the Python environment and `.env`, and a desktop shortcut "Breeze ASR". Picks CUDA when `nvidia-smi` exists. Options: `-Device cpu`/`cuda`, `-NoShortcut`. |
 | Linux | `bash scripts/install.sh` | Picks CUDA or ROCm automatically; force with `cpu`, `cuda` or `rocm` as the argument. |
+| macOS (Apple Silicon) | `bash scripts/install.sh` | CPU only (OpenVINO). Before the first start, set `ASR_SUBTITLE_FONT` and `ASR_SUBTITLE_FONTS_DIR` in `.env` to a Chinese font the Mac has, or the service refuses to start; see `docs/deployment.md#字幕字型`. |
 | Docker | `cp .env.example .env`, set `ASR_ACCESS_TOKEN`, then `docker compose up -d --build` | The container always listens on `0.0.0.0`, so Docker needs an access token. NVIDIA: also layer `compose.cuda.yaml`; AMD: `compose.rocm.yaml`. See `docs/deployment.md#docker`. |
 
 Generate a token with `uv run --no-sync python -c "import secrets; print(secrets.token_urlsafe(32))"` (or `openssl rand -base64 32`) and let the user paste it into `.env` themselves; don't echo it back into the conversation.
@@ -33,7 +34,7 @@ Generate a token with `uv run --no-sync python -c "import secrets; print(secrets
 | Way | Start | Stop |
 | --- | --- | --- |
 | Desktop shortcut / `scripts\start.ps1` (Windows) | Double-click, or run the script. Opens the browser when ready (`-NoBrowser` to skip). Fills in `.env` variables added by newer versions. | Ctrl+C in its window. Closing the window kills the service abruptly. |
-| `bash scripts/start.sh` (Linux) | Same as above. | Ctrl+C |
+| `bash scripts/start.sh` (Linux, macOS) | Same as above. | Ctrl+C |
 | From an agent | Run in the background: `uv run --directory <install-dir> --no-sync --env-file .env python -m app` | Stop that background task. |
 | Docker | `docker compose up -d` | `docker compose stop` (or `docker stop -t 15 <container>`) |
 

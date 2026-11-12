@@ -4,6 +4,22 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-12
+
+### Added
+
+- macOS（Apple Silicon、macOS 14 以上）可以用 `scripts/install.sh`、`scripts/start.sh` 安裝與啟動，以 CPU（OpenVINO）推論。Intel Mac 與 macOS 13 以下由安裝腳本直接擋下並說明原因，Intel Mac 改用 Docker。CI 的測試與腳本檢查加上 macOS。
+
+### Changed
+
+- 自動調校：某裝置的 int4 或 int8 失敗時只略過其他壓縮格式，fp16、fp32 照測；浮點格式也失敗才略過整個裝置。
+- 內附的 ffmpeg 升到 9.0.2（imageio-ffmpeg 0.8.1）。
+- `scripts/install.sh` 建立 `.env` 時提醒先把字幕字型改成這台電腦有的中文字型。
+
+### Fixed
+
+- macOS 沒有 CPU 親和性，自動調校偵測硬體時出錯、本機模型全部不能用；改以邏輯核心數當作可用執行緒數。
+
 ## [0.4.0] - 2026-11-08
 
 ### Added
@@ -221,6 +237,30 @@
 - `.env` 新增必填的 `ASR_SUBTITLE_FONT`、`ASR_SUBTITLE_FONTS_DIR` 與 `ASR_WATCH_*`；舊的 `.env` 要照 `.env.example` 補上，否則服務拒絕啟動。
 - `.env.example` 的註解精簡為每區一行，各變數的說明集中在 `docs/configuration.md`。
 
+## [0.1.3] - 2026-10-29
+
+這個 tag 的 `pyproject.toml` 仍標 0.1.0，程式回報的版本是 0.1.0。
+
+### Removed
+
+- Intel NPU 不再納入自動調校：實測時驅動回報 `DEVICE_LOST`、裝置被重置。調校結果把 NPU 列為略過並寫明原因。
+
+## [0.1.2] - 2026-10-29
+
+這個 tag 的 `pyproject.toml` 仍標 0.1.0，程式回報的版本是 0.1.0。
+
+### Changed
+
+- 編譯快取依轉換後的模型分資料夾存放；推論子行程每次啟動都會刪掉對應模型已不存在的快取，快取不再無限增長。
+
+## [0.1.1] - 2026-10-29
+
+這個 tag 的 `pyproject.toml` 仍標 0.1.0，程式回報的版本是 0.1.0。
+
+### Fixed
+
+- 自動調校預估 fp16、fp32 需要的記憶體時，權重大小改用權重格式本身的位元數，不再以裝置的運算精度計算。原本 CPU 上的 fp16 以每個參數 4 bytes 估算，可能誤判放不下而略過不測。
+
 ## [0.1.0] - 2026-10-29
 
 第一個版本。
@@ -231,7 +271,7 @@
 - 字幕編輯軟體式的介面：工具列、波形與時間尺、說話者軌道、字幕列表、右側面板與狀態列；時間軸可點擊或拖曳定位，空白鍵播放／暫停，播放時字幕列表跟著捲動。
 - 支援 Breeze ASR 25 與 Breeze ASR 26，模型清單由 `models.json` 指定並固定版本。
 - 三種推論方式：本機 OpenVINO、本機 PyTorch、轉呼叫既有的 Breeze ASR 服務。
-- 自動調校：第一次啟動時依 OpenVINO 裝置回報的運算精度，實測各裝置與權重格式（int4、int8、fp16、fp32），選出最快且輸出正確的推論設定；只轉換要實測的格式，放不下的格式在轉換前就略過；Intel NPU 實測無法執行，不納入。可重新調校、在「硬體」改用其他實測過的設定，或手寫硬體設定檔。
+- 自動調校：第一次啟動時依 OpenVINO 裝置回報的運算精度，實測各裝置與權重格式（int4、int8、fp16、fp32），選出最快且輸出正確的推論設定；只轉換要實測的格式，放不下的格式在轉換前就略過，NPU 排在最後測、失敗只淘汰 NPU。可重新調校、在「硬體」改用其他實測過的設定，或手寫硬體設定檔。
 - 排隊中與處理中的工作都能取消；工作進行中不能重複送出同一段音訊。
 - 瀏覽器從其他網站送來的寫入請求一律拒絕。
 - 日誌記錄下載、轉換、調校、工作與分辨說話者的開始、完成與耗時。
@@ -247,12 +287,12 @@
 - 社群文件：行為準則、無障礙聲明、issue 範本（問題回報、功能建議、無障礙問題）與 Pull Request 範本。
 - 無障礙：所有文字顏色在實際背景上達到 4.5:1 以上的對比；正在播放的字幕列不只靠顏色標示；時間軸是可用方向鍵操作的滑桿；文字大小跟隨瀏覽器的字型大小設定；按鈕與輸入框的點擊範圍至少 24×24 像素。
 - 字幕文字可以直接在列表上修改，全文與下載的檔案跟著更新。
-- 編譯快取依轉換後的模型分資料夾存放；推論子行程每次啟動都會刪掉對應模型已不存在的快取，快取不再無限增長。
 - 超過 30 分鐘或瀏覽器無法解碼的音訊，送出辨識後由伺服器產生波形。
 - 在不能錄音的網址按「錄音」，狀態列說明原因與瀏覽器的設定方式。
 - 所有回應加上 `Cache-Control: no-cache`，更新版本後瀏覽器不會繼續使用舊的前端程式。
 
-[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.4...v0.4.0
 [0.3.4]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.3.2...v0.3.3
@@ -266,5 +306,8 @@
 [0.2.3]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.2.0...v0.2.1
-[0.2.0]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.1.0...v0.2.0
+[0.2.0]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.1.3...v0.2.0
+[0.1.3]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/Scorpio-meow/Breeze-ASR/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Scorpio-meow/Breeze-ASR/releases/tag/v0.1.0

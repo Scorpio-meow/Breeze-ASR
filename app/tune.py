@@ -125,11 +125,18 @@ def _device_info(core: ov.Core, device: str) -> dict:
     return info
 
 
+def _usable_threads() -> int:
+    process = psutil.Process()
+    if hasattr(process, "cpu_affinity"):
+        return len(process.cpu_affinity())
+    return psutil.cpu_count(logical=True)
+
+
 def detect_hardware() -> dict:
     core = ov.Core()
     openvino_devices = {device: _device_info(core, device) for device in core.available_devices}
     memory = psutil.virtual_memory()
-    usable_threads = len(psutil.Process().cpu_affinity())
+    usable_threads = _usable_threads()
     return {
         "os": f"{platform.system()} {platform.release()}",
         "cpu": openvino_devices["CPU"]["name"] if "CPU" in openvino_devices else platform.processor(),
@@ -278,7 +285,11 @@ def _blocker(config: EngineConfig, inaccurate: set[str], failed: dict[str, str],
     if config.engine == "openvino" and config.weight_format in inaccurate:
         return f"{config.weight_format} 在 CPU 上的錯誤率已不合格，不再測"
     if config.device in failed:
-        return f"這個裝置第一個實測的 {failed[config.device]} 就無法執行，其餘格式不再測"
+        failed_format = failed[config.device]
+        if config.engine != "openvino" or _FORMAT_TYPES[failed_format].is_real():
+            return f"這個裝置實測 {failed_format} 失敗、還沒有格式成功過，其餘格式不再測"
+        if not _FORMAT_TYPES[config.weight_format].is_real():
+            return f"這個裝置實測 {failed_format} 失敗，其他壓縮格式不再測"
     if need > limit:
         where = "顯示記憶體" if config.engine == "torch" else "記憶體"
         return f"預估執行時需要 {gb(need)} GB {where}，超過目前可用的 {gb(limit)} GB"
@@ -468,7 +479,7 @@ def run_tuning(settings: Settings, catalog: Catalog, report: Reporter) -> Hardwa
     queue = list(candidates)
     results: list[dict] = []
     failed: dict[str, str] = {}
-    tried: set[str] = set()
+    working: set[str] = set()
     overheads: list[int] = []
     inaccurate: set[str] = set()
     graded = False
@@ -494,10 +505,10 @@ def run_tuning(settings: Settings, catalog: Catalog, report: Reporter) -> Hardwa
         log.info("開始實測 %s（%d/%d）", candidate.label, len(results) + 1, total)
         record = _measure(candidate, directory, spec, settings, sample)
         results.append(record)
-        if config.device not in tried:
-            tried.add(config.device)
-            if record["status"] == "failed":
-                failed[config.device] = config.weight_format
+        if record["status"] != "failed":
+            working.add(config.device)
+        elif config.device not in working:
+            failed[config.device] = config.weight_format
         if config.engine == "openvino" and record["status"] == "measured":
             weights = _weight_bytes(config, parameters)
             if record["memory_bytes"] < weights:

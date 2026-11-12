@@ -4,12 +4,13 @@
 
 安裝、啟動、更新與日常維運。每個環境變數的說明見[設定](configuration.md)。
 
-**本頁**：[Windows](#windows-安裝腳本) · [Linux](#linux-安裝腳本) · [Docker](#docker) · [第一次啟動](#第一次啟動) · [更新版本](#更新版本) · [讓其他電腦連線](#讓其他電腦連線) · [從手機或平板使用](#從手機或平板使用) · [監看資料夾](#監看資料夾) · [日誌](#日誌) · [字幕字型](#字幕字型) · [資源限制與轉呼叫](#資源限制與轉呼叫) · [限制](#限制) · [GPU 支援](#gpu-支援) · [不支援或未實測的硬體](#不支援或未實測的硬體)
+**本頁**：[Windows](#windows-安裝腳本) · [Linux](#linux-安裝腳本) · [macOS](#macos-安裝腳本) · [Docker](#docker) · [第一次啟動](#第一次啟動) · [更新版本](#更新版本) · [讓其他電腦連線](#讓其他電腦連線) · [從手機或平板使用](#從手機或平板使用) · [監看資料夾](#監看資料夾) · [日誌](#日誌) · [字幕字型](#字幕字型) · [資源限制與轉呼叫](#資源限制與轉呼叫) · [限制](#限制) · [GPU 支援](#gpu-支援) · [不支援或未實測的硬體](#不支援或未實測的硬體)
 
 | 方式 | 適用 | GPU |
 | --- | --- | --- |
 | [Windows 安裝腳本](#windows-安裝腳本) | 個人電腦 | Intel 內顯（OpenVINO）、NVIDIA（CUDA），自動偵測 |
 | [Linux 安裝腳本](#linux-安裝腳本) | 個人電腦、伺服器 | Intel 內顯（OpenVINO）、NVIDIA（CUDA）、AMD（ROCm），自動偵測 |
+| [macOS 安裝腳本](#macos-安裝腳本) | Apple Silicon 的 Mac | 不用 GPU，以 CPU（OpenVINO）推論 |
 | [Docker](#docker) | 伺服器 | 沒有顯示卡用 `compose.yaml`；NVIDIA 再疊加 `compose.cuda.yaml`，AMD（只限 Linux 主機）再疊加 `compose.rocm.yaml`。不支援 Intel 內顯，Docker Desktop 上只能用 CPU |
 
 ## Windows 安裝腳本
@@ -49,6 +50,20 @@ bash scripts/start.sh
 ```
 
 偵測到 `nvidia-smi` 時裝 CUDA 版 PyTorch、偵測到 `rocm-smi` 或 `amd-smi` 時裝 ROCm 版，否則裝 CPU 版；可以用 `bash scripts/install.sh cpu`、`cuda` 或 `rocm` 指定。ROCm 需要主機已安裝 AMD 的 ROCm 驅動，且使用者在 `video`、`render` 群組。
+
+## macOS 安裝腳本
+
+需要 Apple Silicon（M 系列晶片）與 macOS 14 以上。在專案根目錄的終端機：
+
+```bash
+bash scripts/install.sh
+bash scripts/start.sh
+```
+
+- 推論只用 CPU（OpenVINO）；Apple 的 GPU 與神經網路引擎都用不到。
+- 第一次啟動前，把 `.env` 的字幕字型改成這台 Mac 有的中文字型，見[字幕字型](#字幕字型)；`.env.example` 的微軟正黑體在 Mac 上找不到，服務會拒絕啟動。
+- Intel Mac 無法原生安裝：OpenVINO 2026 與 PyTorch 2.3 起都沒有 Intel Mac 版，安裝腳本會直接停下。改用 [Docker](#docker) 的 CPU 版。
+- Apple Silicon 上用 Docker 時要在本機建置（`docker compose up -d --build`）：發布的映像檔只有 x86（`linux/amd64`），在 Apple Silicon 上要靠模擬執行，會明顯變慢。
 
 ## Docker
 
@@ -255,6 +270,13 @@ ASR_WATCH_SOURCE=/srv/recordings
 
 匯出 ASS 與燒錄字幕用的字型由 `ASR_SUBTITLE_FONT` 與 `ASR_SUBTITLE_FONTS_DIR` 決定（見[設定](configuration.md#env)），`.env.example` 是 Windows 的微軟正黑體。Docker 映像檔內建 Noto Sans CJK，`compose.yaml` 會自動改用它；Linux 原生執行時請改成系統裡有的中文字型，例如 `Noto Sans CJK TC` 與 `/usr/share/fonts/opentype/noto`。
 
+macOS 內建中文字型的檔案位置會隨系統版本改變，建議自己安裝一套：從 [Noto CJK 的發布頁](https://github.com/notofonts/noto-cjk/releases)下載 Noto Sans CJK TC，用「字體簿」安裝（會放進自己帳號的 `Library/Fonts`），再把 `.env` 改成：
+
+```dotenv
+ASR_SUBTITLE_FONT="Noto Sans CJK TC"
+ASR_SUBTITLE_FONTS_DIR=/Users/<帳號>/Library/Fonts
+```
+
 ## 資源限制與轉呼叫
 
 Docker 部署可以只讓容器用部分 CPU 核心，也可以把某些模型轉呼叫另一個既有的 Breeze ASR 服務：
@@ -304,4 +326,5 @@ NVIDIA 卡的顯示記憶體：
 | Docker 裡的 Intel 內顯 | Docker Desktop（WSL2）的容器看不到內顯，只能用 CPU；Linux 主機把 `/dev/dri` 交給容器理論上可用內顯，但本專案沒有提供對應的 compose 疊加檔，也未實測 |
 | Windows ARM64（Snapdragon 等） | 無法安裝：OpenVINO 與 PyTorch 都沒有 Windows ARM64 版，安裝腳本與 `uv sync` 會失敗。改用 x64 版 Python（例如 `uv sync --python cpython-3.12-windows-x86_64-none`）透過 Windows 的 x64 模擬執行，理論上能用 CPU 推論，但會明顯變慢，OpenVINO 需要的 x86 指令集在模擬下能否正常運作也未實測 |
 | Qualcomm Hexagon NPU、Adreno GPU | 用不到：Hexagon 需要 Qualcomm QNN，Adreno 不支援 CUDA 或 ROCm，OpenVINO 也不認得這兩種裝置 |
-| Apple Silicon | 未實測；OpenVINO 有 macOS ARM64 版，理論上能用 CPU 推論，但 Apple GPU（PyTorch 的 MPS）沒有納入自動調校 |
+| Apple Silicon | 可以用[安裝腳本](#macos-安裝腳本)安裝，以 CPU（OpenVINO）推論，需要 macOS 14 以上；整套流程（安裝、模型轉換、自動調校、燒錄字幕）都還沒在實機上跑過。Apple GPU（PyTorch 的 MPS）沒有納入自動調校 |
+| Intel Mac | 無法原生安裝：OpenVINO 2026 與 PyTorch 2.3 起都沒有 Intel Mac 版。改用 Docker 的 CPU 版，發布的映像檔可以直接用 |

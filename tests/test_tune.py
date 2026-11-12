@@ -217,11 +217,29 @@ def test_memory_limit_uses_device_memory_where_reported():
 def test_blocker_reports_the_first_reason_that_applies():
     gpu_int4 = _config("GPU", "int4")
     assert "錯誤率已不合格" in _blocker(gpu_int4, {"int4"}, {"GPU": "int8"}, 2, 1)
-    assert "第一個實測的 int8" in _blocker(gpu_int4, set(), {"GPU": "int8"}, 2, 1)
+    assert "實測 int8 失敗，其他壓縮格式不再測" in _blocker(gpu_int4, set(), {"GPU": "int8"}, 2, 1)
     assert "預估執行時需要" in _blocker(gpu_int4, set(), {}, 2 * GB, GB)
     assert _blocker(gpu_int4, set(), {}, GB, 2 * GB) is None
     cuda = EngineConfig("torch", "cuda:0", None, "float16", 1, 1)
     assert "顯示記憶體" in _blocker(cuda, set(), {}, 4 * GB, GB)
+
+
+def test_a_failed_compressed_format_still_lets_float_formats_run():
+    assert "其他壓縮格式不再測" in _blocker(_config("CPU", "int8"), set(), {"CPU": "int4"}, 0, 0)
+    assert _blocker(_config("CPU", "fp16"), set(), {"CPU": "int4"}, 0, 0) is None
+    assert "其餘格式不再測" in _blocker(_config("CPU", "fp32"), set(), {"CPU": "fp16"}, 0, 0)
+
+
+def test_usable_threads_count_logical_cores_where_cpu_affinity_is_missing(monkeypatch):
+    monkeypatch.setattr(tune.psutil, "Process", lambda: SimpleNamespace())
+    monkeypatch.setattr(tune.psutil, "cpu_count", lambda logical: 10 if logical else 4)
+    assert tune._usable_threads() == 10
+
+
+def test_detect_hardware_reports_this_machine():
+    hardware = tune.detect_hardware()
+    assert "CPU" in hardware["openvino_devices"]
+    assert hardware["usable_threads"] >= 1
 
 
 SPEC = ModelSpec(
@@ -362,6 +380,46 @@ def test_fp16_on_a_cpu_that_computes_in_fp32_is_skipped_when_fp32_sized_weights_
     measured, reasons = _tune_openvino(monkeypatch, tmp_path, 4 * GB, 8 * GB, MEASURED_MEMORY)
     assert ("CPU", "fp16") not in measured
     assert reasons["Test CPU（OpenVINO CPU・fp16）"] == "預估執行時需要 4.5 GB 記憶體，超過目前可用的 4.0 GB"
+
+
+def test_a_cpu_that_cannot_run_int4_is_still_tuned_on_fp16(monkeypatch, tmp_path):
+    arm = {"name": "Test Arm CPU", "precisions": ["FP32", "FP16", "INT8"]}
+    measured = []
+
+    def measure(candidate, directory, spec, settings, sample):
+        config = candidate.config
+        measured.append(config.weight_format)
+        record = {
+            "label": candidate.label,
+            "engine": config.engine,
+            "device": config.device,
+            "weight_format": config.weight_format,
+            "torch_dtype": None,
+            "torch_num_beams": None,
+        }
+        if config.weight_format == "int4":
+            return record | {"status": "failed", "reason": "子行程異常結束"}
+        return record | {
+            "status": "measured",
+            "transcribe_seconds": 3.0,
+            "memory_bytes": 3 * GB,
+            "rtf": 0.1,
+            "cer": 0.02,
+        }
+
+    monkeypatch.setattr(tune, "detect_hardware", lambda: _hardware(openvino_devices={"CPU": arm}))
+    monkeypatch.setattr(tune.preparation, "download", lambda spec: tmp_path)
+    monkeypatch.setattr(tune.preparation, "source_info", lambda snapshot: ({"BF16"}, GB))
+    monkeypatch.setattr(tune.preparation, "is_prepared", lambda target: True)
+    monkeypatch.setattr(tune.psutil, "virtual_memory", lambda: SimpleNamespace(available=16 * GB))
+    monkeypatch.setattr(tune, "_measure", measure)
+    monkeypatch.setattr(tune, "_remove_unused", lambda settings, spec, config: None)
+    catalog = SimpleNamespace(models=[SPEC], default_model=SPEC.id, get=lambda model_id: SPEC)
+    profile = tune.run_tuning(SimpleNamespace(openvino_dir=tmp_path), catalog, lambda progress: None)
+    reasons = {item["label"]: item["reason"] for item in profile.tuning["skipped"]}
+    assert measured == ["int4", "fp16"]
+    assert reasons["Test Arm CPU（OpenVINO CPU・int8）"] == "這個裝置實測 int4 失敗，其他壓縮格式不再測"
+    assert profile.settings.weight_format == "fp16"
 
 
 def test_a_measurement_smaller_than_its_weights_does_not_lower_later_estimates(monkeypatch, tmp_path):

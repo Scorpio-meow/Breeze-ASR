@@ -29,7 +29,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -44,12 +44,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
-      - if: runner.os == 'Linux'
-        run: bash -n scripts/install.sh && bash -n scripts/start.sh
+      - if: runner.os != 'Windows'
+        run: /bin/bash -n scripts/install.sh && /bin/bash -n scripts/start.sh
       - if: runner.os == 'Windows'
         shell: powershell
         run: |
