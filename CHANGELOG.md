@@ -4,13 +4,19 @@
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-13
+
+### Fixed
+
+- 網頁更新時提示移除舊的 `breeze-asr` Skill，指令改成 `bunx skills remove breeze-asr -g`；少了 `-g` 只會找目前資料夾，刪不到照 README 用 `-g` 裝在全域的那份。`docs/cli.md` 裡 `bunx skills` 的更新與移除指令也一起加上 `-g`。
+
 ## [0.7.0] - 2026-11-13
 
 ### Changed
 
 - 專案改名為 ListenMiao（聽喵）：GitHub repo 改成 `Scorpio-meow/ListenMiao`，官網改到 <https://scorpio-meow.github.io/ListenMiao/>，舊的 repo 網址會自動轉過去。網頁、文件、命令列、MCP server 的顯示名稱、新安裝時的 Windows 桌面捷徑與 LOGO 字樣都換成新名字；「Breeze ASR」之後只指 MediaTek Research 的模型。
 - 識別名稱也改成新名字：
-  - Agent Skill 從 `breeze-asr` 改名為 `listenmiao`（`/listenmiao`、`skills/listenmiao/scripts/listenmiao.py`）。安裝腳本裝的會在網頁更新時換成新名字：從 0.6.x 更新到 0.7.0 時先維持舊名 `breeze-asr`（內容換成新版，照樣用 `/breeze-asr`），下一次更新再換成 `listenmiao`；用 `bunx skills` 裝過舊名的，先 `bunx skills remove breeze-asr` 再重新安裝。
+  - Agent Skill 從 `breeze-asr` 改名為 `listenmiao`（`/listenmiao`、`skills/listenmiao/scripts/listenmiao.py`）。安裝腳本裝的會在網頁更新時換成新名字：從 0.6.x 更新到 0.7.0 時先維持舊名 `breeze-asr`（內容換成新版，照樣用 `/breeze-asr`），下一次更新再換成 `listenmiao`；用 `bunx skills` 裝過舊名的，先 `bunx skills remove breeze-asr -g` 再重新安裝。
   - 發布檔改名為 `listenmiao-<版本>.zip` 與 `listenmiao-manifest.json`；每次發布仍另外附上舊名的 `breeze-asr-<版本>.zip`，讓 0.6.x 能直接在網頁上更新。
   - MCP server 名稱改為 `listenmiao`，資源網址改為 `listenmiao://…`。
   - Docker Compose 的專案與服務名稱改為 `listenmiao`，容器固定叫 `listenmiao`，資料放在 `listenmiao_asr-data` volume。已經在用 Docker 版的，先在 `.env` 加上 `COMPOSE_PROJECT_NAME=breeze-asr`，繼續用原本的 `breeze-asr_asr-data`，再用 `docker compose up -d --remove-orphans` 換掉舊容器；沒加的話會因網段和舊的網路重疊而無法啟動，或在舊專案已經關掉時改用一個空的新 volume（舊資料仍在 `breeze-asr_asr-data`，加上這行就會回來）。
@@ -322,7 +328,8 @@
 - 在不能錄音的網址按「錄音」，狀態列說明原因與瀏覽器的設定方式。
 - 所有回應加上 `Cache-Control: no-cache`，更新版本後瀏覽器不會繼續使用舊的前端程式。
 
-[Unreleased]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.5.0...v0.6.0

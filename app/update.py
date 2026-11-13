@@ -327,7 +327,7 @@ def _refresh_skills(old: dict, staging: Path, home: Path) -> list[str]:
             if name == LEGACY_SKILL and shared:
                 notes.append(
                     f"沒有更新 Skill：{target} 是 bunx skills 用連結共用的，"
-                    f"請執行 bunx skills remove {LEGACY_SKILL} 後重新安裝"
+                    f"請執行 bunx skills remove {LEGACY_SKILL} -g 後重新安裝"
                 )
                 continue
             if _files(target) != _shipped_skill(old, name):

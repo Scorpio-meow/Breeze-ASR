@@ -308,7 +308,7 @@ def test_an_old_skill_that_other_folders_link_to_is_not_moved(tmp_path, monkeypa
     assert result["updated"]
     assert (home / ".claude/skills/breeze-asr/SKILL.md").read_bytes() == b"skill 1"
     assert not (home / ".agents/skills/listenmiao").exists()
-    assert len(result["skills"]) == 1 and "bunx skills remove breeze-asr" in result["skills"][0]
+    assert len(result["skills"]) == 1 and "bunx skills remove breeze-asr -g" in result["skills"][0]
 
 
 def test_new_skill_installs_go_to_the_folders_that_do_not_have_it_yet(tmp_path):

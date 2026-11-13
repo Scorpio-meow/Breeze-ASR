@@ -162,7 +162,7 @@ bunx skills add Scorpio-meow/ListenMiao --skill listenmiao -g
 
 第一次執行指令時，多數工具會先請你同意。
 
-`skills` 指令要用 git 下載 Skill。電腦沒有 git 時，安裝腳本最後會問你要不要直接把專案裡的 `skills/listenmiao` 複製到 `~/.claude/skills/` 與 `~/.agents/skills/`（直接按 Enter 就是安裝；已經有 `listenmiao` 的資料夾會略過）；已經裝好 ListenMiao 的，也可以在專案資料夾執行 `uv run --no-sync python -m app.update --root . skills` 做同樣的事，或照下一節手動複製。`~/.agents/skills/` 是多個工具共用的資料夾，Codex、Cline 等都會讀。之後在網頁上更新 ListenMiao 時，用安裝腳本裝的 Skill 會一起換成新版（你改過的保留不動）；用 `bunx` 或 `npx` 裝的，請用 `bunx skills update listenmiao`（或把 `bunx` 換成 `npx`）更新。
+`skills` 指令要用 git 下載 Skill。電腦沒有 git 時，安裝腳本最後會問你要不要直接把專案裡的 `skills/listenmiao` 複製到 `~/.claude/skills/` 與 `~/.agents/skills/`（直接按 Enter 就是安裝；已經有 `listenmiao` 的資料夾會略過）；已經裝好 ListenMiao 的，也可以在專案資料夾執行 `uv run --no-sync python -m app.update --root . skills` 做同樣的事，或照下一節手動複製。`~/.agents/skills/` 是多個工具共用的資料夾，Codex、Cline 等都會讀。之後在網頁上更新 ListenMiao 時，用安裝腳本裝的 Skill 會一起換成新版（你改過的保留不動）；用 `bunx` 或 `npx` 裝的，請用 `bunx skills update listenmiao -g`（或把 `bunx` 換成 `npx`）更新。
 
 #### 各工具的 Skill 資料夾
 
@@ -254,12 +254,12 @@ Claude 應用程式（網頁版、桌面版）與 ChatGPT 的 Skill 在雲端的
 
 | 安裝方式 | 更新 | 移除 |
 | --- | --- | --- |
-| `bunx skills` | `bunx skills update listenmiao` | `bunx skills remove listenmiao` |
+| `bunx skills` | `bunx skills update listenmiao -g` | `bunx skills remove listenmiao -g` |
 | `gh skill` | `gh skill update` | 刪除 `listenmiao` 資料夾 |
 | Codex（`$skill-installer`） | 刪除 `~/.codex/skills/listenmiao` 資料夾，再安裝一次 | 刪除 `~/.codex/skills/listenmiao` 資料夾 |
 | Gemini CLI | 移除後重新安裝 | `gemini skills uninstall listenmiao` |
 | 手動複製 | 更新專案資料夾（或在 `listenmiao-skill` 執行 `git pull`），再複製一次 | 刪除 `listenmiao` 資料夾 |
 
-Skill 在 0.7.0 從 `breeze-asr` 改名為 `listenmiao`。用安裝腳本裝的，在網頁上更新時會換成新名字：從 0.6.x 更新到 0.7.0 時先維持舊名 `breeze-asr`（內容換成新版，照樣用 `/breeze-asr`），下一次更新再換成 `listenmiao`；用 `bunx skills` 裝過舊名的，先執行 `bunx skills remove breeze-asr`，再照上面重新安裝；其他方式裝的，刪掉 `breeze-asr` 資料夾後重新安裝。
+Skill 在 0.7.0 從 `breeze-asr` 改名為 `listenmiao`。用安裝腳本裝的，在網頁上更新時會換成新名字：從 0.6.x 更新到 0.7.0 時先維持舊名 `breeze-asr`（內容換成新版，照樣用 `/breeze-asr`），下一次更新再換成 `listenmiao`；用 `bunx skills` 裝過舊名的，先執行 `bunx skills remove breeze-asr -g`，再照上面重新安裝；其他方式裝的，刪掉 `breeze-asr` 資料夾後重新安裝。
 
 路徑或介面如有變動，以官方文件為準：[Claude Code](https://code.claude.com/docs/en/skills)・[OpenAI Codex](https://learn.chatgpt.com/docs/build-skills)・[GitHub Copilot](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills)・[VS Code](https://code.visualstudio.com/docs/agent-customization/agent-skills)・[Cursor](https://cursor.com/docs/skills)・[Gemini CLI](https://geminicli.com/docs/cli/skills/)・[Google Antigravity](https://antigravity.google/docs/skills)・[Devin Desktop](https://docs.devin.ai/desktop/cascade/skills)・[OpenCode](https://opencode.ai/docs/skills)・[Cline](https://docs.cline.bot/customization/skills)・[Kiro](https://kiro.dev/docs/skills/)・[JetBrains Junie](https://junie.jetbrains.com/docs/agent-skills.html)・[Roo Code](https://roocodeinc.github.io/Roo-Code/features/skills/)・[skills](https://github.com/vercel-labs/skills)・[gh skill](https://cli.github.com/manual/gh_skill_install)

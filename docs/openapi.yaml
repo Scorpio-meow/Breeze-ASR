@@ -3,7 +3,7 @@ $self: https://raw.githubusercontent.com/Scorpio-meow/ListenMiao/main/docs/opena
 info:
   title: ListenMiao
   summary: 本機語音辨識服務的 HTTP API：上傳錄音、取得逐字稿、編輯字幕、匯出檔案與燒錄字幕。
-  version: 0.7.0
+  version: 0.7.1
   license:
     name: MIT
     identifier: MIT
