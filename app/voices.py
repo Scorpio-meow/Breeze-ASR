@@ -111,7 +111,7 @@ class VoiceLibrary:
         with self._lock:
             voice = next((v for v in self._voices if v["name"] == name), None)
             if voice is None:
-                voice = {"id": secrets.token_urlsafe(8), "name": name, "samples": 0, "created_at": now}
+                voice = {"id": secrets.token_hex(8), "name": name, "samples": 0, "created_at": now}
                 self._voices.append(voice)
             if _outdated(voice):
                 voice["samples"] = 0

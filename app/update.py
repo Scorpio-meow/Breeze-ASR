@@ -255,6 +255,8 @@ def _place(source: Path, target: Path) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     staged = target.with_name(f"{target.name}.updating")
     shutil.copyfile(source, staged)
+    if target.exists():
+        shutil.copymode(target, staged)
     os.replace(staged, target)
 
 

@@ -34,6 +34,7 @@ const CONFIRM_MS = 5000;
 const CONFIG_REFRESH_MS = 4000;
 const JOB_POLL_MS = 1000;
 const RENDER_POLL_MS = 1000;
+const RECORD_SLICE_MS = 1000;
 const HOTWORDS_COUNT_DELAY_MS = 400;
 const HISTORY_LIMIT = 100;
 const DURATION_TOLERANCE_SECONDS = 2;
@@ -73,8 +74,7 @@ const state = {
   jobs: [],
   glossary: { hotwords: "", replacements: [] },
   burnFile: null,
-  render: null,
-  renderTimer: null,
+  renders: new Map(),
   recording: null,
   uploading: false,
   openTicket: 0,
@@ -643,26 +643,7 @@ function bindRetune() {
   const button = $("retune-btn");
   const hint = $("retune-hint");
   const original = hint.textContent;
-  const label = button.textContent;
-  let armed = false;
-  let disarmTimer = 0;
-  const disarm = () => {
-    armed = false;
-    button.textContent = label;
-    hint.textContent = original;
-  };
-  button.addEventListener("click", async () => {
-    if (!armed) {
-      armed = true;
-      button.textContent = "確定重新調校";
-      hint.textContent = "再按一次開始";
-      clearTimeout(disarmTimer);
-      disarmTimer = setTimeout(disarm, CONFIRM_MS);
-      return;
-    }
-    clearTimeout(disarmTimer);
-    armed = false;
-    button.textContent = label;
+  twoStepButton(button, "確定重新調校", async () => {
     button.disabled = true;
     hint.textContent = "重新啟動推論行程…";
     try {
@@ -686,8 +667,12 @@ function bindDialogs() {
   $("update-check").addEventListener("click", checkUpdate);
   $("update-apply").addEventListener("click", applyUpdate);
   for (const dialog of document.querySelectorAll("dialog:not(#login-dialog)")) {
+    let pressed = null;
+    dialog.addEventListener("pointerdown", (event) => {
+      pressed = event.target;
+    });
     dialog.addEventListener("click", (event) => {
-      if (event.target === dialog) dialog.close();
+      if (event.target === dialog && pressed === dialog) dialog.close();
     });
   }
 }
@@ -780,7 +765,7 @@ function timelineDuration() {
 function previewHoldsJobAudio() {
   return !!state.job && !!state.audio && state.audio.blob === state.job.blob;
 }
-function setAudio(blob, name) {
+function setAudio(blob, name, seconds) {
   const limit = state.config ? state.config.max_upload_mb * 1024 * 1024 : null;
   if (limit !== null && blob.size > limit) {
     setStatus(`檔案 ${bytes(blob.size)} 超過上限 ${uploadLimit(state.config.max_upload_mb)}`, "", "error");
@@ -789,7 +774,7 @@ function setAudio(blob, name) {
   if (state.uploading) return setStatus("上傳中，請等上傳完成再換音訊", "", "error");
   if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
   state.batch = null;
-  state.audio = { blob, name };
+  state.audio = { blob, name, seconds };
   state.previewUrl = URL.createObjectURL(blob);
   audioEl().src = state.previewUrl;
   $("selected-name").textContent = name;
@@ -805,6 +790,7 @@ function setAudio(blob, name) {
 }
 function setFiles(files) {
   if (!files.length) return;
+  if (unsentRecording()) return setStatus("錄音還沒送出", "請先按「辨識」送出，或按「關閉」放棄這段錄音", "error");
   if (files.length === 1) {
     setAudio(files[0], files[0].name);
     return;
@@ -863,6 +849,7 @@ function updateRelink() {
 async function linkSource(file) {
   const job = state.job;
   if (!job) return;
+  if (unsentRecording()) return setStatus("錄音還沒送出", "請先按「辨識」送出，或按「關閉」放棄這段錄音", "error");
   setAudio(file, file.name);
   const ok = await waitForMetadata(audioEl());
   if (state.job !== job || state.audio?.blob !== file) return;
@@ -886,7 +873,11 @@ async function linkSource(file) {
 }
 function bindUpload() {
   const input = $("file-input");
-  input.addEventListener("change", () => setFiles([...(input.files ?? [])]));
+  input.addEventListener("change", () => {
+    const files = [...(input.files ?? [])];
+    input.value = "";
+    setFiles(files);
+  });
   $("relink-input").addEventListener("change", (event) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -950,8 +941,9 @@ async function loadPeaks(blob) {
     note.textContent = `檔案超過 ${bytes(WAVEFORM_MAX_BYTES)}，送出辨識後顯示波形`;
     return;
   }
-  const length = audioEl().duration;
-  if (Number.isFinite(length) && length > WAVEFORM_MAX_SECONDS) {
+  const reported = audioEl().duration;
+  const length = Number.isFinite(reported) ? reported : state.audio.seconds;
+  if (length > WAVEFORM_MAX_SECONDS) {
     note.textContent = `超過 ${duration(WAVEFORM_MAX_SECONDS)}，送出辨識後顯示波形`;
     return;
   }
@@ -1273,6 +1265,7 @@ function recordingName(type) {
 }
 async function startRecording() {
   if (state.uploading) return setStatus("上傳中，請等上傳完成再錄音", "", "error");
+  if (unsentRecording()) return setStatus("錄音還沒送出", "請先按「辨識」送出，或按「關閉」放棄這段錄音", "error");
   let stream;
   $("record-btn").disabled = true;
   try {
@@ -1295,6 +1288,7 @@ async function startRecording() {
   audioContext.createMediaStreamSource(stream).connect(analyser);
   const samples = new Float32Array(analyser.fftSize);
   const startedAt = performance.now();
+  const elapsed = () => (performance.now() - startedAt) / 1000;
   const maxSeconds = state.config?.max_audio_seconds ?? Infinity;
   const rec = { recorder, stream, audioContext, frame: 0 };
   state.recording = rec;
@@ -1303,27 +1297,23 @@ async function startRecording() {
     let peak = 0;
     for (const v of samples) peak = Math.max(peak, Math.abs(v));
     $("level-fill").style.transform = `scaleX(${Math.min(1, peak * 1.5)})`;
-    const elapsed = (performance.now() - startedAt) / 1000;
-    $("record-timer").textContent = clock(elapsed);
-    if (elapsed >= maxSeconds) {
-      stopRecording();
-      return;
-    }
+    $("record-timer").textContent = clock(elapsed());
     rec.frame = requestAnimationFrame(tick);
   };
   recorder.addEventListener("dataavailable", (event) => {
     if (event.data.size) chunks.push(event.data);
+    if (state.recording === rec && elapsed() + RECORD_SLICE_MS / 1000 >= maxSeconds) stopRecording();
   });
   recorder.addEventListener("stop", () => {
     const type = recorder.mimeType || preferred || "audio/webm";
     const blob = new Blob(chunks, { type });
     if (blob.size) {
-      setAudio(blob, recordingName(type));
+      setAudio(blob, recordingName(type), elapsed());
       if (state.audio?.blob === blob) state.audio.recorded = true;
     }
     announce("錄音完成");
   });
-  recorder.start(1000);
+  recorder.start(RECORD_SLICE_MS);
   tick();
   $("record-btn").setAttribute("aria-pressed", "true");
   $("record-label").textContent = "停止";
@@ -2150,9 +2140,16 @@ function updateSpeakerItem(item, speaker) {
     ...state.speakers.filter((s) => s.id !== speaker.id).map((s) => new Option(s.name, s.id)),
   );
 }
-function applySpeakerUpdate(job) {
+function applySpeakerUpdate(job, before) {
   if (state.job?.id !== job.id || !job.result) return;
+  const jumped = job.result.revision > state.revision + 1;
   renderTranscript(job);
+  if (jumped) {
+    state.history = { past: [], future: [] };
+    updateHistoryButtons();
+  } else if (before) {
+    remember(before);
+  }
 }
 function setSpeakerStatus(status, message, tone) {
   status.textContent = message;
@@ -2168,14 +2165,17 @@ function saveSpeakerName(speakerId, input, status) {
   }
   setSpeakerStatus(status, "儲存中…");
   const jobId = state.job.id;
-  const before = currentDraft();
-  const saving = api(`/api/jobs/${encodeURIComponent(jobId)}/speakers/${encodeURIComponent(speakerId)}`, {
-    method: "PATCH",
-    body: { name },
-  })
+  let before = null;
+  const saving = settle()
+    .then(() => {
+      if (state.job?.id === jobId) before = currentDraft();
+      return api(`/api/jobs/${encodeURIComponent(jobId)}/speakers/${encodeURIComponent(speakerId)}`, {
+        method: "PATCH",
+        body: { name },
+      });
+    })
     .then((job) => {
-      applySpeakerUpdate(job);
-      if (state.job?.id === jobId) remember(before);
+      applySpeakerUpdate(job, before);
       setSpeakerStatus(status, "");
       announce(`已改名為 ${name}`);
       return true;
@@ -2184,8 +2184,12 @@ function saveSpeakerName(speakerId, input, status) {
       setSpeakerStatus(status, `無法改名：${err.message}`, "error");
       return false;
     })
-    .finally(() => nameSaves.delete(input));
+    .finally(() => {
+      nameSaves.delete(input);
+      if (state.pendingSave === saving) state.pendingSave = null;
+    });
   nameSaves.set(input, saving);
+  state.pendingSave = saving;
   return saving;
 }
 async function rememberVoice(speakerId, input, status, button) {
@@ -2193,21 +2197,28 @@ async function rememberVoice(speakerId, input, status, button) {
   if (input.value.trim() !== input.dataset.saved && !(await saveSpeakerName(speakerId, input, status))) return;
   button.disabled = true;
   setSpeakerStatus(status, "記住中…");
-  try {
-    const data = await api("/api/voices", { method: "POST", body: { job_id: state.job.id, speaker_id: speakerId } });
-    applySpeakerUpdate(data.job);
-    const message =
-      data.voice.samples > 1 ? `已記住「${data.voice.name}」（第 ${data.voice.samples} 次）` : `已記住「${data.voice.name}」`;
-    setSpeakerStatus(status, message);
-    announce(message);
-    loadVoices();
-  } catch (err) {
-    setSpeakerStatus(status, err.message, "error");
-    input.focus();
-    input.select();
-  } finally {
-    button.disabled = false;
-  }
+  const jobId = state.job.id;
+  const saving = settle()
+    .then(() => api("/api/voices", { method: "POST", body: { job_id: jobId, speaker_id: speakerId } }))
+    .then((data) => {
+      applySpeakerUpdate(data.job);
+      const message =
+        data.voice.samples > 1 ? `已記住「${data.voice.name}」（第 ${data.voice.samples} 次）` : `已記住「${data.voice.name}」`;
+      setSpeakerStatus(status, message);
+      announce(message);
+      loadVoices();
+    })
+    .catch((err) => {
+      setSpeakerStatus(status, err.message, "error");
+      input.focus();
+      input.select();
+    })
+    .finally(() => {
+      button.disabled = false;
+      if (state.pendingSave === saving) state.pendingSave = null;
+    });
+  state.pendingSave = saving;
+  await saving;
 }
 async function loadVoices() {
   try {
@@ -2479,7 +2490,7 @@ function bindGlossary() {
   );
 }
 function renderBurn() {
-  const render = state.render;
+  const render = state.renders.get(state.job?.id);
   const running = !!render && !["succeeded", "failed", "cancelled"].includes(render.status);
   $("burn-progress").hidden = !render;
   $("burn-cancel").hidden = !running;
@@ -2498,23 +2509,29 @@ function renderBurn() {
   if (render.status === "failed") status.dataset.tone = "error";
   else delete status.dataset.tone;
 }
-async function pollRender() {
-  const render = state.render;
-  if (!render) return;
+async function pollRender(jobId, renderId) {
+  let render;
   try {
-    state.render = await api(`/api/renders/${encodeURIComponent(render.id)}`);
+    render = await api(`/api/renders/${encodeURIComponent(renderId)}`);
   } catch (err) {
-    state.render = { ...render, status: "failed", error: err.message };
+    if (state.renders.get(jobId)?.id !== renderId) return;
+    if (err.status !== 404) {
+      setTimeout(pollRender, RENDER_POLL_MS * 3, jobId, renderId);
+      return;
+    }
+    render = { ...state.renders.get(jobId), status: "failed", error: err.message };
   }
-  renderBurn();
-  if (["succeeded", "failed", "cancelled"].includes(state.render.status)) {
-    announce(`燒錄字幕${RENDER_LABELS[state.render.status]}`);
+  if (state.renders.get(jobId)?.id !== renderId) return;
+  state.renders.set(jobId, render);
+  if (state.job?.id === jobId) renderBurn();
+  if (["succeeded", "failed", "cancelled"].includes(render.status)) {
+    announce(`燒錄字幕${RENDER_LABELS[render.status]}`);
     return;
   }
-  state.renderTimer = setTimeout(pollRender, RENDER_POLL_MS);
+  setTimeout(pollRender, RENDER_POLL_MS, jobId, renderId);
 }
 function chooseBurnFile(file, name) {
-  state.burnFile = { blob: file, name };
+  state.burnFile = { blob: file, name, jobId: state.job.id };
   $("burn-name").textContent = name;
   renderBurn();
 }
@@ -2522,38 +2539,34 @@ async function startBurn() {
   const source = state.burnFile;
   if (!source || !editable()) return;
   await settle();
-  clearTimeout(state.renderTimer);
   const jobId = state.job.id;
   const placeholder = { id: "", job_id: jobId, status: "queued", progress: 0, error: null };
-  state.render = placeholder;
+  state.renders.set(jobId, placeholder);
   renderBurn();
   $("burn-status").textContent = "上傳影片…";
   let render;
   try {
     render = await upload(`/api/jobs/${encodeURIComponent(jobId)}/renders`, {}, source.blob, source.name, (ratio) => {
-      if (state.render !== placeholder) return;
+      if (state.renders.get(jobId) !== placeholder || state.job?.id !== jobId) return;
       $("burn-status").textContent = ratio < 1 ? `上傳影片 ${Math.round(ratio * 100)}%` : "檢查影片…";
     });
   } catch (err) {
-    if (state.render !== placeholder) return;
-    state.render = { id: "", job_id: jobId, status: "failed", progress: 0, error: err.message };
+    if (state.renders.get(jobId) !== placeholder) return;
+    state.renders.set(jobId, { id: "", job_id: jobId, status: "failed", progress: 0, error: err.message });
     renderBurn();
     announce(err.message);
     return;
   }
-  if (state.render !== placeholder) return;
-  state.render = render;
+  if (state.renders.get(jobId) !== placeholder) return;
+  state.renders.set(jobId, render);
   renderBurn();
-  state.renderTimer = setTimeout(pollRender, RENDER_POLL_MS);
+  setTimeout(pollRender, RENDER_POLL_MS, jobId, render.id);
 }
 function openBurn() {
-  if (state.render && state.render.job_id !== state.job?.id) {
-    clearTimeout(state.renderTimer);
-    state.render = null;
-  }
+  const jobId = state.job?.id;
   const current = previewHoldsJobAudio() && hasVideo();
   $("burn-current").hidden = !current;
-  if (!state.render) {
+  if (!state.renders.has(jobId) || state.burnFile?.jobId !== jobId) {
     state.burnFile = null;
     $("burn-name").textContent = current ? "" : "請選擇這份字幕的原始影片";
   }
@@ -2570,9 +2583,11 @@ function bindBurn() {
   });
   $("burn-start").addEventListener("click", startBurn);
   $("burn-cancel").addEventListener("click", async () => {
-    if (!state.render?.id) return;
+    const jobId = state.job?.id;
+    const render = state.renders.get(jobId);
+    if (!render?.id) return;
     try {
-      state.render = await api(`/api/renders/${encodeURIComponent(state.render.id)}`, { method: "DELETE" });
+      state.renders.set(jobId, await api(`/api/renders/${encodeURIComponent(render.id)}`, { method: "DELETE" }));
       renderBurn();
     } catch (err) {
       $("burn-status").textContent = err.message;

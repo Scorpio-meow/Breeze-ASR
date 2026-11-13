@@ -44,7 +44,7 @@ flowchart TD
 | `app/punctuate.py`、`app/punctuation.py` | 自動標點子行程與把標點放回原文的對齊；標點模型的下載與呼叫 |
 | `app/renders.py` | 燒錄字幕的佇列與 ffmpeg 呼叫 |
 | `app/watch.py` | [監看資料夾](deployment.md#監看資料夾) |
-| `app/client.py`、`app/cli.py`、`app/mcp_server.py` | 呼叫服務的 HTTP 用戶端；命令列工具；MCP server |
+| `app/cli.py`、`app/mcp_server.py` | 命令列工具（執行 `skills/listenmiao/scripts/listenmiao.py`，MCP server 也用它的 HTTP 用戶端）；MCP server |
 | `static/` | 前端（純 HTML／CSS／JavaScript，不需建置） |
 
 - OpenVINO 把模型編譯到內顯時會鎖住 Python GIL，所以推論放在子行程，網頁在這段期間仍能即時回應。

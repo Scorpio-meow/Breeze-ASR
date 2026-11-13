@@ -7,5 +7,6 @@ compose*.yaml
 README.md
 private/
 skills/
+!skills/listenmiao/scripts/listenmiao.py
 evals/
 .update/

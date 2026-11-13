@@ -23,20 +23,24 @@ if [ -z "$device" ]; then
   else
     device=cpu
   fi
-  echo "偵測到的裝置：$device（可用 scripts/install.sh cpu|cuda|rocm 指定）"
+  echo "偵測到的裝置：$device（可用 bash scripts/install.sh cpu|cuda|rocm 指定）"
 fi
 
 case "$device" in
   cpu) group=cpu ;;
   cuda) group=cu130 ;;
   rocm) group=rocm72 ;;
-  *) echo "用法：scripts/install.sh [cpu|cuda|rocm]" >&2; exit 2 ;;
+  *) echo "用法：bash scripts/install.sh [cpu|cuda|rocm]" >&2; exit 2 ;;
 esac
 
 if ! command -v uv >/dev/null 2>&1; then
   echo "安裝 uv…"
   curl -LsSf https://astral.sh/uv/install.sh | sh
-  . "$HOME/.local/bin/env"
+  export PATH="$HOME/.local/bin:$PATH"
+  if ! command -v uv >/dev/null 2>&1; then
+    echo "uv 已安裝但這個終端機還找不到它，請重新開啟終端機後再執行一次" >&2
+    exit 1
+  fi
 fi
 
 echo "安裝套件（PyTorch $group）…"
@@ -51,4 +55,4 @@ fi
 
 uv run --no-sync python -m app.update --root . skills
 
-echo "安裝完成。執行 scripts/start.sh 啟動；第一次啟動會下載並轉換約 9 GB 的模型。"
+echo "安裝完成。執行 bash scripts/start.sh 啟動；第一次啟動會下載並轉換約 9 GB 的模型。"

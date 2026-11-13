@@ -1,16 +1,21 @@
+import io
+import json
+import urllib.error
 from pathlib import Path
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app import client as client_module
-from app.client import AsrClient, ServiceError, access_token
+from app.cli import load
 from app.config import Settings
 from app.main import STATIC_DIR, create_app, public_paths, session_value
 
 ROOT = Path(__file__).resolve().parent.parent
 TOKEN = "k3Jq9V_x2mL8tR4wZ0pN6sYb"
+AsrClient = load().AsrClient
+ServiceError = load().ServiceError
+access_token = load().access_token
 
 
 def _app(tmp_path: Path, token: str | None):
@@ -174,31 +179,39 @@ def test_cli_and_mcp_read_the_token_from_the_environment(monkeypatch, value, exp
     assert access_token() == expected
 
 
-def _client(monkeypatch, token: str | None, seen: list[str | None]) -> AsrClient:
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen.append(request.headers.get("authorization"))
-        if request.headers.get("authorization") != f"Bearer {TOKEN}":
-            return httpx.Response(401, json={"detail": "需要存取權杖"})
-        return httpx.Response(200, json={"jobs": []})
+class _TokenCheck:
+    def __init__(self) -> None:
+        self.seen: list[str | None] = []
 
-    real = httpx.Client
-    monkeypatch.setattr(client_module.httpx, "Client", lambda **kw: real(transport=httpx.MockTransport(handler), **kw))
-    return AsrClient("http://asr.example:7860", token)
-
-
-def test_client_sends_the_token(monkeypatch):
-    seen = []
-    assert _client(monkeypatch, TOKEN, seen).jobs() == []
-    assert seen == [f"Bearer {TOKEN}"]
+    def open(self, request, timeout=None):
+        sent = request.get_header("Authorization")
+        self.seen.append(sent)
+        if sent != f"Bearer {TOKEN}":
+            body = io.BytesIO(json.dumps({"detail": "需要存取權杖"}).encode())
+            raise urllib.error.HTTPError(request.full_url, 401, "Unauthorized", {}, body)
+        return io.BytesIO(b'{"jobs": []}')
 
 
-def test_client_explains_a_missing_token(monkeypatch):
-    seen = []
+def _client(token: str | None) -> tuple[AsrClient, _TokenCheck]:
+    client = AsrClient("http://asr.example:7860", token)
+    client._opener = _TokenCheck()
+    return client, client._opener
+
+
+def test_client_sends_the_token():
+    client, check = _client(TOKEN)
+    assert client.jobs() == []
+    assert check.seen == [f"Bearer {TOKEN}"]
+
+
+def test_client_explains_a_missing_token():
+    client, check = _client(None)
     with pytest.raises(ServiceError, match="需要存取權杖：請把環境變數 ASR_ACCESS_TOKEN"):
-        _client(monkeypatch, None, seen).jobs()
-    assert seen == [None]
+        client.jobs()
+    assert check.seen == [None]
 
 
-def test_client_explains_a_wrong_token(monkeypatch):
+def test_client_explains_a_wrong_token():
+    client, _ = _client("another-token-of-24-chars")
     with pytest.raises(ServiceError, match="拒絕這個存取權杖"):
-        _client(monkeypatch, "another-token-of-24-chars", []).jobs()
+        client.jobs()

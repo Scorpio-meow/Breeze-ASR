@@ -97,6 +97,58 @@ def test_running_job_can_be_cancelled(tmp_path):
     assert not queue.cancel(job.id)
 
 
+class _SlowSpeakers:
+    def __init__(self) -> None:
+        self.waiting = threading.Event()
+        self.release = threading.Event()
+        self.killed = False
+
+    def run(self, audio_path, num_speakers, on_progress):
+        self.waiting.set()
+        self.release.wait(5)
+        return self
+
+    def kill(self) -> None:
+        self.killed = True
+
+
+class _CountingInference(FakeInference):
+    def __init__(self) -> None:
+        super().__init__(finish=True)
+        self.started: list[str] = []
+
+    def transcribe(self, job_id, model_id, audio_path, hotwords, on_stage, on_progress) -> Transcript:
+        self.started.append(job_id)
+        return super().transcribe(job_id, model_id, audio_path, hotwords, on_stage, on_progress)
+
+
+def test_cancel_while_the_speaker_model_is_not_ready_skips_transcription(tmp_path):
+    inference = _CountingInference()
+    speakers = _SlowSpeakers()
+    queue = JobQueue(
+        inference,
+        speakers,
+        None,
+        GlossaryStore(tmp_path / "glossary.json"),
+        tmp_path / "jobs",
+        tmp_path / "results",
+        5,
+        3600,
+    )
+    queue.start()
+    decoded = tmp_path / "decoded.f32"
+    decoded.write_bytes(bytes(64))
+    job = queue.submit("org/model", "a.wav", decoded, 1.0, "auto", False, "")
+    assert speakers.waiting.wait(5)
+
+    assert queue.cancel(job.id)
+    speakers.release.set()
+    _wait(lambda: job.finished_at is not None)
+    assert job.status is JobStatus.CANCELLED
+    assert inference.started == []
+    assert speakers.killed
+
+
 def test_edited_segment_text_is_saved_and_exported(tmp_path):
     inference = FakeInference(finish=True)
     queue = _queue(tmp_path, inference)

@@ -1,11 +1,13 @@
 import asyncio
+import io
+import urllib.error
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app import client as client_module
-from app.client import AsrClient, service_url
+from app.cli import load
 from app.config import Settings
 from app.main import AllowedHostsMiddleware, create_app
 
@@ -139,9 +141,20 @@ def test_cli_and_mcp_reach_the_service(monkeypatch, tmp_path, listen):
     app = _app(tmp_path)
     monkeypatch.setenv("ASR_HOST", listen)
     monkeypatch.setenv("ASR_PORT", "7860")
-    monkeypatch.setattr(
-        client_module.httpx,
-        "Client",
-        lambda **kw: TestClient(app, base_url=kw["base_url"], headers=kw["headers"]),
-    )
-    assert AsrClient(service_url(None), None).jobs() == []
+    cli = load()
+    client = cli.AsrClient(cli.service_url(None), None)
+    client._opener = _Through(app)
+    assert client.jobs() == []
+
+
+class _Through:
+    def __init__(self, app) -> None:
+        self._app = app
+
+    def open(self, request, timeout=None):
+        url = urlparse(request.full_url)
+        http = TestClient(self._app, base_url=f"{url.scheme}://{url.netloc}")
+        response = http.request(request.get_method(), url.path, headers=dict(request.header_items()))
+        if not response.is_success:
+            raise urllib.error.HTTPError(request.full_url, response.status_code, "", {}, io.BytesIO(response.content))
+        return io.BytesIO(response.content)

@@ -42,12 +42,19 @@ class ServiceError(RuntimeError):
     pass
 
 
+class NotFoundError(ServiceError):
+    pass
+
+
 def service_url(explicit: str | None) -> str:
     if explicit:
         return explicit.rstrip("/")
     host, port = os.environ.get("ASR_HOST"), os.environ.get("ASR_PORT")
     if not host or not port:
-        raise ServiceError("不知道服務的網址：請用 --url 指定，或設定環境變數 ASR_HOST 與 ASR_PORT")
+        raise ServiceError(
+            "不知道服務的網址：請設定環境變數 ASR_HOST 與 ASR_PORT（在專案資料夾用 uv run --env-file .env 執行就會讀入）；"
+            "命令列工具也可以用 --url 指定"
+        )
     host = LOCAL_ALIASES.get(host, host)
     return f"http://[{host}]:{port}" if ":" in host else f"http://{host}:{port}"
 
@@ -81,17 +88,24 @@ class Multipart:
         yield self._tail
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 class AsrClient:
     def __init__(self, base_url: str, token: str | None) -> None:
         self.base_url = base_url
+        self.uses_token = token is not None
         self._token = token
+        self._opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect)
 
     def _open(self, method: str, path: str, body=None, headers: dict | None = None, timeout: float | None = None):
         request = urllib.request.Request(self.base_url + path, data=body, method=method, headers=headers or {})
         if self._token is not None:
             request.add_header("Authorization", f"Bearer {self._token}")
         try:
-            return urllib.request.urlopen(request, timeout=timeout)
+            return self._opener.open(request, timeout=timeout)
         except urllib.error.HTTPError as exc:
             raise self._error(exc) from None
         except (urllib.error.URLError, OSError) as exc:
@@ -101,26 +115,38 @@ class AsrClient:
         if exc.code == 401:
             return ServiceError(
                 f"{self.base_url} 需要存取權杖：請把環境變數 ASR_ACCESS_TOKEN 設成和服務 .env 相同的值"
-                if self._token is None
+                if not self.uses_token
                 else f"{self.base_url} 拒絕這個存取權杖：請確認 ASR_ACCESS_TOKEN 和服務 .env 的值相同"
             )
         try:
             detail = json.loads(exc.read().decode("utf-8")).get("detail")
-        except (ValueError, AttributeError):
+        except (ValueError, AttributeError, OSError, http.client.HTTPException):
             detail = None
-        return ServiceError(detail if isinstance(detail, str) else f"HTTP {exc.code}")
+        error = NotFoundError if exc.code == 404 else ServiceError
+        return error(detail if isinstance(detail, str) else f"HTTP {exc.code}")
+
+    def _read(self, method: str, path: str, body=None, headers: dict | None = None, timeout: float | None = None):
+        with self._open(method, path, body, headers, timeout) as response:
+            try:
+                return response.read()
+            except (OSError, http.client.HTTPException) as exc:
+                raise ServiceError(f"連不上 ListenMiao 服務 {self.base_url}：{exc}") from exc
+
+    def _parse(self, raw: bytes):
+        try:
+            return json.loads(raw.decode("utf-8"))
+        except ValueError as exc:
+            raise ServiceError(f"{self.base_url} 的回應不是 JSON，請確認這是 ListenMiao 服務的網址") from exc
 
     def _json(self, method: str, path: str, payload: dict | None = None):
         body = None if payload is None else json.dumps(payload, ensure_ascii=False).encode("utf-8")
         headers = {} if payload is None else {"Content-Type": "application/json; charset=utf-8"}
-        with self._open(method, path, body, headers, REQUEST_SECONDS) as response:
-            return json.loads(response.read().decode("utf-8"))
+        return self._parse(self._read(method, path, body, headers, REQUEST_SECONDS))
 
     def _upload(self, path: str, fields: dict[str, str], source: Path) -> dict:
         form = Multipart(fields, "file", source)
         headers = {"Content-Type": form.content_type, "Content-Length": str(form.length)}
-        with self._open("POST", path, form, headers, None) as response:
-            return json.loads(response.read().decode("utf-8"))
+        return self._parse(self._read("POST", path, form, headers, None))
 
     def config(self) -> dict:
         return self._json("GET", "/api/config")
@@ -138,8 +164,7 @@ class AsrClient:
         return self._json("GET", f"/api/jobs/{job_id}")
 
     def export(self, job_id: str, fmt: str) -> bytes:
-        with self._open("GET", f"/api/jobs/{job_id}/export/{fmt}", timeout=REQUEST_SECONDS) as response:
-            return response.read()
+        return self._read("GET", f"/api/jobs/{job_id}/export/{fmt}", timeout=REQUEST_SECONDS)
 
     def cancel(self, job_id: str) -> dict:
         return self._json("DELETE", f"/api/jobs/{job_id}")
@@ -207,16 +232,19 @@ def describe_progress(job: dict) -> str:
         return f"{stage} {round(progress * 100)}%" if progress is not None else stage
     if status == "succeeded":
         result = job["result"]
-        return "，".join(["完成", f"{len(result['segments'])} 段", *_speaker_summary(result)])
+        return "，".join(["完成", f"{len(result['segments'])} 段", *_result_notes(result)])
     return job.get("error") or ("已取消" if status == "cancelled" else "失敗")
 
 
-def _speaker_summary(result: dict) -> list[str]:
+def _result_notes(result: dict) -> list[str]:
+    notes = []
     if result.get("speakers_error"):
-        return [f"分辨說話者失敗：{result['speakers_error']}"]
-    if result.get("speakers"):
-        return [f"說話者 {len(result['speakers'])} 位"]
-    return []
+        notes.append(f"分辨說話者失敗：{result['speakers_error']}")
+    elif result.get("speakers"):
+        notes.append(f"說話者 {len(result['speakers'])} 位")
+    if result.get("punctuation_error"):
+        notes.append(f"自動標點失敗：{result['punctuation_error']}")
+    return notes
 
 
 def _formats(raw: str) -> list[str]:
@@ -256,11 +284,31 @@ def _reporter(name: str, describe: Callable[[dict], str]) -> Callable[[dict], No
     return report
 
 
+def _target(source: Path, fmt: str, out: Path | None) -> Path:
+    name = f"{source.name}.{fmt}"
+    return out / name if out is not None else source.with_name(name)
+
+
+def _clashes(sources: list[Path], fmt: str, out: Path | None) -> list[str]:
+    seen: dict[str, Path] = {}
+    clashes = []
+    for source in sources:
+        key = os.path.normcase(os.path.abspath(_target(source, fmt, out)))
+        if key in seen:
+            clashes.append(f"{seen[key]} 和 {source}")
+        else:
+            seen[key] = source
+    return clashes
+
+
 def _transcribe(client: AsrClient, args: argparse.Namespace) -> int:
     sources = [Path(p) for p in args.files]
     missing = [str(p) for p in sources if not p.is_file()]
     if missing:
         raise ServiceError(f"找不到檔案：{'、'.join(missing)}")
+    clashes = _clashes(sources, args.formats[0], args.out)
+    if clashes:
+        raise ServiceError(f"這些檔案的結果會寫到同一個位置：{'；'.join(clashes)}。請改檔名，或分開用不同的 --out 執行")
     config = client.config()
     unknown = [f for f in args.formats if f not in config["formats"]]
     if unknown:
@@ -280,15 +328,18 @@ def _transcribe(client: AsrClient, args: argparse.Namespace) -> int:
         _log(f"{source.name}：已送出（工作 {job['id']}）")
         submitted.append((source, job["id"]))
     for source, job_id in submitted:
-        job = client.wait(job_id, _reporter(source.name, describe_progress))
-        if job["status"] != "succeeded":
+        try:
+            job = client.wait(job_id, _reporter(source.name, describe_progress))
+            if job["status"] != "succeeded":
+                failed += 1
+                continue
+            for fmt in args.formats:
+                target = _target(source, fmt, args.out)
+                target.write_bytes(client.export(job_id, fmt))
+                print(target)
+        except (ServiceError, OSError) as exc:
+            _log(f"{source.name}：無法寫出結果（工作 {job_id}）：{exc}")
             failed += 1
-            continue
-        for fmt in args.formats:
-            name = f"{source.name}.{fmt}"
-            target = args.out / name if args.out is not None else source.with_name(name)
-            target.write_bytes(client.export(job_id, fmt))
-            print(target)
     return 1 if failed else 0
 
 

@@ -11,8 +11,8 @@ from mcp.shared.exceptions import MCPError
 from mcp.types import INTERNAL_ERROR, INVALID_PARAMS, PromptReference, ResourceTemplateReference
 
 from app import mcp_server
-from app.client import NotFoundError, ServiceError
 from app.exports import FORMATS
+from app.mcp_server import NotFoundError, ServiceError
 
 ROOT = Path(__file__).resolve().parent.parent
 COMPONENTS = yaml.safe_load((ROOT / "docs" / "openapi.yaml").read_text(encoding="utf-8"))["components"]
@@ -246,6 +246,14 @@ def test_list_models_reports_models_and_features(service):
         "speakers": {"max_speakers": 8},
         "punctuation": False,
     }
+
+
+def test_job_status_reports_a_failed_punctuation_step(service):
+    result = SUCCEEDED["result"] | {"punctuation_error": "標點模型下載失敗"}
+    service.states = [SUCCEEDED | {"result": result}]
+    assert _structured(_call("job_status", {"job_id": "job1"}))["progress"] == (
+        "完成，2 段，說話者 1 位，自動標點失敗：標點模型下載失敗"
+    )
 
 
 def test_transcribe_without_waiting_returns_the_queued_job(service, recording):

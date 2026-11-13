@@ -56,5 +56,8 @@ if (-not $NoShortcut) {
 }
 
 uv run --no-sync python -m app.update --root . skills
+if ($LASTEXITCODE -ne 0) {
+    throw "安裝 Agent Skill 失敗"
+}
 
 Write-Host "安裝完成。點桌面捷徑或執行 scripts\start.ps1 啟動；第一次啟動會下載並轉換約 9 GB 的模型。"

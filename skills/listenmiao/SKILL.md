@@ -18,6 +18,7 @@ Reply to the user in their language. The service and its command-line tools prin
 - **`uv run --directory` changes the working directory.** Pass absolute paths for audio, video and output files.
 - **`glossary --set` replaces the whole glossary**, which every user of the service shares. Start from the current `glossary` output.
 - **Results expire.** The service keeps a job for `ASR_JOB_TTL_SECONDS` after its last edit (24 h in `.env.example`); afterwards only exported files remain.
+- **An id that starts with `-` reads as an option.** Services up to 0.7.2 made such job and voice ids. Put every option first and `--` right before the id: `<asr> export --format md -- -x9AbCdEfGhIjKlMn`.
 - **Breeze ASR 26 writes Taiwanese Hokkien as Mandarin characters**, not Tâi-lô or Hàn-jī orthography.
 - **Renaming a speaker unlinks it from the voice library.** That is expected; remembering the voice again is a separate, consent-gated step.
 - **Windows PowerShell mangles Chinese passed to `curl.exe` on the command line.** Use `<asr>`, which sends UTF-8 itself.
@@ -64,7 +65,7 @@ Choose each option deliberately:
 - **`--glossary`**: use the hotwords saved in the web app's glossary instead of `--hotwords`.
 - **`--out`**: output folder. Without it, results go next to the source as `<file name>.<format>`, e.g. `週會.m4a.md`.
 
-Progress goes to stderr and written paths to stdout. The last progress line reports segments and speakers (`完成，25 段，說話者 2 位`), or why diarization failed (`分辨說話者失敗：…`) while the transcript itself still succeeded. Exit code 1 means at least one file failed; the others still finish.
+Progress goes to stderr and written paths to stdout. The last progress line reports segments and speakers (`完成，25 段，說話者 2 位`), and why diarization (`分辨說話者失敗：…`) or punctuation (`自動標點失敗：…`) failed while the transcript itself still succeeded; tell the user when the files came out without speaker labels or punctuation. Exit code 1 means at least one file failed; the others still finish, and a result that couldn't be written names its job id so you can `export` it again. If two inputs would write the same output file, nothing is submitted.
 
 **Long recordings.** Estimate time as audio length × the model's speed from `status`, plus roughly 0.15–0.4 × audio length for speaker diarization; a one-hour meeting with speaker labels typically takes 20–60 minutes on a laptop. Start long jobs as a background process (or redirect output to a log file) instead of waiting in the foreground, tell the user the estimate, and check back. Limits come from `status` (2 GB and 3 hours per file in the example settings); split longer recordings with ffmpeg first.
 

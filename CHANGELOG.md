@@ -4,6 +4,35 @@
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-11-13
+
+### Changed
+
+- 命令列工具只剩一份：`python -m app.cli` 直接執行 Skill 附的 `skills/listenmiao/scripts/listenmiao.py`，MCP server 與 Windows 啟動腳本也用這支腳本連服務，原本另一份 HTTP 用戶端 `app/client.py` 刪除，不會再改得不一致。Docker 映像也放進這支腳本。
+- 新的工作 id 與語者 id 改用十六進位字串。原本約每 64 個 id 就有 1 個以 `-` 開頭，命令列工具會把它當成選項而失敗；之前產生、以 `-` 開頭的 id，要放在所有選項之後並在前面加上 `--`。
+- 發布流程：推 tag 時先跑完 CI 才發布 GitHub Release；Docker 映像只在推 `v*` tag 時建置，而且 tag 要和 `pyproject.toml` 的版本一致；`astral-sh/setup-uv` 與 `jlumbroso/free-disk-space` 改用 commit SHA 固定版本。
+- 發布的 zip 裡 `.sh` 不再標成可執行，和 git 裡一致；文件與腳本的提示一律寫 `bash scripts/…`。
+
+### Fixed
+
+- 命令列工具與 MCP server 不再經過系統或環境變數設定的 proxy，也不跟著轉址走。Windows 設了公司 proxy 時，連 `127.0.0.1` 的請求（含存取權杖與錄音）原本會先送到 proxy，常見結果是只看到「HTTP 502」；遇到轉址時，權杖也不會再被帶到別的主機。
+- 工作還在等分辨說話者的模型（第一次下載，或離線時重試）時按取消，原本辨識照樣開始並跑完整段，現在直接結束。
+- 自動標點失敗時，命令列工具與 MCP 的完成訊息會附上原因，例如「完成，25 段，自動標點失敗：…」。
+- 批次辨識：兩個檔案的結果會寫到同一個位置時，一開始就停下，不再互相覆蓋；某個結果寫不出去（例如檔案正在 Word 裡開著）時，印出原因與工作 id，其他檔案照常寫出。
+- 命令列工具讀回應讀到一半斷線（例如服務被關掉或正在更新）時，改成說明連不上服務，不再印出 traceback，批次辨識的其他檔案也照常寫出。
+- 命令列工具與 MCP 的 `--url`／`ASR_HOST`、`ASR_PORT` 指到別的網頁服務時，改成說明回應不是 JSON、請確認網址，不再印出 JSON 解析錯誤。
+- MCP 送出錄音後，等服務收檔與解碼不再有 60 秒上限，長錄音不會因為逾時被當成失敗，重試時也不會多出重複的工作。
+- 更新時換掉的檔案保留原本的權限，自己加上執行權限的 `.sh` 更新後仍然可以直接執行。
+- `scripts/install.sh`：`~/.local/bin` 已經在 PATH 裡時，裝完 uv 不再中止。
+- `scripts/install.ps1`：Agent Skill 裝不起來時停下並說明原因，不再接著印「安裝完成」。CI 也會檢查 `scripts/update.sh` 的語法。
+- 網頁：還沒送出的錄音，不會再被選檔、拖檔、再按一次錄音或「對應原始檔」直接換掉，會先提醒送出或關閉；之後再選同一個檔案也照常有反應。
+- 網頁：Chrome、Edge 錄的 WebM 讀不到長度，超過 30 分鐘的錄音原本會在瀏覽器裡整段解碼成波形，可能把分頁撐爆；現在改用錄音秒數判斷。
+- 網頁：錄音分頁切到背景時，錄音長度上限照樣生效，不會錄超過上限、送出時整段被拒絕。
+- 網頁：燒錄字幕時網路斷一下不再直接顯示失敗，會繼續查進度；切到別的工作再打開燒錄視窗，也不會丟掉進行中的燒錄。
+- 網頁：說話者改名與「記住聲音」也排進儲存佇列，改完名字馬上合併、分割或復原不再收到版本衝突；伺服器版本跳號時（例如別人同時在改），清掉復原紀錄，不會用舊的快照蓋掉別人的修改。
+- 網頁：在對話框裡拖曳選字、放開時滑鼠在對話框外，不再關掉對話框、丟掉沒存的內容。
+- 網頁：「重新調校」按鈕改用共用的兩段確認按鈕，讀螢幕軟體會知道它進入待確認狀態。
+
 ## [0.7.2] - 2026-11-13
 
 ### Added
@@ -340,7 +369,8 @@
 - 在不能錄音的網址按「錄音」，狀態列說明原因與瀏覽器的設定方式。
 - 所有回應加上 `Cache-Control: no-cache`，更新版本後瀏覽器不會繼續使用舊的前端程式。
 
-[Unreleased]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.2...HEAD
+[Unreleased]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.3...HEAD
+[0.7.3]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.6.1...v0.7.0

@@ -32,7 +32,7 @@ foreach ($line in Get-Content .env -Encoding UTF8) {
         $settings[$Matches[1]] = $Matches[2]
     }
 }
-$url = uv run --no-sync --env-file .env python -c "from app.client import service_url; print(service_url(None))"
+$url = uv run --no-sync --env-file .env python -c "from app.cli import load; print(load().service_url(None))"
 if ($LASTEXITCODE -ne 0) {
     throw "無法從 .env 的 ASR_HOST、ASR_PORT 組出服務網址"
 }

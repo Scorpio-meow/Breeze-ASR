@@ -39,8 +39,8 @@
 - [app/punctuate.py](app/punctuate.py), [app/punctuation.py](app/punctuation.py): 自動標點子行程與標點對齊
 - [app/renders.py](app/renders.py): 燒錄字幕
 - [app/watch.py](app/watch.py): 監看資料夾
-- [app/client.py](app/client.py), [app/cli.py](app/cli.py), [app/mcp_server.py](app/mcp_server.py): HTTP 用戶端、命令列工具、MCP server
-- [skills/listenmiao/](skills/listenmiao/): Agent Skill；`scripts/listenmiao.py` 是只用標準函式庫、指令與 `app.cli` 相同的命令列工具，`tests/test_skill_script.py` 檢查兩者的參數一致
+- [app/cli.py](app/cli.py), [app/mcp_server.py](app/mcp_server.py): 命令列工具（載入 Skill 附的 `listenmiao.py`，MCP server 也用它的 HTTP 用戶端）、MCP server
+- [skills/listenmiao/](skills/listenmiao/): Agent Skill；`scripts/listenmiao.py` 是只用標準函式庫的命令列工具，`python -m app.cli` 直接執行這支腳本，測試在 `tests/test_skill_script.py`
 - [evals/](evals/): Agent Skill 的測試情境（使用者會說的話、評分標準、測試用影音檔），不隨 Skill 安裝
 - [static/](static/): 前端（工具列、波形時間軸、字幕列表、右側面板、狀態列）
 - [tests/](tests/): 不需要模型的單元測試

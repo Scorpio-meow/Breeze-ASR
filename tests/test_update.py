@@ -87,6 +87,20 @@ def _yes(current, newest) -> bool:
     return True
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows 沒有執行權限位元")
+def test_replaced_files_keep_their_permissions(tmp_path):
+    source = tmp_path / "new.sh"
+    source.write_text("echo new", encoding="utf-8")
+    source.chmod(0o644)
+    target = tmp_path / "scripts" / "start.sh"
+    target.parent.mkdir()
+    target.write_text("echo old", encoding="utf-8")
+    target.chmod(0o755)
+    update._place(source, target)
+    assert target.read_text(encoding="utf-8") == "echo new"
+    assert target.stat().st_mode & 0o777 == 0o755
+
+
 def test_update_replaces_untouched_files_keeps_edited_ones_and_rolls_back(tmp_path, monkeypatch):
     old = _publish(tmp_path, "v0.5.0", OLD)
     new = _publish(tmp_path, "v0.6.0", NEW)

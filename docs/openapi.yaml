@@ -3,7 +3,7 @@ $self: https://raw.githubusercontent.com/Scorpio-meow/ListenMiao/main/docs/opena
 info:
   title: ListenMiao
   summary: 本機語音辨識服務的 HTTP API：上傳錄音、取得逐字稿、編輯字幕、匯出檔案與燒錄字幕。
-  version: 0.7.2
+  version: 0.7.3
   license:
     name: MIT
     identifier: MIT
@@ -615,7 +615,7 @@ paths:
                         created_at: 1793583123.41
                         finished_at: null
                         segments: null
-                      - id: Hn4cV7pLs0aR1uYb
+                      - id: 3f9a1c0b7d2e4a6f8b1c9d0e
                         model: MediaTek-Research/Breeze-ASR-25
                         filename: lecture.mp4
                         audio_seconds: 29.11
@@ -914,7 +914,7 @@ paths:
                       similarity: null
                     - id: S2
                       name: 陳美玲
-                      voice_id: Xk2pQ9rT_aE
+                      voice_id: 5e1f0a9c3b7d2e48
                       similarity: 0.82
               noSpeakers:
                 summary: 沒有分辨說話者的結果
@@ -1269,7 +1269,7 @@ paths:
                 queued:
                   dataValue:
                     id: b8Wm2TqZ0rKc4NvE
-                    job_id: Hn4cV7pLs0aR1uYb
+                    job_id: 3f9a1c0b7d2e4a6f8b1c9d0e
                     status: queued
                     progress: 0.0
                     error: null
@@ -1350,7 +1350,7 @@ paths:
                 running:
                   dataValue:
                     id: b8Wm2TqZ0rKc4NvE
-                    job_id: Hn4cV7pLs0aR1uYb
+                    job_id: 3f9a1c0b7d2e4a6f8b1c9d0e
                     status: running
                     progress: 0.415
                     error: null
@@ -1360,7 +1360,7 @@ paths:
                 failed:
                   dataValue:
                     id: b8Wm2TqZ0rKc4NvE
-                    job_id: Hn4cV7pLs0aR1uYb
+                    job_id: 3f9a1c0b7d2e4a6f8b1c9d0e
                     status: failed
                     progress: 0.12
                     error: 燒錄字幕失敗：Error opening output files：No space left on device
@@ -1502,7 +1502,7 @@ paths:
             examples:
               s1:
                 dataValue:
-                  job_id: Hn4cV7pLs0aR1uYb
+                  job_id: 3f9a1c0b7d2e4a6f8b1c9d0e
                   speaker_id: S1
       responses:
         "201":
@@ -1593,11 +1593,11 @@ components:
       name: job_id
       in: path
       required: true
-      description: 工作編號，`POST /api/jobs` 回傳的 `id`（16 個字元，URL-safe Base64）。
+      description: 工作編號，`POST /api/jobs` 回傳的 `id`（24 個十六進位字元；0.7.2 以前建立的是 16 個字元的 URL-safe Base64，可能以 `-` 開頭）。
       schema:
         type: string
         pattern: "^[A-Za-z0-9_-]+$"
-      example: Hn4cV7pLs0aR1uYb
+      example: 3f9a1c0b7d2e4a6f8b1c9d0e
     RenderId:
       name: render_id
       in: path
@@ -1610,10 +1610,10 @@ components:
       name: voice_id
       in: path
       required: true
-      description: 語者庫裡的人的編號（`GET /api/voices` 的 `id`）。
+      description: 語者庫裡的人的編號（`GET /api/voices` 的 `id`；16 個十六進位字元，0.7.2 以前記住的是 URL-safe Base64，可能以 `-` 開頭）。
       schema:
         type: string
-      example: Xk2pQ9rT_aE
+      example: 5e1f0a9c3b7d2e48
     SpeakerId:
       name: speaker_id
       in: path
@@ -1798,7 +1798,7 @@ components:
       summary: 兩個人
       dataValue:
         voices:
-          - id: Xk2pQ9rT_aE
+          - id: 5e1f0a9c3b7d2e48
             name: 陳美玲
             samples: 3
             outdated: false
@@ -1832,7 +1832,7 @@ components:
     JobSucceeded:
       summary: 完成，有分辨說話者
       dataValue:
-        id: Hn4cV7pLs0aR1uYb
+        id: 3f9a1c0b7d2e4a6f8b1c9d0e
         model: MediaTek-Research/Breeze-ASR-25
         filename: lecture.mp4
         audio_seconds: 29.11
@@ -1868,7 +1868,7 @@ components:
             - id: S2
               name: 陳美玲
               seconds: 5.6
-              voice_id: Xk2pQ9rT_aE
+              voice_id: 5e1f0a9c3b7d2e48
               similarity: 0.82
           voiceprint_speakers: [S1, S2]
           speakers_error: null

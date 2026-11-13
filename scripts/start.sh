@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 if [ ! -f .env ]; then
-  echo "找不到 .env，請先執行 scripts/install.sh" >&2
+  echo "找不到 .env，請先執行 bash scripts/install.sh" >&2
   exit 1
 fi
 

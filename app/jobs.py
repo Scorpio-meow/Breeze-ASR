@@ -213,7 +213,7 @@ class JobQueue:
         punctuation: bool,
         hotwords: str,
     ) -> Job:
-        job_id = secrets.token_urlsafe(12)
+        job_id = secrets.token_hex(12)
         audio_path = self._work_dir / f"{job_id}.f32"
         os.replace(decoded, audio_path)
         with self._cond:
@@ -641,6 +641,8 @@ class JobQueue:
         with self._cond:
             self._active_run = run
         try:
+            if job.cancel_requested:
+                raise InferenceError("工作已取消")
             transcript = self._inference.transcribe(
                 job.id,
                 job.model_id,

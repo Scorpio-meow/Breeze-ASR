@@ -47,7 +47,7 @@ def _zip(tree: Path, manifest_name: str, name: str, tag: str, out: Path) -> None
             if path.is_file():
                 info = zipfile.ZipInfo(f"{name}/{path.relative_to(tree).as_posix()}", _ZIP_TIME)
                 info.compress_type = zipfile.ZIP_DEFLATED
-                info.external_attr = (0o755 if path.suffix == ".sh" else 0o644) << 16
+                info.external_attr = 0o644 << 16
                 zipped.writestr(info, path.read_bytes())
     shutil.copyfile(tree / manifest_name, out / manifest_name)
     (out / f"{target.name}.sha256").write_text(f"{digest(target)}  {target.name}\n", encoding="utf-8")

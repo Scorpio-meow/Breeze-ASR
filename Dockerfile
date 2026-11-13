@@ -21,6 +21,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 COPY app ./app
 COPY static ./static
+COPY skills/listenmiao/scripts/listenmiao.py ./skills/listenmiao/scripts/
 COPY CHANGELOG.md ./
 
 RUN useradd --create-home --uid 10001 asr \

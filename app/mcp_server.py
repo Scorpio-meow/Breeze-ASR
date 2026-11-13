@@ -30,20 +30,21 @@ from mcp.types import (
 )
 from pydantic import BaseModel, Field
 
-from .client import (
-    FINISHED,
-    POLL_SECONDS,
-    AsrClient,
-    NotFoundError,
-    ServiceError,
-    access_token,
-    describe_progress,
-    service_url,
-)
+from .cli import load
 from .exports import FORMATS
 from .logsetup import project, setup_logging
 
 log = logging.getLogger(__name__)
+
+_CLI = load()
+FINISHED = _CLI.FINISHED
+POLL_SECONDS = _CLI.POLL_SECONDS
+AsrClient = _CLI.AsrClient
+NotFoundError = _CLI.NotFoundError
+ServiceError = _CLI.ServiceError
+access_token = _CLI.access_token
+describe_progress = _CLI.describe_progress
+service_url = _CLI.service_url
 
 ROOT = Path(__file__).resolve().parent.parent
 _PROJECT = project()
