@@ -1,6 +1,6 @@
 # 運作方式
 
-[README](../README.md) · [部署](deployment.md) · [設定](configuration.md) · **運作方式** · [API](api.md) · [命令列與 MCP](cli.md) · [效能實測](benchmarks.md)
+[README](../README.md) · [部署](deployment.md) · [設定](configuration.md) · **運作方式** · [API](api.md) · [命令列、MCP 與 Skill](cli.md) · [效能實測](benchmarks.md)
 
 服務內部怎麼分工、每個功能背後的作法與取捨。
 
@@ -220,3 +220,7 @@ Breeze ASR 的輸出沒有標點。勾選「標點」時，辨識完成後用 [s
 ## 燒錄字幕
 
 「匯出」的「燒錄字幕…」把目前已儲存的字幕燒進原始影片：用內建 ffmpeg 的 libass 依 ASS 匯出的樣式畫字幕（字型由 `ASR_SUBTITLE_FONT` 決定，見[部署](deployment.md#字幕字型)），影像重新編碼成 H.264、聲音轉成 AAC，輸出 MP4。燒好的影片放在 `ASR_DATA_DIR/renders`，保存與刪除的時機見[隱私權政策](../PRIVACY.md#存在這台電腦的資料)。
+
+---
+
+[← 設定](configuration.md) · [API →](api.md)

@@ -1,8 +1,10 @@
 # API
 
-[README](../README.md) · [部署](deployment.md) · [設定](configuration.md) · [運作方式](how-it-works.md) · **API** · [命令列與 MCP](cli.md) · [效能實測](benchmarks.md)
+[README](../README.md) · [部署](deployment.md) · [設定](configuration.md) · [運作方式](how-it-works.md) · **API** · [命令列、MCP 與 Skill](cli.md) · [效能實測](benchmarks.md)
 
 網頁用的就是這組 API，所有路徑都在 `/api` 底下。機器可讀的完整規格是 [`openapi.yaml`](openapi.yaml)（OpenAPI 3.2，含每個欄位、狀態碼與範例，可匯入 Postman、Insomnia 等工具）；服務執行時 `/api/openapi.json` 另有 FastAPI 自動產生的簡略版。
+
+**本頁**：[存取權杖](#存取權杖) · [錯誤](#錯誤) · [一次完整的辨識](#一次完整的辨識) · [端點一覽](#端點一覽) · [服務狀態與登入](#服務狀態與登入) · [設定與更新](#設定與更新) · [硬體](#硬體) · [詞彙表與熱詞](#詞彙表與熱詞) · [辨識工作](#辨識工作) · [燒錄字幕](#燒錄字幕) · [語者庫](#語者庫)
 
 ## 存取權杖
 
@@ -69,11 +71,13 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 | `POST` | [`/api/voices`](#post-apivoices) | 記住說話者的聲音 |
 | `DELETE` | [`/api/voices/{id}`](#delete-apivoicesid) | 從語者庫刪除 |
 
-## GET /api/health
+## 服務狀態與登入
+
+### GET /api/health
 
 **回應：** 200 `{"status": "ok"}`
 
-## POST /api/session
+### POST /api/session
 
 **請求：** JSON `{"token": "<ASR_ACCESS_TOKEN 的值>"}`，權杖前後的空白與換行會先去掉。
 
@@ -85,7 +89,7 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 - 413：請求超過 4 KB；這個端點不需要權杖，所以還沒讀內容就拒絕
 - 429：一分鐘內錯了 10 次，這一分鐘內的登入一律拒絕，連正確的權杖也一樣
 
-## POST /api/client-errors
+### POST /api/client-errors
 
 網頁遇到未處理的 JavaScript 錯誤或上傳時連線中斷，用這個端點寫進 `listenmiao.log`；同一則錯誤每次開啟網頁只回報一次，最多 20 則。
 
@@ -93,7 +97,9 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 
 **回應：** 204；整個服務一分鐘超過 30 則時回 429（沒有內容），這則不會記錄。
 
-## GET /api/config
+## 設定與更新
+
+### GET /api/config
 
 **回應：** 200
 
@@ -110,7 +116,7 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 | `max_text_length`、`max_hotwords_length` | 一段字幕、熱詞的字數上限 |
 | `version` | `current`：服務的版本；`released`：CHANGELOG 記載的發布日期，找不到時是 `null` |
 
-## GET /api/update
+### GET /api/update
 
 服務這時才連到 GitHub 查詢最新的正式版，平常不會連線。
 
@@ -118,7 +124,7 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 - 200：`current`、`latest`、`newer`（最新版是否比較新）、`published`、`url`（Release 頁面）、`how`（不能從網頁更新時的原因與做法：用 git 取得、Docker、不是由啟動腳本啟動；可以更新時是 `null`）
 - 502：連不上 GitHub，或 GitHub 回應錯誤
 
-## POST /api/update
+### POST /api/update
 
 記下更新要求後關閉服務，由啟動腳本下載新版、核對 SHA-256、換上新版的檔案並重裝套件，再重新啟動。過程與保留哪些檔案見[更新版本](deployment.md#更新版本)。
 
@@ -126,7 +132,9 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 - 202：`{"restarting": true}`，服務隨即關閉
 - 409：不能從網頁更新（原因同 `GET /api/update` 的 `how`），或還有辨識、燒錄工作在進行
 
-## POST /api/hardware/retune
+## 硬體
+
+### POST /api/hardware/retune
 
 重新偵測硬體，把預設模型重新轉成要實測的權重格式並實測（Core i7-9700 上約 7–9 分鐘，Core Ultra 7 155U 上約 7 分鐘），期間無法辨識。調校的做法見[運作方式](how-it-works.md#自動調校)。
 
@@ -134,7 +142,7 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 - 202：新的調校狀態
 - 409：還有工作在排隊或處理中，或正在調校中
 
-## POST /api/hardware/settings
+### POST /api/hardware/settings
 
 **請求：** JSON `{"label": "Intel(R) UHD Graphics 630 (iGPU)（OpenVINO GPU・int8）"}`，`label` 取自 `GET /api/config` 的 `hardware.tuning.candidates[].label`。
 
@@ -145,11 +153,13 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 - 409：還有工作在排隊或處理中，或推論設定還沒就緒
 - 422：設定檔沒有實測紀錄、找不到這個設定，或它實測時無法執行
 
-## GET /api/glossary
+## 詞彙表與熱詞
+
+### GET /api/glossary
 
 **回應：** 200 `{"hotwords": "…", "replacements": [{"find": "嗯，", "replace": ""}]}`，還沒存過時兩者都是空的。
 
-## PUT /api/glossary
+### PUT /api/glossary
 
 整份取代詞彙表，JSON 格式同上。
 
@@ -163,7 +173,7 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 - 200：儲存後的詞彙表
 - 422：格式不對
 
-## POST /api/hotwords/count
+### POST /api/hotwords/count
 
 **請求：** JSON `{"model": "MediaTek-Research/Breeze-ASR-25", "text": "與會者有王小明、陳美玲。"}`
 
@@ -172,11 +182,13 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 - 400：不支援的模型
 - 422：這個模型轉呼叫外部服務，不支援熱詞
 
-## GET /api/jobs
+## 辨識工作
+
+### GET /api/jobs
 
 **回應：** 200 `{"jobs": [...]}`，最新的在前。每筆有 `id`、`model`、`filename`、`audio_seconds`、`status`、`stage`、`created_at`、`finished_at`，以及完成後的段數 `segments`（還沒完成是 `null`）。
 
-## POST /api/jobs
+### POST /api/jobs
 
 **請求：** `multipart/form-data`
 
@@ -196,7 +208,7 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 - 422：無法解碼、音訊超過 `ASR_MAX_AUDIO_SECONDS`、熱詞太長，或轉呼叫外部服務的模型給了熱詞
 - 503：排隊的工作已達 `ASR_MAX_QUEUE`
 
-## GET /api/jobs/{id}
+### GET /api/jobs/{id}
 
 **回應：** 200，或 404（找不到或已過期）
 
@@ -230,7 +242,7 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 
 不分辨說話者時，`speakers` 與每段的 `speaker` 是 `null`；分辨失敗或沒有偵測到說話聲音時也是，原因在 `speakers_error`。
 
-## DELETE /api/jobs/{id}
+### DELETE /api/jobs/{id}
 
 排隊中的工作立即取消。處理中的工作會結束推論子行程再重新啟動，狀態稍後變成 `cancelled`。
 
@@ -239,7 +251,7 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 - 404：找不到工作
 - 409：工作已經結束
 
-## PUT /api/jobs/{id}/transcript
+### PUT /api/jobs/{id}/transcript
 
 網頁的改文字、改時間、分割、合併、刪除、改說話者、合併說話者、尋找取代與復原都送這個請求；只有「說話者」面板改名字用 [`PATCH …/speakers/{speaker_id}`](#patch-apijobsidspeakersspeaker_id)。
 
@@ -266,7 +278,7 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 - 409：`revision` 不符
 - 422：內容不合法
 
-## PATCH /api/jobs/{id}/speakers/{speaker_id}
+### PATCH /api/jobs/{id}/speakers/{speaker_id}
 
 **請求：** JSON `{"name": "王小明"}`
 
@@ -275,7 +287,7 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 - 404：找不到工作或說話者
 - 422：名字空白或超過 40 字
 
-## PATCH /api/jobs/{id}/segments/{index}
+### PATCH /api/jobs/{id}/segments/{index}
 
 修改第 `index` 段（從 0 起算）的文字。連續空白與換行會合併成一個空格；時間不能改，要改時間、分割或合併用 [`PUT /api/jobs/{id}/transcript`](#put-apijobsidtranscript)。結果的 `text` 與之後下載的檔案都會用修改後的文字。
 
@@ -286,7 +298,7 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 - 404：找不到工作或這一段
 - 422：空白或超過 500 字
 
-## GET /api/jobs/{id}/export/{fmt}
+### GET /api/jobs/{id}/export/{fmt}
 
 以附件下載，檔名沿用上傳的檔名。`fmt` 是下列其中一種：
 
@@ -304,7 +316,9 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 - 404：找不到工作，或不支援的格式
 - 409：工作還沒有辨識結果
 
-## POST /api/jobs/{id}/renders
+## 燒錄字幕
+
+### POST /api/jobs/{id}/renders
 
 把目前已儲存的字幕燒進影片畫面。輸出是 H.264／AAC 的 MP4，字幕樣式同 ASS 匯出；一次燒一支，其他排隊。
 
@@ -319,7 +333,7 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 - 422：檔案沒有影像、讀不到長度，或長度不符
 - 503：排隊的燒錄工作已達 `ASR_MAX_QUEUE`
 
-## GET /api/renders/{id}
+### GET /api/renders/{id}
 
 燒好的影片和辨識結果一樣保留 `ASR_JOB_TTL_SECONDS`；服務重新啟動時會清掉。
 
@@ -327,14 +341,14 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 - 200：燒錄狀態（欄位同上），`status` 是 `queued`、`running`、`cancelling`、`succeeded`、`failed`、`cancelled`，`progress` 是 0–1
 - 404：找不到或已過期
 
-## DELETE /api/renders/{id}
+### DELETE /api/renders/{id}
 
 **回應：**
 - 200：燒錄狀態
 - 404：找不到
 - 409：已經結束
 
-## GET /api/renders/{id}/file
+### GET /api/renders/{id}/file
 
 **回應：**
 - 200：MP4 檔（附件），檔名是「原檔名-字幕.mp4」
@@ -343,13 +357,15 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 - 409：還沒完成
 - 416：`Range` 超出檔案大小
 
-## GET /api/voices
+## 語者庫
+
+### GET /api/voices
 
 **回應：**
 - 200：`{"voices": [...]}`，每筆有 `id`、`name`、`samples`、`outdated`、`created_at`、`updated_at`，不含聲紋本身
 - 404：沒有提供分辨說話者
 
-## POST /api/voices
+### POST /api/voices
 
 把某個結果裡的說話者以目前的名字記進語者庫，同名的人會累加聲紋。
 
@@ -360,8 +376,12 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 - 404：找不到工作或說話者，或這位說話者沒有聲紋（手動新增的說話者，見 `voiceprint_speakers`）
 - 422：說話者還是預設名字，請先取名
 
-## DELETE /api/voices/{id}
+### DELETE /api/voices/{id}
 
 **回應：**
 - 200：刪除後的清單 `{"voices": [...]}`
 - 404：語者庫裡沒有這個人
+
+---
+
+[← 運作方式](how-it-works.md) · [命令列、MCP 與 Skill →](cli.md)

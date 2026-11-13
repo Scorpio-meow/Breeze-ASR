@@ -1,24 +1,20 @@
 # ListenMiao
-> 在瀏覽器用 MediaTek Research 的 Breeze ASR 25／26 模型把語音轉成字幕的本機服務：FastAPI 後端加純 HTML／CSS／JavaScript 前端，支援 OpenVINO、PyTorch 或轉呼叫遠端服務，含分辨說話者與語者庫、熱詞、自動標點、字幕編輯與復原、燒錄字幕、監看資料夾、命令列工具與 MCP server。非 MediaTek 官方專案。
+> 在瀏覽器用 MediaTek Research 的 Breeze ASR 25／26 模型，把臺灣華語、中英夾雜與臺灣台語轉成字幕的本機服務：FastAPI 後端加純 HTML／CSS／JavaScript 前端，支援 OpenVINO、PyTorch 或轉呼叫遠端服務，含分辨說話者與語者庫、熱詞、自動標點、字幕編輯與復原、燒錄字幕、監看資料夾、命令列工具、MCP server 與 Agent Skill。非 MediaTek 官方專案。
 
 ## Docs
-- [README.md](README.md): 介紹、快速開始、功能、支援的模型、系統需求
+- [README.md](README.md): 介紹、快速開始、功能、支援的模型、系統需求、常用設定
 - [docs/deployment.md](docs/deployment.md): 安裝腳本、Docker、更新版本、讓其他電腦與手機連線、監看資料夾、日誌、資源限制與轉呼叫、GPU 支援
 - [docs/configuration.md](docs/configuration.md): `.env`、`models.json`、硬體設定檔
 - [docs/how-it-works.md](docs/how-it-works.md): 架構、自動調校、句子分段、分辨說話者與語者庫、熱詞、詞彙表、自動標點、編輯與復原、燒錄字幕
 - [docs/api.md](docs/api.md): API 各端點的參數與回應
 - [docs/openapi.yaml](docs/openapi.yaml): OpenAPI 3.2 規格，含每個欄位的型別、狀態碼與範例
-- [docs/benchmarks.md](docs/benchmarks.md): 效能實測：辨識速度與自動調校、句子分段、分辨說話者、熱詞
-- [docs/cli.md](docs/cli.md): 命令列工具、MCP server 與 Agent Skill
+- [docs/cli.md](docs/cli.md): 命令列工具、MCP server 與 Agent Skill 的安裝
 - [skills/listenmiao/SKILL.md](skills/listenmiao/SKILL.md): 給 AI 工具用的 Agent Skill（英文）：轉逐字稿、熱詞、說話者改名、會議紀錄、燒錄字幕、詞彙表與語者庫、啟動與排錯
-- [CHANGELOG.md](CHANGELOG.md): 更新紀錄
-- [CONTRIBUTING.md](CONTRIBUTING.md): 開發環境、提交前檢查、撰寫原則
+- [skills/listenmiao/references/setup.md](skills/listenmiao/references/setup.md): Skill 用的安裝、啟動、更新、錯誤對照與日誌（英文）
+- [skills/listenmiao/references/api.md](skills/listenmiao/references/api.md): Skill 直接呼叫 API 的方式（英文）
 - [SECURITY.md](SECURITY.md): 部署範圍與存取權杖、已有的防護、漏洞回報
 - [PRIVACY.md](PRIVACY.md): 隱私權政策：資料存放與保留期限、瀏覽器存的資料、對外連線、用量回報、刪除方式
-- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md): 行為準則與檢舉方式
-- [ACCESSIBILITY.md](ACCESSIBILITY.md): 無障礙目標、支援環境、已知限制與回報方式
-- [.github/ISSUE_TEMPLATE/](.github/ISSUE_TEMPLATE/): 問題回報、功能建議、無障礙問題的 issue 範本
-- [NOTICE.md](NOTICE.md): 第三方作品與授權
+- [CONTRIBUTING.md](CONTRIBUTING.md): 開發環境、提交前檢查、撰寫原則
 
 ## Core Files
 - [app/__main__.py](app/__main__.py), [app/logsetup.py](app/logsetup.py): 啟動服務；日誌（終端機與 `ASR_DATA_DIR/logs`）
@@ -41,7 +37,6 @@
 - [app/watch.py](app/watch.py): 監看資料夾
 - [app/cli.py](app/cli.py), [app/mcp_server.py](app/mcp_server.py): 命令列工具（載入 Skill 附的 `listenmiao.py`，MCP server 也用它的 HTTP 用戶端）、MCP server
 - [skills/listenmiao/](skills/listenmiao/): Agent Skill；`scripts/listenmiao.py` 是只用標準函式庫的命令列工具，`python -m app.cli` 直接執行這支腳本，測試在 `tests/test_skill_script.py`
-- [evals/](evals/): Agent Skill 的測試情境（使用者會說的話、評分標準、測試用影音檔），不隨 Skill 安裝
 - [static/](static/): 前端（工具列、波形時間軸、字幕列表、右側面板、狀態列）
 - [tests/](tests/): 不需要模型的單元測試
 - [models.json](models.json): 模型清單、分辨說話者與自動標點的設定
@@ -66,3 +61,12 @@
 - API：`POST /api/jobs` 建立工作、`GET /api/jobs/{id}` 輪詢、`GET /api/jobs/{id}/export/{fmt}` 下載；所有端點見 [docs/api.md](docs/api.md) 與 [docs/openapi.yaml](docs/openapi.yaml)。
 - 命令列工具：`transcribe`、`jobs`、`export`、`status`、`cancel`、`rename`、`render`、`glossary`、`voices`，呼叫執行中的服務；見 [docs/cli.md](docs/cli.md)。
 - MCP server：依 MCP `2026-07-28` 規格、只走 stdio；工具 `list_models`、`transcribe`、`job_status`、`get_transcript`、`list_jobs`、`cancel_job`、`rename_speaker`，資源 `listenmiao://glossary` 與 `listenmiao://jobs/{job_id}/transcript.{格式}`，提示 `meeting_minutes`、`proofread_transcript`。
+
+## Optional
+- [docs/benchmarks.md](docs/benchmarks.md): 效能實測：辨識速度與自動調校、顯示記憶體、句子分段、分辨說話者、熱詞
+- [CHANGELOG.md](CHANGELOG.md): 更新紀錄
+- [evals/](evals/): Agent Skill 的測試情境（使用者會說的話、評分標準、測試用影音檔），不隨 Skill 安裝
+- [ACCESSIBILITY.md](ACCESSIBILITY.md): 無障礙目標、支援環境、已知限制與回報方式
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md): 行為準則與檢舉方式
+- [.github/ISSUE_TEMPLATE/](.github/ISSUE_TEMPLATE/): 問題回報、功能建議、無障礙問題的 issue 範本
+- [NOTICE.md](NOTICE.md): 第三方作品與授權

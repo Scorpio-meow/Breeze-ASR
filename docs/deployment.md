@@ -1,6 +1,6 @@
 # 部署
 
-[README](../README.md) · **部署** · [設定](configuration.md) · [運作方式](how-it-works.md) · [API](api.md) · [命令列與 MCP](cli.md) · [效能實測](benchmarks.md)
+[README](../README.md) · **部署** · [設定](configuration.md) · [運作方式](how-it-works.md) · [API](api.md) · [命令列、MCP 與 Skill](cli.md) · [效能實測](benchmarks.md)
 
 安裝、啟動、更新與日常維運。每個環境變數的說明見[設定](configuration.md)。
 
@@ -364,3 +364,7 @@ NVIDIA 卡的顯示記憶體：
 | Qualcomm Hexagon NPU、Adreno GPU | 用不到：Hexagon 需要 Qualcomm QNN，Adreno 不支援 CUDA 或 ROCm，OpenVINO 也不認得這兩種裝置 |
 | Apple Silicon | 可以用[安裝腳本](#macos-安裝腳本)安裝，以 CPU（OpenVINO）推論，需要 macOS 14 以上；整套流程（安裝、模型轉換、自動調校、燒錄字幕）都還沒在實機上跑過。Apple GPU（PyTorch 的 MPS）沒有納入自動調校 |
 | Intel Mac | 無法原生安裝：OpenVINO 2026 與 PyTorch 2.3 起都沒有 Intel Mac 版。改用 Docker 的 CPU 版，發布的映像檔可以直接用 |
+
+---
+
+[← README](../README.md) · [設定 →](configuration.md)

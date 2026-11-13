@@ -1,6 +1,6 @@
 # 效能實測
 
-[README](../README.md) · [部署](deployment.md) · [設定](configuration.md) · [運作方式](how-it-works.md) · [API](api.md) · [命令列與 MCP](cli.md) · **效能實測**
+[README](../README.md) · [部署](deployment.md) · [設定](configuration.md) · [運作方式](how-it-works.md) · [API](api.md) · [命令列、MCP 與 Skill](cli.md) · **效能實測**
 
 速度是處理秒數除以音訊秒數，越小越快。除非另外註明，都是 Breeze ASR 25、內附的 29 秒範例語音（`app/assets/tune-sample.ogg`）、greedy 解碼，在 Intel Core Ultra 7 155U（32 GB）接電源時測。
 
@@ -191,3 +191,7 @@ Breeze ASR 26，內顯、int8。「句子邊界」是每句實際開口與收尾
 - 熱詞長度：約 100 token 速度不變；約 220 token 慢 18%；約 390 token 起結果被截斷；481 token 直接報錯。
 - 靜音、白噪音各 40 秒，加不加熱詞都輸出空白，沒有冒出熱詞。
 - 只測過語音合成與一段真人課程錄音，還沒用真實會議錄音驗證。
+
+---
+
+[← 命令列、MCP 與 Skill](cli.md) · [README →](../README.md)

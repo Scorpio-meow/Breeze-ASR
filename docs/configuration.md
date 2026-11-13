@@ -1,6 +1,6 @@
 # 設定
 
-[README](../README.md) · [部署](deployment.md) · **設定** · [運作方式](how-it-works.md) · [API](api.md) · [命令列與 MCP](cli.md) · [效能實測](benchmarks.md)
+[README](../README.md) · [部署](deployment.md) · **設定** · [運作方式](how-it-works.md) · [API](api.md) · [命令列、MCP 與 Skill](cli.md) · [效能實測](benchmarks.md)
 
 服務的行為由三個檔案決定：環境設定 `.env`、模型清單 `models.json`，以及自動調校寫出的硬體設定檔。
 
@@ -11,34 +11,66 @@
 > [!IMPORTANT]
 > 所有設定都必須填寫，缺少或格式錯誤時服務會直接拒絕啟動並說明原因；程式裡沒有預設值。
 
-最右欄是 `.env.example` 的值。
+下面依用途分組，最右欄是 `.env.example` 的值。
+
+**服務與網路**
 
 | 變數 | 說明 | `.env.example` |
 | --- | --- | --- |
 | `ASR_HOST`、`ASR_PORT` | 原生執行的監聽位址與埠（Docker 版的 `ASR_PORT` 是容器內的埠） | `127.0.0.1`、`7860` |
 | `ASR_ALLOWED_HOSTS` | [接受的主機名稱](#接受的主機名稱)，以逗號分隔；必須包含 `ASR_HOST` 對應的本機位址 | `127.0.0.1,localhost` |
 | `ASR_ACCESS_TOKEN` | [存取權杖](#存取權杖)，至少 24 個字元；只有 `ASR_HOST` 是本機位址時可以填 `off` | `off` |
-| `ASR_MODELS_FILE` | 模型清單檔 | `models.json` |
+
+**模型與資料**
+
+| 變數 | 說明 | `.env.example` |
+| --- | --- | --- |
+| `ASR_MODELS_FILE` | [模型清單檔](#modelsjson) | `models.json` |
 | `ASR_DATA_DIR` | 轉換後模型、編譯快取、辨識結果、語者庫、詞彙表、日誌與上傳暫存的目錄 | `data` |
 | `ASR_HARDWARE_PROFILE` | [硬體設定檔](#硬體設定檔)；不存在時第一次啟動自動調校並寫出 | `data/hardware-profile.json` |
+
+**上限與保留期限**
+
+| 變數 | 說明 | `.env.example` |
+| --- | --- | --- |
 | `ASR_MAX_UPLOAD_MB` | 單檔大小上限 | `2048` |
 | `ASR_MAX_AUDIO_SECONDS` | 音訊長度上限 | `10800` |
 | `ASR_MAX_QUEUE` | 最多可排隊的工作數 | `20` |
 | `ASR_JOB_TTL_SECONDS` | 完成的結果與燒好字幕的影片保留多久，至少 60；結果從最後一次修改起算 | `86400` |
+
+**字幕字型**（見[部署](deployment.md#字幕字型)）
+
+| 變數 | 說明 | `.env.example` |
+| --- | --- | --- |
 | `ASR_SUBTITLE_FONT` | ASS 匯出與燒錄字幕的字型名稱；含空白時加引號 | `"Microsoft JhengHei"` |
 | `ASR_SUBTITLE_FONTS_DIR` | 燒錄字幕時尋找字型檔的資料夾，必須存在 | `C:/Windows/Fonts` |
-| `ASR_LOG_LEVEL` | [日誌](deployment.md#日誌)等級：`DEBUG`、`INFO`、`WARNING` 或 `ERROR`；`DEBUG` 也會記下第三方套件的細節 | `INFO` |
+
+**日誌**（見[部署](deployment.md#日誌)）
+
+| 變數 | 說明 | `.env.example` |
+| --- | --- | --- |
+| `ASR_LOG_LEVEL` | 日誌等級：`DEBUG`、`INFO`、`WARNING` 或 `ERROR`；`DEBUG` 也會記下第三方套件的細節 | `INFO` |
 | `ASR_LOG_FILE_MB`、`ASR_LOG_FILE_COUNT` | 每個日誌檔滿幾 MB 換新檔、保留幾個舊檔，各至少 1 | `5`、`5` |
-| `ASR_WATCH_DIR` | [監看資料夾](deployment.md#監看資料夾)；不監看填 `off` | `off` |
+
+**監看資料夾**（見[部署](deployment.md#監看資料夾)）
+
+| 變數 | 說明 | `.env.example` |
+| --- | --- | --- |
+| `ASR_WATCH_DIR` | 要監看的資料夾，必須存在；不監看填 `off` | `off` |
 | `ASR_WATCH_MODEL` | 監看資料夾用的模型 id | `MediaTek-Research/Breeze-ASR-25` |
 | `ASR_WATCH_SPEAKERS` | 監看資料夾的說話者：`off`、`auto` 或人數 | `auto` |
 | `ASR_WATCH_PUNCTUATION` | 監看資料夾是否自動加標點：`on` 或 `off` | `on` |
 | `ASR_WATCH_FORMATS` | 監看資料夾寫出的格式，以逗號分隔：`txt`、`srt`、`vtt`、`ass`、`md`、`docx`、`json` | `srt,md,json` |
 | `ASR_WATCH_POLL_SECONDS` | 監看資料夾多久檢查一次（秒） | `10` |
+
+**Hugging Face**
+
+| 變數 | 說明 | `.env.example` |
+| --- | --- | --- |
 | `HF_HUB_DISABLE_TELEMETRY` | 關閉 Hugging Face 用量回報；OpenVINO 與 NNCF 沒有對應的環境變數，由服務自動關閉，見[隱私權政策](../PRIVACY.md#用量回報) | `1` |
 | `HF_HUB_DISABLE_SYMLINKS_WARNING` | 關閉 Windows 無法建立符號連結時的快取警告（快取改用複製檔案，每個模型只固定一個版本，不會多佔空間） | `1` |
 
-只有 Docker 版會用到：
+**只有 Docker 版會用到**
 
 | 變數 | 說明 | `.env.example` |
 | --- | --- | --- |
@@ -246,3 +278,7 @@
 | `max_loaded_models` | 同時常駐的本機模型數 | 同左 |
 
 設定檔有誤（例如欄位錯誤）時服務照常啟動，狀態列顯示原因，本機模型暫時無法使用。
+
+---
+
+[← 部署](deployment.md) · [運作方式 →](how-it-works.md)

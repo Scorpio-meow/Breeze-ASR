@@ -1,8 +1,14 @@
 # 命令列工具、MCP server 與 Agent Skill
 
-[README](../README.md) · [部署](deployment.md) · [設定](configuration.md) · [運作方式](how-it-works.md) · [API](api.md) · **命令列與 MCP** · [效能實測](benchmarks.md)
+[README](../README.md) · [部署](deployment.md) · [設定](configuration.md) · [運作方式](how-it-works.md) · [API](api.md) · **命令列、MCP 與 Skill** · [效能實測](benchmarks.md)
 
-兩者都是呼叫執行中的服務（先用 `scripts\start.ps1` 或桌面捷徑啟動），檔案從這台電腦上傳到服務，不經過其他地方。要在專案資料夾用 `uv run --env-file .env` 執行，才會讀到 `.env` 的這些變數：
+命令列工具、MCP server 與 Agent Skill 都是呼叫執行中的服務（先用桌面捷徑、`scripts\start.ps1` 或 `bash scripts/start.sh` 啟動），檔案從這台電腦上傳到服務，不經過其他地方。
+
+**本頁**：[連線設定](#連線設定) · [命令列工具](#命令列工具) · [MCP server](#mcp-server) · [Agent Skill](#agent-skill) · [安裝 Skill](#安裝-skill) · [各工具的 Skill 資料夾](#各工具的-skill-資料夾) · [更新與移除](#更新與移除) · [開發用的測試情境](#開發用的測試情境)
+
+## 連線設定
+
+命令列工具與 MCP server 從環境變數取得服務網址與權杖。要在專案資料夾用 `uv run --env-file .env` 執行，才會讀到 `.env` 的這些變數：
 
 | 環境變數 | 用途 |
 | --- | --- |
@@ -134,15 +140,8 @@ server 回報的名稱是 `listenmiao`，標題 `ListenMiao`，版本與網址�
 | `references/api.md` | 命令列工具沒有的操作（改字幕段落、重新調校）直接呼叫 API 的方式 |
 | `scripts/listenmiao.py` | 只用標準函式庫的命令列工具，指令與 `python -m app.cli` 相同，給沒有專案資料夾的電腦 |
 
-Skill 只呼叫執行中的服務，錄音不會離開這台電腦；但 AI 讀到的逐字稿會進入對話，內容不能交給外部 AI 的錄音，請只用網頁或命令列工具。
-
-開發這個 Skill 用的測試情境放在 repo 根目錄的 [`evals/`](../evals/)，不在 Skill 資料夾裡，安裝時不會帶到。每個情境一個資料夾，`prompt.md` 是使用者會說的話，`graders/` 是評分標準，`files/` 是測試用的錄音與影片（語音合成的週會、29 秒的課程片段）：
-
-| 情境 | 檢查什麼 |
-| --- | --- |
-| `meeting-minutes-two-speakers` | 兩人週會：帶與會者熱詞、判斷誰是誰並寫回服務、決議與待辦附時間戳、標成未校對的草稿 |
-| `burn-subtitles-into-video` | 燒錄字幕：不標說話者、用服務的燒錄功能、燒錄前不自己猜著改字 |
-| `confidential-transcript-unread` | 機密錄音：只轉成 Word，AI 不讀、不轉述逐字稿內容 |
+> [!CAUTION]
+> Skill 只呼叫執行中的服務，錄音不會離開這台電腦；但 AI 讀到的逐字稿會進入對話，內容不能交給外部 AI 的錄音，請只用網頁或命令列工具。
 
 ### 安裝 Skill
 
@@ -164,7 +163,7 @@ bunx skills add Scorpio-meow/ListenMiao --skill listenmiao -g
 
 第一次執行指令時，多數工具會先請你同意。
 
-`skills` 指令要用 git 下載 Skill。電腦沒有 git 時，安裝腳本最後會問你要不要直接把專案裡的 `skills/listenmiao` 複製到 `~/.claude/skills/` 與 `~/.agents/skills/`（直接按 Enter 就是安裝；已經有 `listenmiao` 的資料夾會略過）；已經裝好 ListenMiao 的，也可以在專案資料夾執行 `uv run --no-sync python -m app.update --root . skills` 做同樣的事，或照下一節手動複製。`~/.agents/skills/` 是多個工具共用的資料夾，Codex、Cline 等都會讀。之後在網頁上更新 ListenMiao 時，用安裝腳本裝的 Skill 會一起換成新版（你改過的保留不動）；用 `bunx` 或 `npx` 裝的，請用 `bunx skills update listenmiao -g`（或把 `bunx` 換成 `npx`）更新。
+`skills` 指令要用 git 下載 Skill。電腦沒有 git 時也能安裝：安裝腳本最後會問你要不要直接把專案裡的 `skills/listenmiao` 複製到 `~/.claude/skills/` 與 `~/.agents/skills/`（直接按 Enter 就是安裝；已經有 `listenmiao` 的資料夾會略過）；已經裝好 ListenMiao 的，也可以在專案資料夾執行 `uv run --no-sync python -m app.update --root . skills` 做同樣的事，或照下一節手動複製。`~/.agents/skills/` 是多個工具共用的資料夾，Codex、Cline 等都會讀。之後在網頁上更新 ListenMiao 時，用安裝腳本裝的 Skill 會一起換成新版（你改過的保留不動）；用 `bunx` 或 `npx` 裝的，請用 `bunx skills update listenmiao -g`（或把 `bunx` 換成 `npx`）更新。
 
 #### 各工具的 Skill 資料夾
 
@@ -265,3 +264,17 @@ Claude 應用程式（網頁版、桌面版）與 ChatGPT 的 Skill 在雲端的
 Skill 在 0.7.0 從 `breeze-asr` 改名為 `listenmiao`。用安裝腳本裝的，在網頁上更新時會換成新名字：從 0.6.x 更新到 0.7.0 時先維持舊名 `breeze-asr`（內容換成新版，照樣用 `/breeze-asr`），下一次更新再換成 `listenmiao`；用 `bunx skills` 裝過舊名的，先執行 `bunx skills remove breeze-asr -g`，再照上面重新安裝；其他方式裝的，刪掉 `breeze-asr` 資料夾後重新安裝。
 
 路徑或介面如有變動，以官方文件為準：[Claude Code](https://code.claude.com/docs/en/skills)・[OpenAI Codex](https://learn.chatgpt.com/docs/build-skills)・[GitHub Copilot](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills)・[VS Code](https://code.visualstudio.com/docs/agent-customization/agent-skills)・[Cursor](https://cursor.com/docs/skills)・[Gemini CLI](https://geminicli.com/docs/cli/skills/)・[Google Antigravity](https://antigravity.google/docs/skills)・[Devin Desktop](https://docs.devin.ai/desktop/cascade/skills)・[OpenCode](https://opencode.ai/docs/skills)・[Cline](https://docs.cline.bot/customization/skills)・[Kiro](https://kiro.dev/docs/skills/)・[JetBrains Junie](https://junie.jetbrains.com/docs/agent-skills.html)・[Roo Code](https://roocodeinc.github.io/Roo-Code/features/skills/)・[skills](https://github.com/vercel-labs/skills)・[gh skill](https://cli.github.com/manual/gh_skill_install)
+
+### 開發用的測試情境
+
+開發這個 Skill 用的測試情境放在 repo 根目錄的 [`evals/`](../evals/)，不在 Skill 資料夾裡，安裝時不會帶到。每個情境一個資料夾，`prompt.md` 是使用者會說的話，`graders/` 是評分標準，`files/` 是測試用的錄音與影片（語音合成的週會、29 秒的課程片段）：
+
+| 情境 | 檢查什麼 |
+| --- | --- |
+| `meeting-minutes-two-speakers` | 兩人週會：帶與會者熱詞、判斷誰是誰並寫回服務、決議與待辦附時間戳、標成未校對的草稿 |
+| `burn-subtitles-into-video` | 燒錄字幕：不標說話者、用服務的燒錄功能、燒錄前不自己猜著改字 |
+| `confidential-transcript-unread` | 機密錄音：只轉成 Word，AI 不讀、不轉述逐字稿內容 |
+
+---
+
+[← API](api.md) · [效能實測 →](benchmarks.md)
