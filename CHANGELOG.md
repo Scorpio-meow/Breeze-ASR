@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-11-14
+
+### Security
+
+- 相依套件 `opentelemetry-api` 升到 1.45.2，修補解析 `traceparent` 時可能耗盡 CPU 的問題（ReDoS）。ListenMiao 只有 MCP server 會從本機 AI 工具送來的請求讀這個值，網頁服務不受影響。
+
 ## [0.7.3] - 2026-11-13
 
 ### Changed
@@ -369,7 +375,8 @@
 - 在不能錄音的網址按「錄音」，狀態列說明原因與瀏覽器的設定方式。
 - 所有回應加上 `Cache-Control: no-cache`，更新版本後瀏覽器不會繼續使用舊的前端程式。
 
-[Unreleased]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.3...HEAD
+[Unreleased]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.4...HEAD
+[0.7.4]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.0...v0.7.1
