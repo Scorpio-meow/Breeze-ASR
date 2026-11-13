@@ -316,11 +316,20 @@ def _state(part: dict) -> str:
     return f"{part['state']}：{part['error']}" if part.get("error") else part["state"]
 
 
+def _version(config: dict) -> str:
+    version = config.get("version")
+    if version is None:
+        return "版本\t服務沒有回報（0.6.0 以前）"
+    released = version["released"]
+    return f"版本\t{version['current']}" + (f"\t{released} 發布" if released else "")
+
+
 def _status(client: AsrClient, _: argparse.Namespace) -> int:
     config = client.config()
     hardware = config["hardware"]
     detail = hardware.get("summary") or hardware.get("step")
     print(f"服務\t{client.base_url}")
+    print(_version(config))
     print(f"硬體\t{_state(hardware)}" + (f"\t{detail}" if detail else ""))
     for model in config["models"]:
         speed = model["seconds_per_audio_second"]

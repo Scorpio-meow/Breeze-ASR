@@ -18,7 +18,7 @@ Installing, updating and reconfiguring change the user's machine. Explain what y
 
 ## Install
 
-The repository is <https://github.com/Scorpio-meow/ListenMiao>. Clone or download it, then in its root:
+Download `listenmiao-<version>.zip` from <https://github.com/Scorpio-meow/ListenMiao/releases/latest> and unzip it (no git needed; a clone of <https://github.com/Scorpio-meow/ListenMiao> also works), then in its root:
 
 | Platform | Command | Notes |
 | --- | --- | --- |
@@ -26,6 +26,8 @@ The repository is <https://github.com/Scorpio-meow/ListenMiao>. Clone or downloa
 | Linux | `bash scripts/install.sh` | Picks CUDA or ROCm automatically; force with `cpu`, `cuda` or `rocm` as the argument. |
 | macOS (Apple Silicon) | `bash scripts/install.sh` | CPU only (OpenVINO). Before the first start, set `ASR_SUBTITLE_FONT` and `ASR_SUBTITLE_FONTS_DIR` in `.env` to a Chinese font the Mac has, or the service refuses to start; see `docs/deployment.md#字幕字型`. |
 | Docker | `cp .env.example .env`, set `ASR_ACCESS_TOKEN`, then `docker compose up -d --build` | The container always listens on `0.0.0.0`, so Docker needs an access token. NVIDIA: also layer `compose.cuda.yaml`; AMD: `compose.rocm.yaml`. See `docs/deployment.md#docker`. |
+
+At the end, the native install scripts ask whether to copy this skill into `~/.claude/skills/` and `~/.agents/skills/` (Enter means yes; an existing `listenmiao` folder is skipped). Updates through the web app or update script refresh a skill installed that way; one installed with `bunx skills` updates with `bunx skills update listenmiao -g`.
 
 Generate a token with `uv run --no-sync python -c "import secrets; print(secrets.token_urlsafe(32))"` (or `openssl rand -base64 32`) and let the user paste it into `.env` themselves; don't echo it back into the conversation.
 
@@ -35,7 +37,7 @@ Generate a token with `uv run --no-sync python -c "import secrets; print(secrets
 | --- | --- | --- |
 | Desktop shortcut / `scripts\start.ps1` (Windows) | Double-click, or run the script. Opens the browser when ready (`-NoBrowser` to skip). Fills in `.env` variables added by newer versions. | Ctrl+C in its window. Closing the window kills the service abruptly. |
 | `bash scripts/start.sh` (Linux, macOS) | Same as above. | Ctrl+C |
-| From an agent | Run in the background: `uv run --directory <install-dir> --no-sync --env-file .env python -m app` | Stop that background task. |
+| From an agent | Run in the background: `uv run --directory <install-dir> --no-sync --env-file .env python -m app`. A service started this way can't update itself from the web app; that needs the shortcut or start script. | Stop that background task. |
 | Docker | `docker compose up -d` | `docker compose stop` (or `docker stop -t 15 listenmiao`) |
 
 After starting, poll `<asr> status` until it answers (about 15 s on later starts).
@@ -57,15 +59,22 @@ Port `7860` in `.env.example` is the convention; if something else holds the por
 
 ## Update
 
-Ask before running these: `git pull` changes the user's checkout.
+Update only when the user asks, and say first that the service will be down for a few minutes. `<asr> status` shows the running version; an installed CLI older than 0.7.2 doesn't print it, so read `version` in `<install-dir>/pyproject.toml` instead. How to update depends on how ListenMiao was installed; a folder with `.git` is a clone, one without is a release zip.
 
 | Install | Steps |
 | --- | --- |
-| Native | Stop the service; `git pull`; `uv sync --frozen` (NVIDIA: `uv sync --frozen --no-default-groups --group cu130`; AMD: `--group rocm72`), or rerun the install script; start again with the start script, which adds new `.env` variables. |
+| Release zip, started from the desktop shortcut or start script | Let the user click the version number in the lower-right corner of the web app, then 檢查更新 and 立即更新. The service shuts down; the start script downloads the new zip, checks its SHA-256, backs up the files it replaces to `.update/backup/`, reinstalls packages for the same GPU and restarts the service. |
+| Release zip, service stopped, failing to start, or started without the start script | Stop the service, then have the user run `powershell -ExecutionPolicy Bypass -File scripts\update.ps1` (Windows) or `bash scripts/update.sh` in `<install-dir>` in their own terminal, where it asks them for a yes. Don't run it yourself: without a terminal it answers no by itself, prints `沒有更新`, and still ends with `完成`. |
+| Release zip without `scripts/update.ps1` (older than 0.6.0) | It has no update script: download it once into `scripts/` from `https://github.com/Scorpio-meow/ListenMiao/releases/latest/download/update.ps1` (or `update.sh`), then run it as above. Versions before 0.3.0 can't be identified; download the new release by hand and move `.env` and the data folder over. |
+| Git clone | Stop the service; `git pull`; `uv sync --frozen` (NVIDIA: `uv sync --frozen --no-default-groups --group cu130`; AMD: `--group rocm72`), or rerun the install script; start again with the start script, which adds new `.env` variables. |
 | Docker, built locally | `git pull`, then `docker compose up -d --build` |
 | Docker, published image | `docker compose pull`, then `docker compose up -d --no-build` |
 
-Docker skips the start scripts: if the service then refuses to start over a missing variable, run the `app.envfile` command above on the host or copy the line from `.env.example`. Read `CHANGELOG.md` for new settings and behavior changes. If the user edited `models.json`, merge changes from the changelog by hand.
+Release updates leave `.env`, the data folder and the models alone, and keep `.venv`, only reinstalling its packages for the same GPU. A file the user changed (such as `models.json`) keeps their version, and the new one is saved beside it as `<name>.new`; point those out so the user can merge them. If the packages fail to install, the updater puts the old files back and starts the old version. To undo a finished update, stop the service and run in `<install-dir>`: `uv run --no-sync python -m app.update --root . rollback`, then `uv run --no-sync python -m app.update --root . group` to print the package group, and `uv sync --frozen --no-default-groups --group <group>`.
+
+Docker installs from before 0.7.0 (when the project was renamed from Breeze ASR): add `COMPOSE_PROJECT_NAME=breeze-asr` to `.env` so the old `breeze-asr_asr-data` volume keeps being used, add `--remove-orphans` to the first `docker compose up`, and with the published image set `ASR_IMAGE` to `ghcr.io/scorpio-meow/listenmiao:<tag>`. Without the project name the container either fails to start over an overlapping network or starts with an empty volume; the old data stays in `breeze-asr_asr-data`.
+
+Docker skips the start scripts: if the service then refuses to start over a missing variable, run the `app.envfile` command above on the host or copy the line from `.env.example`. Read `CHANGELOG.md` for new settings and behavior changes.
 
 ## Errors
 
@@ -78,7 +87,8 @@ The service answers errors as `{"detail": "<reason in Chinese>"}`; the CLI print
 | 400 `服務不接受 … 這個名稱` | URL host not in `ASR_ALLOWED_HOSTS` | Use `127.0.0.1` locally, or have the user add the name and restart |
 | 400 unsupported model / option | Model id not in `models.json`, or diarization/punctuation not provided by this install | Check `status` |
 | 401 `需要存取權杖` / `拒絕這個存取權杖` | Token missing or different from the service's | Set `ASR_ACCESS_TOKEN` to the service's value (never print it) |
-| 409 | Job already finished (cancel), no result yet (export, render), or the service is busy (retune, hardware switch) | Wait or check `jobs` |
+| 409 | Job already finished (cancel), no result yet (export, render), the service is busy (retune, hardware switch, update), or this install can't update from the web app | Wait or check `jobs`; for an update, follow the reason in the message |
+| 502 on the update check | GitHub unreachable or refused the request, such as `GitHub 回應 HTTP 403` when rate-limited; the message says which | Check the network or try again later; offline machines update by hand |
 | 413 `檔案超過上限` | File over `ASR_MAX_UPLOAD_MB` | Compress or split with ffmpeg |
 | 422 `檔案裡沒有可辨識的音訊` | Corrupt file or no audio track | Check with `ffprobe`; re-extract audio |
 | 422 `音訊長度超過上限` | Over `ASR_MAX_AUDIO_SECONDS` | Split, e.g. `ffmpeg -i in.m4a -f segment -segment_time 3600 -c copy part%02d.m4a` |

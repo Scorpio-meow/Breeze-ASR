@@ -2,7 +2,7 @@
 name: listenmiao
 description: Use this skill when the user wants a transcript, subtitles or meeting minutes from an audio or video file and has ListenMiao installed or running, the local transcription app for Taiwanese Mandarin, Mandarin–English code-switching and Taiwanese Hokkien built on MediaTek Research's Breeze ASR 25/26 models. It covers transcribing with speaker labels and hotwords, exporting SRT/VTT/ASS/TXT/Markdown/DOCX/JSON, burning subtitles into a video, writing minutes from a transcript, editing the glossary and voice library, and starting or troubleshooting the service. Use it even when the user never says "ListenMiao" or "Breeze", for requests like "轉逐字稿", "聽打這段錄音", "幫這支影片上字幕", "把會議錄音整理成會議紀錄", "台語錄音轉文字", "transcribe this interview" or "make an SRT for this lecture", and whenever a recording has to stay on the user's machine. Not for cloud speech APIs or for training ASR models.
 license: MIT
-compatibility: Needs shell access and a running ListenMiao service (https://github.com/Scorpio-meow/ListenMiao), plus either uv with a ListenMiao checkout or Python 3.8+ for the bundled script.
+compatibility: Needs shell access and a running ListenMiao service (https://github.com/Scorpio-meow/ListenMiao), plus either uv with a native ListenMiao install or Python 3.8+ for the bundled script.
 ---
 
 # ListenMiao
@@ -28,18 +28,18 @@ Two command-line tools drive the service. They accept the same commands and opti
 
 | Situation | `<asr>` |
 | --- | --- |
-| A ListenMiao checkout with `.env` and an installed `.venv` exists on this machine (native install via `scripts/install.ps1` / `install.sh` in that checkout) | `uv run --directory <install-dir> --no-sync --env-file .env python -m app.cli` |
-| No checkout here: Docker deployment, service on another computer, or an install whose CLI lacks the commands below | `python scripts/listenmiao.py --url <service-url>` |
+| A native ListenMiao install exists on this machine: a folder with `.env` and an installed `.venv`, set up by `scripts/install.ps1` / `install.sh` | `uv run --directory <install-dir> --no-sync --env-file .env python -m app.cli` |
+| No install folder here: Docker deployment, service on another computer, or an install whose CLI lacks the commands below | `python scripts/listenmiao.py --url <service-url>` |
 
-- `<install-dir>` is the folder holding `pyproject.toml`, `app/` and `.env`. If you cannot find it, ask the user rather than guessing.
+- `<install-dir>` is the folder holding `pyproject.toml`, `app/` and `.env`, either unzipped from a release or cloned with git. If you cannot find it, ask the user rather than guessing.
 - The bundled `scripts/listenmiao.py` needs only Python 3.8+ and the standard library; if `python` is missing try `python3`, `py -3`, or `uv run --no-project python`. Run `--help` on it or on any subcommand for the full options.
 - The installed CLI is new enough when `<asr> --help` lists `status`, `rename` and `render`.
 
-If `listenmiao` MCP tools are connected (`transcribe`, `job_status`, `get_transcript`, `list_jobs`, `cancel_job`, `rename_speaker`), they are fine for reading a transcript into the conversation and renaming speakers. Still use `<asr>` for submitting recordings and for anything that writes files (exports, DOCX, burned video): MCP results only come back as text, and a long `transcribe` call with `wait=true` blocks until the recording is done.
+If `listenmiao` MCP tools are connected (`list_models`, `transcribe`, `job_status`, `get_transcript`, `list_jobs`, `cancel_job`, `rename_speaker`), they are fine for reading a transcript into the conversation and renaming speakers. Still use `<asr>` for submitting recordings and for anything that writes files (exports, DOCX, burned video): MCP results only come back as text, and a long `transcribe` call with `wait=true` blocks until the recording is done.
 
 ## 2. Make sure the service is up
 
-Run `<asr> status` first. It prints the service URL, hardware profile, each model's state and measured speed (`每秒音訊約 0.50 秒` = seconds of processing per second of audio), whether speaker diarization (`分辨說話者`) and punctuation (`自動標點`) are available, and the upload limits.
+Run `<asr> status` first. It prints the service URL, its version and release date (installed CLIs older than 0.7.2 leave this line out), hardware profile, each model's state and measured speed (`每秒音訊約 0.50 秒` = seconds of processing per second of audio), whether speaker diarization (`分辨說話者`) and punctuation (`自動標點`) are available, and the upload limits.
 
 - **Connection refused (`連不上`)**: the service is not running. Start it as described in `references/setup.md`; it is ready about 15 s after start. The very first start downloads ~9 GB and auto-tunes the hardware for roughly 7–35 minutes; tell the user, then check `status` every minute or two.
 - **Model state** `waiting`, `downloading`, `converting`, `loading`: jobs are accepted and wait in the queue until the model is ready. `failed`: show the error and stop.
@@ -113,10 +113,10 @@ Both are shared by everyone using the service (web app, CLI, watched folder), so
 
 - **Confidential recordings.** The audio stays local, but any transcript text you see enters this conversation and goes to the AI provider. When the user says the content is confidential or must not reach an AI service, produce the files with `<asr>` and keep their text out of the conversation: don't open the exported files, don't export to stdout, don't call `get_transcript`, and don't paste or summarize content. Confirm success from the command output (written paths, segment and speaker counts) and file sizes, then tell the user where the files are and that you didn't read them. If you'd normally ask for hotwords, ask the user for names and terms instead of looking at a draft.
 - **Keep recordings and transcripts out of version control.** They usually contain personal data.
-- **Don't reconfigure the service**: no retuning, switching hardware profiles, editing `.env` or `models.json`, or exposing it beyond localhost unless the user asks. These affect every user of the service; `references/setup.md` explains the safe way when they do ask.
+- **Don't reconfigure the service**: no retuning, switching hardware profiles, updating, editing `.env` or `models.json`, or exposing it beyond localhost unless the user asks. These affect every user of the service; `references/setup.md` explains the safe way when they do ask.
 
 ## References
 
-- `references/setup.md`: install, start and stop, first run, updating, Docker, access from other devices, the error table, logs. Read when the service is not running, a command fails, or the user asks about installation.
-- `references/api.md`: the HTTP API for what the CLI doesn't cover (editing segments, retuning, hardware profiles) and for clients without Python. Read before calling the API directly.
+- `references/setup.md`: install, start and stop, first run, updating (web app, update script, git, Docker) and rolling back, access from other devices, the error table, logs. Read when the service is not running, a command fails, or the user asks about installing or updating.
+- `references/api.md`: the HTTP API for what the CLI doesn't cover (editing segments, retuning, hardware profiles, checking for updates) and for clients without Python. Read before calling the API directly.
 - `scripts/listenmiao.py`: the standalone command-line tool described in section 1.

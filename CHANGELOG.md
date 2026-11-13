@@ -4,6 +4,18 @@
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-11-13
+
+### Added
+
+- 命令列工具與 Skill 附的 `listenmiao.py` 的 `status` 多印一行服務的版本與發布日期；0.6.0 以前的服務沒有回報版本，會照實說明。
+
+### Changed
+
+- Agent Skill 補上 0.6.0 起的安裝與更新方式：從 Releases 下載 zip 安裝、安裝腳本詢問是否裝上 Skill、在網頁上更新、`scripts/update.ps1`／`update.sh`、0.6.0 以前的版本怎麼更新、退回更新前的版本，以及 0.7.0 以前的 Docker 版改名後要加的設定；API 參考補上 `GET`／`POST /api/update` 與 `/api/config` 的 `version`。
+- Agent Skill 不再把安裝資料夾稱為 git checkout，用 zip 安裝的也會選用已安裝的命令列工具；MCP 工具清單補上 `list_models`。
+- `evals/` 裡兩個評分檔的檔名換成新名字。
+
 ## [0.7.1] - 2026-11-13
 
 ### Fixed
@@ -328,7 +340,8 @@
 - 在不能錄音的網址按「錄音」，狀態列說明原因與瀏覽器的設定方式。
 - 所有回應加上 `Cache-Control: no-cache`，更新版本後瀏覽器不會繼續使用舊的前端程式。
 
-[Unreleased]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.6.0...v0.6.1

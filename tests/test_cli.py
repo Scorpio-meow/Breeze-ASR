@@ -181,11 +181,13 @@ def test_status_lists_models_features_and_limits(monkeypatch, capsys):
         "max_upload_mb": 2048,
         "max_audio_seconds": 10800,
         "max_hotwords_length": 1000,
+        "version": {"current": "0.8.0", "released": None},
     }
     routes = {("GET", "/api/config"): lambda _: httpx.Response(200, json=config)}
     assert _status(_client(monkeypatch, routes), Namespace()) == 0
     assert capsys.readouterr().out.splitlines() == [
         "服務\thttp://asr.example:7860",
+        "版本\t0.8.0",
         "硬體\tready\tCPU・int8",
         "模型\tm25\tready\t預設、熱詞、每秒音訊約 0.34 秒",
         "模型\tremote\tfailed：連不上",

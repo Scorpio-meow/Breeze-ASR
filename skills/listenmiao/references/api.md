@@ -1,6 +1,6 @@
 # HTTP API
 
-Use the API only for what `<asr>` does not cover: editing segment text or timing, counting hotword tokens, and (when the user asks) retuning or switching the hardware profile. The full, machine-readable spec is `docs/openapi.yaml` in the install folder or <https://raw.githubusercontent.com/Scorpio-meow/ListenMiao/main/docs/openapi.yaml>; it is long, so search it for the operation you need instead of reading it whole.
+Use the API only for what `<asr>` does not cover: editing segment text or timing, counting hotword tokens, and (when the user asks) retuning, switching the hardware profile or updating. The full, machine-readable spec is `docs/openapi.yaml` in the install folder or <https://raw.githubusercontent.com/Scorpio-meow/ListenMiao/main/docs/openapi.yaml>; it is long, so search it for the operation you need instead of reading it whole.
 
 All paths are under `/api` on the service URL. Errors come back as `{"detail": "<reason>"}` (422 validation errors: `detail` is a list).
 
@@ -24,7 +24,9 @@ Git Bash, Linux and macOS shells send UTF-8 and are fine. Prefer `<asr>` wheneve
 | Method and path | Use |
 | --- | --- |
 | `GET /api/health` | `{"status": "ok"}` when the service is up |
-| `GET /api/config` | Models and their state, hardware profile, diarization and punctuation availability, export formats, limits |
+| `GET /api/config` | Models and their state, hardware profile, diarization and punctuation availability, export formats, limits, and `version` (`current`, `released` date) |
+| `GET /api/update` | Asks GitHub for the latest release: `current`, `latest`, `newer`, `published`, `url`, and `how`, the instructions to follow when this install can't update from the web app (`null` when it can). 502 when GitHub is unreachable. |
+| `POST /api/update` | 202 `{"restarting": true}`: the service shuts down and its start script installs the latest release and restarts it. 409 with the reason while jobs or burn-ins are running, or when `how` isn't `null`. Only on the user's request; prefer letting them click 立即更新 in the web app. |
 | `POST /api/hotwords/count` | `{"model": "<id>", "text": "<hotwords>"}` → `{"tokens": 15, "limit": 223}`; check long hotwords before submitting |
 | `GET /api/jobs` / `GET /api/jobs/{id}` | Job list / one job with `status`, `stage`, `progress`, `estimated_seconds` and, when done, `result` |
 | `POST /api/jobs` | multipart: `model`, `speakers` (`off`/`auto`/count), `punctuation` (`on`/`off`), optional `hotwords`, `file` → 202 with the job |

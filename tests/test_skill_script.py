@@ -86,6 +86,7 @@ class _Service:
             "max_upload_mb": 2048,
             "max_audio_seconds": 10800,
             "max_hotwords_length": 1000,
+            "version": {"current": "0.7.1", "released": "2026-11-13"},
         }
 
     def jobs(self) -> list[dict]:
@@ -110,6 +111,25 @@ def test_script_prints_the_same_as_the_cli(argv, capsys):
         printed.append(capsys.readouterr().out)
     assert printed[0]
     assert printed[0] == printed[1]
+
+
+class _ServiceBeforeVersions(_Service):
+    def config(self) -> dict:
+        return {key: value for key, value in super().config().items() if key != "version"}
+
+
+@pytest.mark.parametrize(
+    ("service", "line"),
+    [
+        (_Service(), "版本\t0.7.1\t2026-11-13 發布\n"),
+        (_ServiceBeforeVersions(), "版本\t服務沒有回報（0.6.0 以前）\n"),
+    ],
+)
+def test_status_shows_the_service_version(service, line, capsys):
+    for parser in (_parser(), _script().parser()):
+        args = parser.parse_args(["status"])
+        assert args.run(service, args) == 0
+        assert line in capsys.readouterr().out
 
 
 class _CutResponse:
