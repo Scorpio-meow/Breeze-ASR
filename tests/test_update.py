@@ -14,21 +14,21 @@ from app.main import create_app
 
 ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-REPO = "Scorpio-meow/Breeze-ASR"
+REPO = "Scorpio-meow/ListenMiao"
 
 OLD = {
     "app/a.py": "a1",
     "app/gone.py": "gone",
     "app/same.py": "same",
     "models.json": "m1",
-    "skills/breeze-asr/SKILL.md": "skill 1",
+    "skills/listenmiao/SKILL.md": "skill 1",
 }
 NEW = {
     "app/a.py": "a2",
     "app/new.py": "new",
     "app/same.py": "same",
     "models.json": "m2",
-    "skills/breeze-asr/SKILL.md": "skill 2",
+    "skills/listenmiao/SKILL.md": "skill 2",
 }
 
 
@@ -52,11 +52,11 @@ def _publish(tmp_path: Path, tag: str, files: dict[str, str], version: str | Non
     (source / update.MANIFEST).write_text(json.dumps(manifest), encoding="utf-8")
     dist = tmp_path / "dist" / tag
     dist.mkdir(parents=True)
-    archive = dist / f"breeze-asr-{tag.removeprefix('v')}.zip"
+    archive = dist / f"listenmiao-{tag.removeprefix('v')}.zip"
     with zipfile.ZipFile(archive, "w") as bundle:
         for path in sorted(source.rglob("*")):
             if path.is_file():
-                bundle.write(path, f"breeze-asr-{tag.removeprefix('v')}/{path.relative_to(source).as_posix()}")
+                bundle.write(path, f"listenmiao-{tag.removeprefix('v')}/{path.relative_to(source).as_posix()}")
     (dist / f"{archive.name}.sha256").write_text(f"{update.digest(archive)}  {archive.name}\n", encoding="utf-8")
     (dist / update.MANIFEST).write_text(json.dumps(manifest), encoding="utf-8")
     return {
@@ -166,8 +166,8 @@ def test_a_failure_halfway_through_restores_the_old_files(tmp_path, monkeypatch)
 def test_a_bad_checksum_changes_nothing(tmp_path, monkeypatch):
     old = _publish(tmp_path, "v0.5.0", OLD)
     new = _publish(tmp_path, "v0.6.0", NEW)
-    checksum = tmp_path / "dist/v0.6.0/breeze-asr-0.6.0.zip.sha256"
-    checksum.write_text("0" * 64 + "  breeze-asr-0.6.0.zip\n", encoding="utf-8")
+    checksum = tmp_path / "dist/v0.6.0/listenmiao-0.6.0.zip.sha256"
+    checksum.write_text("0" * 64 + "  listenmiao-0.6.0.zip\n", encoding="utf-8")
     _offer(monkeypatch, new, [new, old])
     root = _install(tmp_path, "v0.5.0")
     before = _snapshot(root)
@@ -205,14 +205,14 @@ def test_skill_copies_are_refreshed_only_when_untouched(tmp_path, monkeypatch):
     _offer(monkeypatch, new, [new, old])
     root = _install(tmp_path, "v0.5.0")
     home = tmp_path / "home"
-    shutil.copytree(root / "skills/breeze-asr", home / ".claude/skills/breeze-asr")
-    shutil.copytree(root / "skills/breeze-asr", home / ".agents/skills/breeze-asr")
-    (home / ".agents/skills/breeze-asr/SKILL.md").write_bytes(b"my notes")
+    shutil.copytree(root / "skills/listenmiao", home / ".claude/skills/listenmiao")
+    shutil.copytree(root / "skills/listenmiao", home / ".agents/skills/listenmiao")
+    (home / ".agents/skills/listenmiao/SKILL.md").write_bytes(b"my notes")
 
     notes = update.apply(root, home, _yes)["skills"]
 
-    assert (home / ".claude/skills/breeze-asr/SKILL.md").read_bytes() == b"skill 2"
-    assert (home / ".agents/skills/breeze-asr/SKILL.md").read_bytes() == b"my notes"
+    assert (home / ".claude/skills/listenmiao/SKILL.md").read_bytes() == b"skill 2"
+    assert (home / ".agents/skills/listenmiao/SKILL.md").read_bytes() == b"my notes"
     assert len(notes) == 2
 
 
@@ -232,6 +232,73 @@ def test_linked_skill_folders_are_left_to_the_copy_they_point_to(tmp_path, monke
     _offer(monkeypatch, new, [new, old])
     root = _install(tmp_path, "v0.5.0")
     home = tmp_path / "home"
+    canonical = home / ".agents/skills/listenmiao"
+    shutil.copytree(root / "skills/listenmiao", canonical)
+    _link(canonical, home / ".claude/skills/listenmiao")
+
+    result = update.apply(root, home, _yes)
+
+    assert result["updated"]
+    assert (home / ".claude/skills/listenmiao/SKILL.md").read_bytes() == b"skill 2"
+    assert result["skills"] == [f"已更新 Skill：{canonical}"]
+
+
+def test_an_install_from_before_the_rename_moves_to_the_new_names(tmp_path, monkeypatch):
+    legacy = {k.replace("skills/listenmiao/", "skills/breeze-asr/"): v for k, v in OLD.items()}
+    old = _publish(tmp_path, "v0.6.1", legacy)
+    new = _publish(tmp_path, "v0.7.0", NEW)
+    _offer(monkeypatch, new, [new, old])
+    root = _install(tmp_path, "v0.6.1")
+    (root / update.MANIFEST).rename(root / update.LEGACY_MANIFEST)
+    home = tmp_path / "home"
+    shutil.copytree(root / "skills/breeze-asr", home / ".claude/skills/breeze-asr")
+
+    result = update.apply(root, home, _yes)
+
+    assert result["updated"]
+    assert not (root / "skills/breeze-asr").exists()
+    assert (root / update.MANIFEST).is_file() and not (root / update.LEGACY_MANIFEST).exists()
+    assert not (home / ".claude/skills/breeze-asr").exists()
+    assert (home / ".claude/skills/listenmiao/SKILL.md").read_bytes() == b"skill 2"
+
+
+@pytest.mark.parametrize("applied_by_old_updater", [True, False])
+def test_rolling_back_across_the_rename_leaves_a_list_both_versions_read(tmp_path, monkeypatch, applied_by_old_updater):
+    old = _publish(tmp_path, "v0.6.1", OLD)
+    new = _publish(tmp_path, "v0.7.0", NEW)
+    _offer(monkeypatch, new, [new, old])
+    root = _install(tmp_path, "v0.6.1")
+    (root / update.MANIFEST).rename(root / update.LEGACY_MANIFEST)
+    update.apply(root, tmp_path / "home", _yes)
+    if applied_by_old_updater:
+        (root / update.MANIFEST).rename(root / update.LEGACY_MANIFEST)
+
+    update.rollback(root)
+
+    for name in (update.MANIFEST, update.LEGACY_MANIFEST):
+        assert json.loads((root / name).read_text(encoding="utf-8"))["tag"] == "v0.6.1"
+    shutil.copyfile(tmp_path / "src/v0.7.0/pyproject.toml", root / "pyproject.toml")
+    shutil.copyfile(tmp_path / "src/v0.7.0" / update.MANIFEST, root / update.LEGACY_MANIFEST)
+    assert update.installed_manifest(root, REPO)["tag"] == "v0.7.0"
+
+
+def test_releases_that_only_carry_the_old_list_name_are_still_matched(tmp_path, monkeypatch):
+    old = _publish(tmp_path, "v0.6.1", OLD)
+    old["assets"][update.LEGACY_MANIFEST] = old["assets"].pop(update.MANIFEST)
+    new = _publish(tmp_path, "v0.7.0", NEW)
+    _offer(monkeypatch, new, [new, old])
+    root = _install(tmp_path, "v0.6.1")
+    (root / update.MANIFEST).unlink()
+    assert update.installed_manifest(root, REPO)["tag"] == "v0.6.1"
+
+
+def test_an_old_skill_that_other_folders_link_to_is_not_moved(tmp_path, monkeypatch):
+    legacy = {k.replace("skills/listenmiao/", "skills/breeze-asr/"): v for k, v in OLD.items()}
+    old = _publish(tmp_path, "v0.6.1", legacy)
+    new = _publish(tmp_path, "v0.7.0", NEW)
+    _offer(monkeypatch, new, [new, old])
+    root = _install(tmp_path, "v0.6.1")
+    home = tmp_path / "home"
     canonical = home / ".agents/skills/breeze-asr"
     shutil.copytree(root / "skills/breeze-asr", canonical)
     _link(canonical, home / ".claude/skills/breeze-asr")
@@ -239,15 +306,16 @@ def test_linked_skill_folders_are_left_to_the_copy_they_point_to(tmp_path, monke
     result = update.apply(root, home, _yes)
 
     assert result["updated"]
-    assert (home / ".claude/skills/breeze-asr/SKILL.md").read_bytes() == b"skill 2"
-    assert result["skills"] == [f"已更新 Skill：{canonical}"]
+    assert (home / ".claude/skills/breeze-asr/SKILL.md").read_bytes() == b"skill 1"
+    assert not (home / ".agents/skills/listenmiao").exists()
+    assert len(result["skills"]) == 1 and "bunx skills remove breeze-asr" in result["skills"][0]
 
 
 def test_new_skill_installs_go_to_the_folders_that_do_not_have_it_yet(tmp_path):
     home = tmp_path / "home"
-    (home / ".agents/skills/breeze-asr").mkdir(parents=True)
+    (home / ".agents/skills/listenmiao").mkdir(parents=True)
     targets = update.skill_targets(home)
-    assert targets == [home / ".claude/skills/breeze-asr"]
+    assert targets == [home / ".claude/skills/listenmiao"]
     update.install_skills(ROOT, targets)
     assert all((target / "SKILL.md").is_file() for target in targets)
 

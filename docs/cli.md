@@ -45,7 +45,7 @@ uv run --no-sync --env-file .env python -m app.cli transcribe 週會.m4a 訪談.
 
 中文的名字與詞彙表都由命令列工具以 UTF-8 送出，Windows PowerShell 也不會變成亂碼。詞彙表與語者庫是整台服務共用的，`glossary --set` 會整份取代，先用 `glossary` 印出目前的內容再修改。聲紋屬於個人生物特徵，記住別人的聲音前請先取得對方同意。
 
-沒有專案資料夾的電腦（例如只用 Docker，或服務在另一台電腦）可以改用 [Agent Skill](#agent-skill) 附的 `skills/breeze-asr/scripts/breeze_asr.py`：只需要 Python 3.8 以上的標準函式庫，指令與參數和這裡相同，服務網址用 `--url` 指定，權杖同樣從環境變數 `ASR_ACCESS_TOKEN` 讀取。
+沒有專案資料夾的電腦（例如只用 Docker，或服務在另一台電腦）可以改用 [Agent Skill](#agent-skill) 附的 `skills/listenmiao/scripts/listenmiao.py`：只需要 Python 3.8 以上的標準函式庫，指令與參數和這裡相同，服務網址用 `--url` 指定，權杖同樣從環境變數 `ASR_ACCESS_TOKEN` 讀取。
 
 ## MCP server
 
@@ -54,10 +54,10 @@ uv run --no-sync --env-file .env python -m app.cli transcribe 週會.m4a 訪談.
 在 Claude Code 加入（路徑換成專案資料夾）：
 
 ```powershell
-claude mcp add breeze-asr -- uv run --directory C:/code/Breeze-ASR --no-sync --env-file .env python -m app.mcp_server
+claude mcp add listenmiao -- uv run --directory C:/code/ListenMiao --no-sync --env-file .env python -m app.mcp_server
 ```
 
-server 回報的名稱是 `breeze-asr`，標題 `Breeze ASR`，版本與網址取自 `pyproject.toml`，圖示是 `static/icon.svg`。日誌寫到標準錯誤，由 MCP 用戶端保留；服務本身的日誌見[部署](deployment.md#日誌)。
+server 回報的名稱是 `listenmiao`，標題 `ListenMiao`，版本與網址取自 `pyproject.toml`，圖示是 `static/icon.svg`。日誌寫到標準錯誤，由 MCP 用戶端保留；服務本身的日誌見[部署](deployment.md#日誌)。
 
 > [!CAUTION]
 > 逐字稿會進到 MCP 用戶端的對話裡，可能因此送到外部 AI 服務。內容不能交給外部 AI 的錄音，只用網頁或命令列工具。
@@ -102,13 +102,13 @@ server 回報的名稱是 `breeze-asr`，標題 `Breeze ASR`，版本與網址�
 
 | URI | 類型 | 內容 |
 | --- | --- | --- |
-| `breeze-asr://glossary` | `application/json` | 網頁「詞彙」裡的熱詞與取代規則 |
-| `breeze-asr://jobs/{job_id}/transcript.md` | `text/markdown` | 含時間戳與說話者的逐字稿 |
-| `breeze-asr://jobs/{job_id}/transcript.txt` | `text/plain` | 純文字 |
-| `breeze-asr://jobs/{job_id}/transcript.srt` | `application/x-subrip` | SRT 字幕 |
-| `breeze-asr://jobs/{job_id}/transcript.vtt` | `text/vtt` | WebVTT 字幕 |
-| `breeze-asr://jobs/{job_id}/transcript.ass` | `text/x-ssa` | ASS 字幕 |
-| `breeze-asr://jobs/{job_id}/transcript.json` | `application/json` | 每段的時間、文字、說話者編號，以及說話者清單 |
+| `listenmiao://glossary` | `application/json` | 網頁「詞彙」裡的熱詞與取代規則 |
+| `listenmiao://jobs/{job_id}/transcript.md` | `text/markdown` | 含時間戳與說話者的逐字稿 |
+| `listenmiao://jobs/{job_id}/transcript.txt` | `text/plain` | 純文字 |
+| `listenmiao://jobs/{job_id}/transcript.srt` | `application/x-subrip` | SRT 字幕 |
+| `listenmiao://jobs/{job_id}/transcript.vtt` | `text/vtt` | WebVTT 字幕 |
+| `listenmiao://jobs/{job_id}/transcript.ass` | `text/x-ssa` | ASS 字幕 |
+| `listenmiao://jobs/{job_id}/transcript.json` | `application/json` | 每段的時間、文字、說話者編號，以及說話者清單 |
 
 逐字稿資源每次讀取都向服務重新取得，網頁上的修改會立即反映。工作不存在或已過期時回傳 JSON-RPC 錯誤 `-32602`，連不上服務是 `-32603`。
 
@@ -123,14 +123,14 @@ server 回報的名稱是 `breeze-asr`，標題 `Breeze ASR`，版本與網址�
 
 ## Agent Skill
 
-[`skills/breeze-asr/`](../skills/breeze-asr/SKILL.md) 是給 Claude Code 等支援 [Agent Skills](https://agentskills.io/) 的 AI 工具用的 Skill：使用者說「轉逐字稿」「幫這支影片上字幕」「把會議錄音整理成會議紀錄」時，AI 會照它用命令列工具辨識、選模型與說話者人數、先問人名與術語再帶熱詞、替說話者改名、整理會議紀錄、燒錄字幕，以及在服務沒開或出錯時排除問題。
+[`skills/listenmiao/`](../skills/listenmiao/SKILL.md) 是給 Claude Code 等支援 [Agent Skills](https://agentskills.io/) 的 AI 工具用的 Skill：使用者說「轉逐字稿」「幫這支影片上字幕」「把會議錄音整理成會議紀錄」時，AI 會照它用命令列工具辨識、選模型與說話者人數、先問人名與術語再帶熱詞、替說話者改名、整理會議紀錄、燒錄字幕，以及在服務沒開或出錯時排除問題。
 
 | 內容 | 用途 |
 | --- | --- |
 | `SKILL.md` | 主要流程與規則（英文） |
 | `references/setup.md` | 安裝、啟動、第一次啟動、更新、錯誤對照、日誌 |
 | `references/api.md` | 命令列工具沒有的操作（改字幕段落、重新調校）直接呼叫 API 的方式 |
-| `scripts/breeze_asr.py` | 只用標準函式庫的命令列工具，指令與 `python -m app.cli` 相同，給沒有專案資料夾的電腦 |
+| `scripts/listenmiao.py` | 只用標準函式庫的命令列工具，指令與 `python -m app.cli` 相同，給沒有專案資料夾的電腦 |
 
 Skill 只呼叫執行中的服務，錄音不會離開這台電腦；但 AI 讀到的逐字稿會進入對話，內容不能交給外部 AI 的錄音，請只用網頁或命令列工具。
 
@@ -144,12 +144,12 @@ Skill 只呼叫執行中的服務，錄音不會離開這台電腦；但 AI 讀�
 
 ### 安裝 Skill
 
-Skill 只是教 AI 怎麼操作服務，要先照 [README](../README.md#快速開始) 安裝並啟動 Breeze ASR。AI 工具要能在這台電腦執行指令，並連得到服務。這台電腦有 Breeze ASR 專案資料夾時，Skill 用專案裡的命令列工具；沒有的話（只用 Docker，或服務在另一台電腦），改用 Skill 附的腳本，需要 Python 3.8 以上。
+Skill 只是教 AI 怎麼操作服務，要先照 [README](../README.md#快速開始) 安裝並啟動 ListenMiao。AI 工具要能在這台電腦執行指令，並連得到服務。這台電腦有 ListenMiao 專案資料夾時，Skill 用專案裡的命令列工具；沒有的話（只用 Docker，或服務在另一台電腦），改用 Skill 附的腳本，需要 Python 3.8 以上。
 
 用 [`skills`](https://github.com/vercel-labs/skills) 指令一行安裝，它會偵測你電腦上的 AI 工具並放到對應的資料夾：
 
 ```bash
-bunx skills add Scorpio-meow/Breeze-ASR --skill breeze-asr -g
+bunx skills add Scorpio-meow/ListenMiao --skill listenmiao -g
 ```
 
 - `-g` 裝到個人目錄（所有專案都能用）；拿掉 `-g` 則只裝到目前的專案。
@@ -162,25 +162,25 @@ bunx skills add Scorpio-meow/Breeze-ASR --skill breeze-asr -g
 
 第一次執行指令時，多數工具會先請你同意。
 
-`skills` 指令要用 git 下載 Skill。電腦沒有 git 時，安裝腳本最後會問你要不要直接把專案裡的 `skills/breeze-asr` 複製到 `~/.claude/skills/` 與 `~/.agents/skills/`（直接按 Enter 就是安裝；已經有 `breeze-asr` 的資料夾會略過）；已經裝好 Breeze ASR 的，也可以在專案資料夾執行 `uv run --no-sync python -m app.update --root . skills` 做同樣的事，或照下一節手動複製。`~/.agents/skills/` 是多個工具共用的資料夾，Codex、Cline 等都會讀。之後在網頁上更新 Breeze ASR 時，用安裝腳本裝的 Skill 會一起換成新版（你改過的保留不動）；用 `bunx` 或 `npx` 裝的，請用 `bunx skills update breeze-asr`（或把 `bunx` 換成 `npx`）更新。
+`skills` 指令要用 git 下載 Skill。電腦沒有 git 時，安裝腳本最後會問你要不要直接把專案裡的 `skills/listenmiao` 複製到 `~/.claude/skills/` 與 `~/.agents/skills/`（直接按 Enter 就是安裝；已經有 `listenmiao` 的資料夾會略過）；已經裝好 ListenMiao 的，也可以在專案資料夾執行 `uv run --no-sync python -m app.update --root . skills` 做同樣的事，或照下一節手動複製。`~/.agents/skills/` 是多個工具共用的資料夾，Codex、Cline 等都會讀。之後在網頁上更新 ListenMiao 時，用安裝腳本裝的 Skill 會一起換成新版（你改過的保留不動）；用 `bunx` 或 `npx` 裝的，請用 `bunx skills update listenmiao`（或把 `bunx` 換成 `npx`）更新。
 
 #### 各工具的 Skill 資料夾
 
-手動安裝就是把 `breeze-asr` 資料夾複製到工具讀取的 Skill 資料夾，讓 `SKILL.md` 落在 `<Skill 資料夾>/breeze-asr/SKILL.md`。個人資料夾給這台電腦上的所有專案用；專案資料夾放在專案根目錄下。
+手動安裝就是把 `listenmiao` 資料夾複製到工具讀取的 Skill 資料夾，讓 `SKILL.md` 落在 `<Skill 資料夾>/listenmiao/SKILL.md`。個人資料夾給這台電腦上的所有專案用；專案資料夾放在專案根目錄下。
 
 | 工具 | `-a` 參數 | 個人資料夾 | 專案資料夾 | 手動叫用 |
 | --- | --- | --- | --- | --- |
-| Claude Code | `claude-code` | `~/.claude/skills/` | `.claude/skills/` | `/breeze-asr` |
-| OpenAI Codex（CLI、IDE 擴充套件、ChatGPT 桌面版） | `codex` | `~/.agents/skills/` | `.agents/skills/` | `/skills` 或 `$breeze-asr` |
-| GitHub Copilot（VS Code、Copilot CLI、JetBrains） | `github-copilot` | `~/.copilot/skills/` | `.github/skills/` | `/breeze-asr` |
+| Claude Code | `claude-code` | `~/.claude/skills/` | `.claude/skills/` | `/listenmiao` |
+| OpenAI Codex（CLI、IDE 擴充套件、ChatGPT 桌面版） | `codex` | `~/.agents/skills/` | `.agents/skills/` | `/skills` 或 `$listenmiao` |
+| GitHub Copilot（VS Code、Copilot CLI、JetBrains） | `github-copilot` | `~/.copilot/skills/` | `.github/skills/` | `/listenmiao` |
 | Cursor | `cursor` | `~/.cursor/skills/` | `.cursor/skills/` | 在 Agent 對話輸入 `/` 選擇 |
 | Gemini CLI | `gemini-cli` | `~/.gemini/skills/` | `.gemini/skills/` | `/skills list` 可確認是否載入 |
 | Google Antigravity | `antigravity` | `~/.gemini/config/skills/` | `.agents/skills/` | — |
-| Devin Desktop（原 Windsurf） | `devin` | `~/.config/devin/skills/` | `.devin/skills/` | `@breeze-asr` |
+| Devin Desktop（原 Windsurf） | `devin` | `~/.config/devin/skills/` | `.devin/skills/` | `@listenmiao` |
 | OpenCode | `opencode` | `~/.config/opencode/skills/` | `.opencode/skills/` | — |
-| Cline | `cline` | `~/.cline/skills/`，也會讀 `~/.agents/skills/` | `.cline/skills/` | `/breeze-asr` |
+| Cline | `cline` | `~/.cline/skills/`，也會讀 `~/.agents/skills/` | `.cline/skills/` | `/listenmiao` |
 | Kiro | `kiro-cli` | `~/.kiro/skills/` | `.kiro/skills/` | 輸入 `/` 選擇 |
-| JetBrains Junie | `junie` | `~/.junie/skills/` | `.junie/skills/` | `/breeze-asr` 或 `$breeze-asr` |
+| JetBrains Junie | `junie` | `~/.junie/skills/` | `.junie/skills/` | `/listenmiao` 或 `$listenmiao` |
 | Roo Code | `roo` | `~/.roo/skills/` | `.roo/skills/` | — |
 
 `~` 在 Windows 是使用者資料夾（`%USERPROFILE%`）。所有工具都會在對話相關時自動使用 Skill，「手動叫用」欄只是指定使用的方式。
@@ -189,14 +189,14 @@ bunx skills add Scorpio-meow/Breeze-ASR --skill breeze-asr -g
 - `bunx skills` 會把 Skill 放在共用的 `.agents/skills/`（加 `-g` 時是 `~/.agents/skills/`），再替其他工具建立連結。裝完工具沒讀到的話，改用下面的手動安裝，放到表中的資料夾。
 - 表上沒有的工具（Amp、Goose、Kilo Code、Trae、Qwen Code 等）也能用 `bunx skills` 安裝，`-a` 的值見 [skills 的說明](https://github.com/vercel-labs/skills)。
 
-以複製到 `~/.agents/skills/` 為例，換成其他工具時，把 `TARGET` 改成上表的路徑。已經有 Breeze ASR 專案資料夾的話，在專案資料夾執行：
+以複製到 `~/.agents/skills/` 為例，換成其他工具時，把 `TARGET` 改成上表的路徑。已經有 ListenMiao 專案資料夾的話，在專案資料夾執行：
 
 macOS／Linux：
 
 ```bash
 TARGET=~/.agents/skills
 mkdir -p "$TARGET"
-cp -r skills/breeze-asr "$TARGET/"
+cp -r skills/listenmiao "$TARGET/"
 ```
 
 Windows PowerShell：
@@ -204,14 +204,14 @@ Windows PowerShell：
 ```powershell
 $TARGET = "$HOME\.agents\skills"
 New-Item -ItemType Directory -Force $TARGET | Out-Null
-Copy-Item -Recurse -Force skills\breeze-asr "$TARGET\"
+Copy-Item -Recurse -Force skills\listenmiao "$TARGET\"
 ```
 
-沒有專案資料夾的話，先只下載 Skill 所在的資料夾，再到 `breeze-asr-skill` 資料夾執行上面的指令：
+沒有專案資料夾的話，先只下載 Skill 所在的資料夾，再到 `listenmiao-skill` 資料夾執行上面的指令：
 
 ```bash
-git clone --depth 1 --filter=blob:none --sparse https://github.com/Scorpio-meow/Breeze-ASR.git breeze-asr-skill
-git -C breeze-asr-skill sparse-checkout set skills/breeze-asr
+git clone --depth 1 --filter=blob:none --sparse https://github.com/Scorpio-meow/ListenMiao.git listenmiao-skill
+git -C listenmiao-skill sparse-checkout set skills/listenmiao
 ```
 
 工具若沒有偵測到新的 Skill，重新啟動一次即可。
@@ -223,13 +223,13 @@ git -C breeze-asr-skill sparse-checkout set skills/breeze-asr
 - **GitHub CLI**（2.90 以上，`gh skill` 目前是 public preview）：`--agent` 的值和上表的 `-a` 相同。
 
   ```bash
-  gh skill install Scorpio-meow/Breeze-ASR breeze-asr --agent claude-code --scope user
+  gh skill install Scorpio-meow/ListenMiao listenmiao --agent claude-code --scope user
   ```
 
 - **OpenAI Codex**：在 Codex 輸入
 
   ```text
-  $skill-installer install https://github.com/Scorpio-meow/Breeze-ASR/tree/main/skills/breeze-asr
+  $skill-installer install https://github.com/Scorpio-meow/ListenMiao/tree/main/skills/listenmiao
   ```
 
   Codex 預設在沙箱裡執行指令、不開網路，連到服務時會先請你核准。想一律允許，在 `~/.codex/config.toml` 加上：
@@ -239,14 +239,14 @@ git -C breeze-asr-skill sparse-checkout set skills/breeze-asr
   network_access = true
   ```
 
-- **GitHub Copilot CLI**：在專案資料夾執行 `copilot skill add skills/breeze-asr`；工作階段中途加入的，用 `/skills reload` 載入。
+- **GitHub Copilot CLI**：在專案資料夾執行 `copilot skill add skills/listenmiao`；工作階段中途加入的，用 `/skills reload` 載入。
 - **Gemini CLI**：預設裝到個人範圍，加上 `--scope workspace` 只裝到目前專案。
 
   ```bash
-  gemini skills install https://github.com/Scorpio-meow/Breeze-ASR.git --path skills/breeze-asr
+  gemini skills install https://github.com/Scorpio-meow/ListenMiao.git --path skills/listenmiao
   ```
 
-- **Kiro**：Kiro 面板的 **Agent Steering & Skills** → **+** → **Import a skill** → **GitHub**，網址要指到 Skill 所在的子資料夾：`https://github.com/Scorpio-meow/Breeze-ASR/tree/main/skills/breeze-asr`。
+- **Kiro**：Kiro 面板的 **Agent Steering & Skills** → **+** → **Import a skill** → **GitHub**，網址要指到 Skill 所在的子資料夾：`https://github.com/Scorpio-meow/ListenMiao/tree/main/skills/listenmiao`。
 
 Claude 應用程式（網頁版、桌面版）與 ChatGPT 的 Skill 在雲端的沙箱執行，連不到你電腦上的服務，錄音也得先上傳到雲端，所以不適用；請在自己的電腦上用 Claude Code、Codex 等工具。
 
@@ -254,10 +254,12 @@ Claude 應用程式（網頁版、桌面版）與 ChatGPT 的 Skill 在雲端的
 
 | 安裝方式 | 更新 | 移除 |
 | --- | --- | --- |
-| `bunx skills` | `bunx skills update breeze-asr` | `bunx skills remove breeze-asr` |
-| `gh skill` | `gh skill update` | 刪除 `breeze-asr` 資料夾 |
-| Codex（`$skill-installer`） | 刪除 `~/.codex/skills/breeze-asr` 資料夾，再安裝一次 | 刪除 `~/.codex/skills/breeze-asr` 資料夾 |
-| Gemini CLI | 移除後重新安裝 | `gemini skills uninstall breeze-asr` |
-| 手動複製 | 更新專案資料夾（或在 `breeze-asr-skill` 執行 `git pull`），再複製一次 | 刪除 `breeze-asr` 資料夾 |
+| `bunx skills` | `bunx skills update listenmiao` | `bunx skills remove listenmiao` |
+| `gh skill` | `gh skill update` | 刪除 `listenmiao` 資料夾 |
+| Codex（`$skill-installer`） | 刪除 `~/.codex/skills/listenmiao` 資料夾，再安裝一次 | 刪除 `~/.codex/skills/listenmiao` 資料夾 |
+| Gemini CLI | 移除後重新安裝 | `gemini skills uninstall listenmiao` |
+| 手動複製 | 更新專案資料夾（或在 `listenmiao-skill` 執行 `git pull`），再複製一次 | 刪除 `listenmiao` 資料夾 |
+
+Skill 在 0.7.0 從 `breeze-asr` 改名為 `listenmiao`。用安裝腳本裝的，在網頁上更新時會換成新名字：從 0.6.x 更新到 0.7.0 時先維持舊名 `breeze-asr`（內容換成新版，照樣用 `/breeze-asr`），下一次更新再換成 `listenmiao`；用 `bunx skills` 裝過舊名的，先執行 `bunx skills remove breeze-asr`，再照上面重新安裝；其他方式裝的，刪掉 `breeze-asr` 資料夾後重新安裝。
 
 路徑或介面如有變動，以官方文件為準：[Claude Code](https://code.claude.com/docs/en/skills)・[OpenAI Codex](https://learn.chatgpt.com/docs/build-skills)・[GitHub Copilot](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills)・[VS Code](https://code.visualstudio.com/docs/agent-customization/agent-skills)・[Cursor](https://cursor.com/docs/skills)・[Gemini CLI](https://geminicli.com/docs/cli/skills/)・[Google Antigravity](https://antigravity.google/docs/skills)・[Devin Desktop](https://docs.devin.ai/desktop/cascade/skills)・[OpenCode](https://opencode.ai/docs/skills)・[Cline](https://docs.cline.bot/customization/skills)・[Kiro](https://kiro.dev/docs/skills/)・[JetBrains Junie](https://junie.jetbrains.com/docs/agent-skills.html)・[Roo Code](https://roocodeinc.github.io/Roo-Code/features/skills/)・[skills](https://github.com/vercel-labs/skills)・[gh skill](https://cli.github.com/manual/gh_skill_install)

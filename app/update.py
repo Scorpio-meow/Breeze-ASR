@@ -15,12 +15,14 @@ import zipfile
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parent.parent
-MANIFEST = "breeze-asr-manifest.json"
+MANIFEST = "listenmiao-manifest.json"
+LEGACY_MANIFEST = "breeze-asr-manifest.json"
 WORK = ".update"
 REQUEST = "request.json"
-SKILL = "breeze-asr"
+SKILL = "listenmiao"
+LEGACY_SKILL = "breeze-asr"
 _API = "https://api.github.com"
-_USER_AGENT = "breeze-asr-updater"
+_USER_AGENT = "listenmiao-updater"
 _TIMEOUT_SECONDS = 30
 _VERSION = re.compile(r"v?(\d+)\.(\d+)\.(\d+)")
 _HOMEPAGE = re.compile(r"https://github\.com/([^/]+/[^/]+?)/?")
@@ -84,7 +86,7 @@ def _files(directory: Path) -> dict[str, str]:
     return {
         path.relative_to(directory).as_posix(): digest(path)
         for path in sorted(directory.rglob("*"))
-        if path.is_file() and path.name != MANIFEST
+        if path.is_file() and path.name not in (MANIFEST, LEGACY_MANIFEST)
     }
 
 
@@ -165,7 +167,7 @@ def check(root: Path) -> dict:
 
 def how_to_update(root: Path, updatable: bool) -> str | None:
     if (root / ".git").exists():
-        return "這份 Breeze ASR 是用 git 取得的：關閉服務後在專案資料夾執行 git pull，再照 docs/deployment.md 的「更新版本」重裝套件"
+        return "這份 ListenMiao 是用 git 取得的：關閉服務後在專案資料夾執行 git pull，再照 docs/deployment.md 的「更新版本」重裝套件"
     if Path("/.dockerenv").exists():
         return "Docker 版：執行 docker compose pull，再 docker compose up -d --no-build；自己建置的改成 git pull 後 docker compose up -d --build"
     if not updatable:
@@ -203,9 +205,10 @@ def _identify(root: Path, repo: str) -> dict:
     local = _Digests(root)
     best, best_score = None, -1
     for release in all_releases(repo):
-        if MANIFEST not in release["assets"]:
+        asset = next((name for name in (MANIFEST, LEGACY_MANIFEST) if name in release["assets"]), None)
+        if asset is None:
             continue
-        manifest = _fetch_json(release["assets"][MANIFEST])
+        manifest = _fetch_json(release["assets"][asset])
         if manifest["version"] != version:
             continue
         score = sum(local(relative) == expected for relative, expected in manifest["files"].items())
@@ -219,9 +222,13 @@ def _identify(root: Path, repo: str) -> dict:
 
 
 def installed_manifest(root: Path, repo: str) -> dict:
-    local = root / MANIFEST
-    if local.is_file():
-        return json.loads(local.read_text(encoding="utf-8"))
+    version = current_version(root)
+    for name in (MANIFEST, LEGACY_MANIFEST):
+        local = root / name
+        if local.is_file():
+            manifest = json.loads(local.read_text(encoding="utf-8"))
+            if manifest["version"] == version:
+                return manifest
     return _identify(root, repo)
 
 
@@ -295,26 +302,47 @@ def service_running(root: Path) -> bool:
         return False
 
 
-def _refresh_skills(old: dict, staging: Path, home: Path) -> list[str]:
-    prefix = f"skills/{SKILL}/"
-    shipped = {
-        relative.removeprefix(prefix): value for relative, value in old["files"].items() if relative.startswith(prefix)
+def _shipped_skill(manifest: dict, name: str) -> dict[str, str]:
+    prefix = f"skills/{name}/"
+    return {
+        relative.removeprefix(prefix): value
+        for relative, value in manifest["files"].items()
+        if relative.startswith(prefix)
     }
+
+
+def _linked(path: Path) -> bool:
+    return path.is_symlink() or path.is_junction()
+
+
+def _refresh_skills(old: dict, staging: Path, home: Path) -> list[str]:
     notes = []
+    shared = any(_linked(home / folder / LEGACY_SKILL) for folder in _SKILL_FOLDERS)
     for folder in _SKILL_FOLDERS:
-        target = home / folder / SKILL
-        if target.is_symlink() or target.is_junction() or not (target / "SKILL.md").is_file():
-            continue
-        if _files(target) != shipped:
-            notes.append(f"沒有更新 Skill：{target} 和 {old['version']} 附的版本不同")
-            continue
-        try:
-            shutil.rmtree(target)
-            shutil.copytree(staging / "skills" / SKILL, target)
-        except OSError as exc:
-            notes.append(f"沒有更新 Skill：{target}（{exc}）")
-            continue
-        notes.append(f"已更新 Skill：{target}")
+        destination = home / folder / SKILL
+        for name in (SKILL, LEGACY_SKILL):
+            target = home / folder / name
+            if _linked(target) or not (target / "SKILL.md").is_file():
+                continue
+            if name == LEGACY_SKILL and shared:
+                notes.append(
+                    f"沒有更新 Skill：{target} 是 bunx skills 用連結共用的，"
+                    f"請執行 bunx skills remove {LEGACY_SKILL} 後重新安裝"
+                )
+                continue
+            if _files(target) != _shipped_skill(old, name):
+                notes.append(f"沒有更新 Skill：{target} 和 {old['version']} 附的版本不同")
+                continue
+            try:
+                shutil.rmtree(target)
+                if not destination.exists():
+                    shutil.copytree(staging / "skills" / SKILL, destination)
+            except OSError as exc:
+                notes.append(f"沒有更新 Skill：{target}（{exc}）")
+                continue
+            notes.append(
+                f"已更新 Skill：{destination}" if target == destination else f"Skill 已從 {target} 換成 {destination}"
+            )
     return notes
 
 
@@ -324,7 +352,7 @@ def apply(root: Path, home: Path, ask) -> dict:
     if how is not None:
         raise UpdateError(how)
     if service_running(root):
-        raise UpdateError("Breeze ASR 還在執行，請先關閉服務再更新")
+        raise UpdateError("ListenMiao 還在執行，請先關閉服務再更新")
     repo = repository(root)
     newest = latest_release(repo)
     current = current_version(root)
@@ -335,7 +363,7 @@ def apply(root: Path, home: Path, ask) -> dict:
     old = installed_manifest(root, repo)
     work = root / WORK
     work.mkdir(exist_ok=True)
-    name = f"breeze-asr-{newest['version']}.zip"
+    name = f"listenmiao-{newest['version']}.zip"
     if name not in newest["assets"] or f"{name}.sha256" not in newest["assets"]:
         raise UpdateError(f"{newest['tag']} 的發布頁面缺少 {name} 或它的檢查碼")
     archive = work / name
@@ -358,6 +386,8 @@ def apply(root: Path, home: Path, ask) -> dict:
     shutil.rmtree(backup, ignore_errors=True)
     for relative in steps["replace"] + steps["delete"]:
         _place(_inside(root, relative), _inside(backup / "files", relative))
+    if (root / LEGACY_MANIFEST).is_file():
+        _place(root / LEGACY_MANIFEST, backup / LEGACY_MANIFEST)
     (backup / "plan.json").write_text(json.dumps({**steps, "manifest": old}, ensure_ascii=False), encoding="utf-8")
     try:
         for relative in steps["add"] + steps["replace"]:
@@ -367,6 +397,7 @@ def apply(root: Path, home: Path, ask) -> dict:
         for relative in steps["delete"]:
             _remove(root, relative)
         _place(staging / MANIFEST, root / MANIFEST)
+        (root / LEGACY_MANIFEST).unlink(missing_ok=True)
     except OSError as exc:
         rollback(root)
         raise UpdateError(f"換上新版的檔案時出錯，已還原成更新前的檔案：{exc}") from exc
@@ -386,7 +417,11 @@ def rollback(root: Path) -> None:
         _remove(root, f"{relative}.new")
     for relative in steps["replace"] + steps["delete"]:
         _place(_inside(backup / "files", relative), _inside(root, relative))
-    (root / MANIFEST).write_text(json.dumps(steps["manifest"], ensure_ascii=False), encoding="utf-8")
+    names = [MANIFEST]
+    if (root / LEGACY_MANIFEST).exists() or (backup / LEGACY_MANIFEST).exists():
+        names.append(LEGACY_MANIFEST)
+    for name in names:
+        (root / name).write_text(json.dumps(steps["manifest"], ensure_ascii=False), encoding="utf-8")
 
 
 def torch_group(root: Path) -> str:
@@ -406,9 +441,15 @@ def torch_group(root: Path) -> str:
     raise UpdateError(f"已安裝的 PyTorch {installed} 不在新版支援的組別裡，請重跑安裝腳本")
 
 
+def _occupied(path: Path) -> bool:
+    return path.exists() or path.is_symlink()
+
+
 def skill_targets(home: Path) -> list[Path]:
     return [
-        target for folder in _SKILL_FOLDERS if not ((target := home / folder / SKILL).exists() or target.is_symlink())
+        home / folder / SKILL
+        for folder in _SKILL_FOLDERS
+        if not (_occupied(home / folder / SKILL) or _occupied(home / folder / LEGACY_SKILL))
     ]
 
 
@@ -453,15 +494,15 @@ def _run(args: argparse.Namespace) -> None:
         if not targets:
             return
         folders = "、".join(str(target) for target in targets)
-        if _confirm(f"要安裝 Agent Skill 嗎？會放到 {folders}，讓 Claude Code、Codex 等 AI 工具操作 Breeze ASR", True):
+        if _confirm(f"要安裝 Agent Skill 嗎？會放到 {folders}，讓 Claude Code、Codex 等 AI 工具操作 ListenMiao", True):
             install_skills(root, targets)
             for target in targets:
                 print(f"已安裝 Agent Skill：{target}")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="檢查與套用 Breeze ASR 的更新")
-    parser.add_argument("--root", type=Path, required=True, help="Breeze ASR 的資料夾")
+    parser = argparse.ArgumentParser(description="檢查與套用 ListenMiao 的更新")
+    parser.add_argument("--root", type=Path, required=True, help="ListenMiao 的資料夾")
     commands = parser.add_subparsers(dest="command", required=True)
     applying = commands.add_parser("apply", help="下載並套用最新版")
     applying.add_argument("--yes", action="store_true", help="不詢問，直接更新")

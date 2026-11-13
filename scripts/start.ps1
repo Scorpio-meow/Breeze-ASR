@@ -54,7 +54,7 @@ if (-not $NoBrowser) {
 
 $request = Join-Path $root ".update\request.json"
 while ($true) {
-    Write-Host "Breeze ASR：$url（關閉這個視窗即停止服務）"
+    Write-Host "ListenMiao：$url（關閉這個視窗即停止服務）"
     uv run --no-sync --env-file .env python -m app --updatable
     $code = $LASTEXITCODE
     if (-not (Test-Path $request)) {

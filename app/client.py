@@ -66,7 +66,7 @@ class AsrClient:
         try:
             response = self._http.request(method, path, **kwargs)
         except httpx.HTTPError as exc:
-            raise ServiceError(f"連不上 Breeze ASR 服務 {self.base_url}：{exc}") from exc
+            raise ServiceError(f"連不上 ListenMiao 服務 {self.base_url}：{exc}") from exc
         if response.status_code >= 400:
             self._raise_for(response)
         return response
@@ -145,7 +145,7 @@ class AsrClient:
                         file.write(chunk)
             partial.replace(target)
         except httpx.HTTPError as exc:
-            raise ServiceError(f"連不上 Breeze ASR 服務 {self.base_url}：{exc}") from exc
+            raise ServiceError(f"連不上 ListenMiao 服務 {self.base_url}：{exc}") from exc
         finally:
             partial.unlink(missing_ok=True)
 

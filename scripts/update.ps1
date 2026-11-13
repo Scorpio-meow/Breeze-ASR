@@ -2,8 +2,8 @@
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
-if (-not (Select-String -Path pyproject.toml -Pattern '^name = "breeze-asr-webapp"$' -Quiet)) {
-    throw "找不到 Breeze ASR：這支腳本要放在 Breeze ASR 資料夾的 scripts 裡執行"
+if (-not (Select-String -Path pyproject.toml -Pattern '^name = "(listenmiao|breeze-asr-webapp)"$' -Quiet)) {
+    throw "找不到 ListenMiao：這支腳本要放在 ListenMiao 資料夾的 scripts 裡執行"
 }
 $homepage = Select-String -Path pyproject.toml -Pattern '^Homepage = "(.+)"$'
 if (-not $homepage) {

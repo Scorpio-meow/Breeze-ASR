@@ -1,6 +1,6 @@
 # HTTP API
 
-Use the API only for what `<asr>` does not cover: editing segment text or timing, counting hotword tokens, and (when the user asks) retuning or switching the hardware profile. The full, machine-readable spec is `docs/openapi.yaml` in the install folder or <https://raw.githubusercontent.com/Scorpio-meow/Breeze-ASR/main/docs/openapi.yaml>; it is long, so search it for the operation you need instead of reading it whole.
+Use the API only for what `<asr>` does not cover: editing segment text or timing, counting hotword tokens, and (when the user asks) retuning or switching the hardware profile. The full, machine-readable spec is `docs/openapi.yaml` in the install folder or <https://raw.githubusercontent.com/Scorpio-meow/ListenMiao/main/docs/openapi.yaml>; it is long, so search it for the operation you need instead of reading it whole.
 
 All paths are under `/api` on the service URL. Errors come back as `{"detail": "<reason>"}` (422 validation errors: `detail` is a list).
 

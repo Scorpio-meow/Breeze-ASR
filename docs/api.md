@@ -87,7 +87,7 @@ curl -o meeting.srt http://127.0.0.1:7860/api/jobs/<id>/export/srt
 
 ## POST /api/client-errors
 
-網頁遇到未處理的 JavaScript 錯誤或上傳時連線中斷，用這個端點寫進 `breeze-asr.log`；同一則錯誤每次開啟網頁只回報一次，最多 20 則。
+網頁遇到未處理的 JavaScript 錯誤或上傳時連線中斷，用這個端點寫進 `listenmiao.log`；同一則錯誤每次開啟網頁只回報一次，最多 20 則。
 
 **請求：** JSON `{"kind": "error", "message": "x is not defined", "source": "app.js:10:5"}`，三個欄位都必填。換行會併成一行，每欄只記前 1000 個字。
 

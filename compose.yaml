@@ -1,7 +1,8 @@
-name: breeze-asr
+name: listenmiao
 
 services:
-  breeze-asr:
+  listenmiao:
+    container_name: listenmiao
     build:
       context: .
       args:

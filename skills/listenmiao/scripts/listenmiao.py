@@ -95,7 +95,7 @@ class AsrClient:
         except urllib.error.HTTPError as exc:
             raise self._error(exc) from None
         except (urllib.error.URLError, OSError) as exc:
-            raise ServiceError(f"連不上 Breeze ASR 服務 {self.base_url}：{exc}") from exc
+            raise ServiceError(f"連不上 ListenMiao 服務 {self.base_url}：{exc}") from exc
 
     def _error(self, exc: urllib.error.HTTPError) -> ServiceError:
         if exc.code == 401:
@@ -407,7 +407,7 @@ def _forget(client: AsrClient, args: argparse.Namespace) -> int:
 
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(
-        prog="breeze_asr.py", description="Breeze ASR 命令列工具（只用標準庫，呼叫執行中的服務）"
+        prog="listenmiao.py", description="ListenMiao 命令列工具（只用標準庫，呼叫執行中的服務）"
     )
     root.add_argument("--url", help="服務網址；沒給時用環境變數 ASR_HOST 與 ASR_PORT")
     commands = root.add_subparsers(dest="command", required=True)

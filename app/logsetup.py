@@ -153,6 +153,6 @@ def versions(packages: tuple[str, ...]) -> str:
         except metadata.PackageNotFoundError:
             found.append(f"{name} 未安裝")
     return (
-        f"Breeze ASR {info['version']}（Python {platform.python_version()}，{platform.platform()}）；"
+        f"ListenMiao {info['version']}（Python {platform.python_version()}，{platform.platform()}）；"
         f"套件：{'、'.join(found)}"
     )

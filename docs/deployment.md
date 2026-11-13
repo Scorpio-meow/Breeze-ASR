@@ -15,13 +15,13 @@
 
 ## Windows 安裝腳本
 
-從 [Releases](https://github.com/Scorpio-meow/Breeze-ASR/releases/latest) 下載 `breeze-asr-<版本>.zip` 解壓縮（不需要 git；也可以 clone 本專案）後，在專案根目錄的 PowerShell 執行：
+從 [Releases](https://github.com/Scorpio-meow/ListenMiao/releases/latest) 下載 `listenmiao-<版本>.zip` 解壓縮（不需要 git；也可以 clone 本專案）後，在專案根目錄的 PowerShell 執行：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 ```
 
-腳本會安裝 [uv](https://docs.astral.sh/uv/)（還沒裝的話）、建立 Python 環境、從 `.env.example` 建立 `.env`，並在桌面建立「Breeze ASR」捷徑。偵測到 `nvidia-smi` 時裝 CUDA 版 PyTorch，否則裝 CPU 版。
+腳本會安裝 [uv](https://docs.astral.sh/uv/)（還沒裝的話）、建立 Python 環境、從 `.env.example` 建立 `.env`，並在桌面建立「ListenMiao」捷徑。偵測到 `nvidia-smi` 時裝 CUDA 版 PyTorch，否則裝 CPU 版。
 
 | 參數 | 作用 |
 | --- | --- |
@@ -77,7 +77,7 @@ docker compose up -d --build
 ```
 
 - 照 `.env.example` 的 `ASR_ALLOWED_HOSTS` 就能在這台主機用 `http://127.0.0.1:7860` 開啟；從其他電腦連線見[讓其他電腦連線](#讓其他電腦連線)。
-- 資料（權重快取、轉換後的模型、硬體設定檔、辨識結果、詞彙表、語者庫、日誌）存在 `breeze-asr_asr-data` volume，重建映像檔不會重新下載或重新調校。
+- 資料（權重快取、轉換後的模型、硬體設定檔、辨識結果、詞彙表、語者庫、日誌）存在 `listenmiao_asr-data` volume，重建映像檔不會重新下載或重新調校。
 - 確認 `ASR_DOCKER_SUBNET` 的網段不會和現有的網路衝突。
 - 轉換 Breeze ASR 26（原始權重 6 GB）時容器記憶體峰值約 6 GB，Docker Desktop 建議至少配置 8 GB（WSL2 預設為實體記憶體的一半）。
 
@@ -89,7 +89,7 @@ docker compose up -d --build
 COMPOSE_FILE=compose.yaml:compose.cuda.yaml
 COMPOSE_PATH_SEPARATOR=:
 ASR_TORCH_GROUP=cu130
-ASR_IMAGE=breeze-asr-webapp:cuda
+ASR_IMAGE=listenmiao:cuda
 ASR_CUDA_DEVICE_ID=0
 ```
 
@@ -105,7 +105,7 @@ ASR_CUDA_DEVICE_ID=0
 COMPOSE_FILE=compose.yaml:compose.rocm.yaml
 COMPOSE_PATH_SEPARATOR=:
 ASR_TORCH_GROUP=rocm72
-ASR_IMAGE=breeze-asr-webapp:rocm
+ASR_IMAGE=listenmiao:rocm
 ASR_VIDEO_GID=44
 ASR_RENDER_GID=110
 ```
@@ -146,7 +146,7 @@ docker compose up -d --no-build
 
 ## 更新版本
 
-從 [Releases](https://github.com/Scorpio-meow/Breeze-ASR/releases/latest) 下載 zip 安裝的，不需要 git 就能更新。
+從 [Releases](https://github.com/Scorpio-meow/ListenMiao/releases/latest) 下載 zip 安裝的，不需要 git 就能更新。
 
 **在網頁上更新**：用桌面捷徑或 `scripts/start` 啟動時，按右下角的版本號，再按「檢查更新」。有新版會出現「立即更新」，按下後：
 
@@ -169,11 +169,11 @@ bash scripts/update.sh
 **0.6.0 以前的版本**沒有更新腳本，先在專案資料夾下載一次，再照上面執行（之後就能在網頁上更新）：
 
 ```powershell
-Invoke-WebRequest https://github.com/Scorpio-meow/Breeze-ASR/releases/latest/download/update.ps1 -OutFile scripts\update.ps1
+Invoke-WebRequest https://github.com/Scorpio-meow/ListenMiao/releases/latest/download/update.ps1 -OutFile scripts\update.ps1
 ```
 
 ```bash
-curl -fsSL -o scripts/update.sh https://github.com/Scorpio-meow/Breeze-ASR/releases/latest/download/update.sh
+curl -fsSL -o scripts/update.sh https://github.com/Scorpio-meow/ListenMiao/releases/latest/download/update.sh
 ```
 
 更新程式會比對檔案指紋，認出你裝的是哪一版、哪些檔案改過。0.3.0 以前的版本沒有記錄下載位置，要到 Releases 手動下載新版，再把 `.env` 與資料目錄搬過去。
@@ -190,6 +190,8 @@ uv sync --frozen
 NVIDIA 顯示卡改用 `uv sync --frozen --no-default-groups --group cu130`（AMD 換成 `rocm72`），或重跑安裝腳本。
 
 **Docker**：`git pull` 後 `docker compose up -d --build`；用發布的映像檔則是 `docker compose pull`、`docker compose up -d --no-build`。
+
+從 0.6.x 以前的 Docker 版更新上來時，先在 `.env` 加上 `COMPOSE_PROJECT_NAME=breeze-asr`，繼續用原本的 `breeze-asr_asr-data` volume，第一次啟動時再加上 `--remove-orphans` 換掉舊容器。用發布的映像檔的，`ASR_IMAGE` 也要改成 `ghcr.io/scorpio-meow/listenmiao:<標籤>`。
 
 > [!IMPORTANT]
 > 新版本可能新增 `.env` 變數，見 [CHANGELOG](../CHANGELOG.md)。安裝腳本只在 `.env` 不存在時才建立它；已有 `.env` 時，安裝與啟動腳本會把還沒有的變數依 `.env.example` 補在檔尾並列出來，已經設定的值不會被改。Docker 不經過啟動腳本，缺少新的變數時服務會拒絕啟動並說出缺少哪一個；照 `.env.example` 手動補上，或在主機上執行 `uv run --no-sync python -m app.envfile .env.example .env`。
@@ -212,7 +214,7 @@ NVIDIA 顯示卡改用 `uv sync --frozen --no-default-groups --group cu130`（AM
 
 辨識照樣在這台電腦上跑，手機與平板只用瀏覽器開網頁：上傳或錄音、播放、校對、匯出。iPhone、iPad 的 Safari 只在 HTTPS 網頁開放麥克風，所以要用 HTTPS 連線。
 
-下面兩種做法，Breeze ASR 都維持只監聽 `127.0.0.1:7860`，轉來的請求在服務看來都來自本機，服務不會強制要求權杖。請一定設定 `ASR_ACCESS_TOKEN`：網路裡有別人的裝置、或手機遺失時，權杖是最後一道防線。手機網址裡的名稱或 IP 也要以逗號接在 `ASR_ALLOWED_HOSTS` 的 `127.0.0.1,localhost` 後面，沒列入會回 400（見[設定](configuration.md#接受的主機名稱)）。
+下面兩種做法，ListenMiao 都維持只監聽 `127.0.0.1:7860`，轉來的請求在服務看來都來自本機，服務不會強制要求權杖。請一定設定 `ASR_ACCESS_TOKEN`：網路裡有別人的裝置、或手機遺失時，權杖是最後一道防線。手機網址裡的名稱或 IP 也要以逗號接在 `ASR_ALLOWED_HOSTS` 的 `127.0.0.1,localhost` 後面，沒列入會回 400（見[設定](configuration.md#接受的主機名稱)）。
 
 ### 用 tailscale serve（建議）
 
@@ -221,14 +223,14 @@ NVIDIA 顯示卡改用 `uv sync --frozen --no-default-groups --group cu130`（AM
 1. 這台電腦與手機都安裝 Tailscale，登入同一個 tailnet。
 2. tailnet 要開啟 MagicDNS 與 HTTPS Certificates（Tailscale 管理頁面的 DNS 分頁）；第一次執行 `tailscale serve` 時如果還沒開，會印出開啟的網址。
 3. 在 `.env` 設定 `ASR_ACCESS_TOKEN`。
-4. 啟動 Breeze ASR 後，在這台電腦執行：
+4. 啟動 ListenMiao 後，在這台電腦執行：
 
    ```powershell
    tailscale serve --bg 7860
    ```
 
    會印出 `https://<電腦名稱>.<tailnet 名稱>.ts.net/` 這類網址。`--bg` 讓這個設定在背景持續生效，直到關閉為止。
-5. 把網址裡的 `<電腦名稱>.<tailnet 名稱>.ts.net` 加進 `ASR_ALLOWED_HOSTS`，重新啟動 Breeze ASR。`tailscale serve` 轉送時保留手機網址裡的名稱。
+5. 把網址裡的 `<電腦名稱>.<tailnet 名稱>.ts.net` 加進 `ASR_ALLOWED_HOSTS`，重新啟動 ListenMiao。`tailscale serve` 轉送時保留手機網址裡的名稱。
 6. 手機開啟 Tailscale app 並連線，用 Safari 或 Chrome 開啟該網址，輸入權杖；第一次按「錄音」時允許使用麥克風。
 
 | 指令 | 作用 |
@@ -241,9 +243,9 @@ NVIDIA 顯示卡改用 `uv sync --frozen --no-default-groups --group cu130`（AM
 
 ### 區網自簽憑證
 
-沒有 Tailscale 時，也可以在這台電腦跑 HTTPS 反向代理（例如 Caddy 的 `tls internal`，或用 mkcert 產生憑證），轉到 `http://127.0.0.1:7860`；Breeze ASR 本身只提供 http。
+沒有 Tailscale 時，也可以在這台電腦跑 HTTPS 反向代理（例如 Caddy 的 `tls internal`，或用 mkcert 產生憑證），轉到 `http://127.0.0.1:7860`；ListenMiao 本身只提供 http。
 
-- 反向代理用另一個埠（例如 443 或 8443），防火牆只開那個埠；Breeze ASR 的埠維持 7860、只監聽本機。
+- 反向代理用另一個埠（例如 443 或 8443），防火牆只開那個埠；ListenMiao 的埠維持 7860、只監聽本機。
 - 每支手機、平板都要安裝並信任自己產生的根憑證。iPhone、iPad 安裝描述檔後，還要到「設定 → 一般 → 關於本機 → 憑證信任設定」打開完整信任；Android 要在系統設定安裝 CA 憑證，有些瀏覽器不採用使用者自行安裝的憑證。
 - 在憑證警告頁直接按「繼續前往」不是解法：連線沒有驗證對方身分，各瀏覽器對這種頁面能不能用麥克風的處理也不一致。
 - 憑證綁定網址裡的 IP 或名稱；電腦的區網 IP 變了（例如 DHCP 重新分配）就要重發憑證，或改成固定 IP。
@@ -283,9 +285,9 @@ ASR_WATCH_SOURCE=/srv/recordings
 
 | 檔案 | 內容 |
 | --- | --- |
-| `breeze-asr.log` | 網頁行程：版本與生效的設定、啟動摘要；上傳與排隊、每個工作進入的階段與耗時，處理中每 5 分鐘記一行目前的階段與耗時；進度每跨過 10% 記一行（分辨說話者，以及會回報進度的 PyTorch 與遠端服務；OpenVINO 不回報辨識進度）；分辨說話者的分群統計與語者庫比對；字幕編輯、詞彙表、語者庫、燒錄字幕、監看資料夾；被拒絕的請求與原因、瀏覽器回報的錯誤、關閉時還沒完成的工作；HTTP 請求（輪詢與熱詞計數不記） |
+| `listenmiao.log` | 網頁行程：版本與生效的設定、啟動摘要；上傳與排隊、每個工作進入的階段與耗時，處理中每 5 分鐘記一行目前的階段與耗時；進度每跨過 10% 記一行（分辨說話者，以及會回報進度的 PyTorch 與遠端服務；OpenVINO 不回報辨識進度）；分辨說話者的分群統計與語者庫比對；字幕編輯、詞彙表、語者庫、燒錄字幕、監看資料夾；被拒絕的請求與原因、瀏覽器回報的錯誤、關閉時還沒完成的工作；HTTP 請求（輪詢與熱詞計數不記） |
 | `inference.log` | 推論子行程：版本、關閉 OpenVINO 用量回報（只在實際改寫設定時記一行，寫不進去時記警告）、自動調校、模型下載轉換與載入、每個工作的辨識開始與完成、編譯快取清理、啟動時的例外；載入模型與辨識開始、完成時附上推論行程的記憶體與系統可用記憶體 |
-| `breeze-asr-crash.log`、`inference-crash.log` | 每次啟動記一行；原生程式碼當掉時寫入當下的 Python 呼叫堆疊 |
+| `listenmiao-crash.log`、`inference-crash.log` | 每次啟動記一行；原生程式碼當掉時寫入當下的 Python 呼叫堆疊 |
 | `inference-native.log` | 推論子行程裡 OpenVINO、GPU 驅動等原生函式庫直接印出的訊息（不會再出現在終端機） |
 
 - 每行開頭是含時區的時間、等級與行程編號（推論子行程標「推論」），例如 `2026-10-31 23:36:35.503+08:00 INFO [推論 24884] app.engine: …`。
@@ -296,7 +298,7 @@ ASR_WATCH_SOURCE=/srv/recordings
 關閉服務時：
 
 - Windows 上直接關閉終端機視窗，服務會被系統直接結束，日誌只來得及記下「終端機視窗被關閉」與還沒完成的工作；要正常關閉請按 Ctrl+C。
-- Docker 版的 `compose.yaml` 設了 `stop_grace_period: 15s`：`docker compose stop` 或 `down` 時，辨識中的推論子行程最多等 10 秒結束，日誌會記到「推論行程已結束」。直接用 `docker stop` 時請加 `-t 15`，否則 Docker 的預設寬限時間過短，服務會在關閉途中被強制結束。
+- Docker 版的 `compose.yaml` 設了 `stop_grace_period: 15s`：`docker compose stop` 或 `down` 時，辨識中的推論子行程最多等 10 秒結束，日誌會記到「推論行程已結束」。直接用 `docker stop` 時請加 `-t 15`（`docker stop -t 15 listenmiao`），否則 Docker 的預設寬限時間過短，服務會在關閉途中被強制結束。
 
 日誌會記上傳的檔名、工作編號與說話者編號，不記字幕內容、熱詞內容與人名。被拒絕的請求：欄位格式不符時只記欄位名稱；其他情況記錯誤訊息，可能帶有送來的模型名稱、說話者編號、語者庫編號這類識別碼。瀏覽器回報的錯誤照錯誤訊息記下（移除控制字元、每欄最多 1000 字，整個服務每分鐘最多 30 則）。MCP server 的日誌在 MCP 用戶端那邊（標準錯誤）。
 

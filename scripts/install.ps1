@@ -46,13 +46,13 @@ if (-not (Test-Path .env)) {
 if (-not $NoShortcut) {
     $desktop = [Environment]::GetFolderPath("Desktop")
     $shell = New-Object -ComObject WScript.Shell
-    $shortcut = $shell.CreateShortcut((Join-Path $desktop "Breeze ASR.lnk"))
+    $shortcut = $shell.CreateShortcut((Join-Path $desktop "ListenMiao.lnk"))
     $shortcut.TargetPath = (Get-Command powershell.exe).Source
     $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $PSScriptRoot 'start.ps1')`""
     $shortcut.WorkingDirectory = $root
-    $shortcut.IconLocation = "$(Join-Path $PSScriptRoot 'breeze-asr.ico'),0"
+    $shortcut.IconLocation = "$(Join-Path $PSScriptRoot 'listenmiao.ico'),0"
     $shortcut.Save()
-    Write-Host "已在桌面建立捷徑「Breeze ASR」"
+    Write-Host "已在桌面建立捷徑「ListenMiao」"
 }
 
 uv run --no-sync python -m app.update --root . skills

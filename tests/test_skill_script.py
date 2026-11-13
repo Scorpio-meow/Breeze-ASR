@@ -8,11 +8,11 @@ import pytest
 from app.cli import _parser
 from app.client import RENDER_STATES, describe_progress, describe_render
 
-SCRIPT = Path(__file__).resolve().parent.parent / "skills" / "breeze-asr" / "scripts" / "breeze_asr.py"
+SCRIPT = Path(__file__).resolve().parent.parent / "skills" / "listenmiao" / "scripts" / "listenmiao.py"
 
 
 def _script():
-    spec = importlib.util.spec_from_file_location("breeze_asr_skill_script", SCRIPT)
+    spec = importlib.util.spec_from_file_location("listenmiao_skill_script", SCRIPT)
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)

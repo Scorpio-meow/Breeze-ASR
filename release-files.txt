@@ -1,7 +1,7 @@
 app
 static
 scripts
-skills/breeze-asr
+skills/listenmiao
 docs
 pyproject.toml
 uv.lock

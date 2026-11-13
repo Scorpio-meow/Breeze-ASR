@@ -1,11 +1,11 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/breeze-asr-logo-dark.svg">
-  <img src="docs/brand/breeze-asr-logo.svg" alt="Breeze ASR" width="360">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/listenmiao-logo-dark.svg">
+  <img src="docs/brand/listenmiao-logo.svg" alt="ListenMiao" width="360">
 </picture>
 
-# Breeze ASR 網頁 APP
+# ListenMiao
 
 **在自己的電腦上，把會議錄音、課程與影片轉成可以校對的字幕與逐字稿。**
 
@@ -16,7 +16,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![M8ven Score](https://m8ven.ai/badge/mcp/scorpio-meow/breeze-asr)](https://m8ven.ai/mcp/scorpio-meow/breeze-asr?s=readme)
 
-[官網](https://scorpio-meow.github.io/Breeze-ASR/) · [快速開始](#快速開始) · [功能](#功能) · [系統需求](#系統需求) · [文件](#文件) · [更新紀錄](CHANGELOG.md)
+[官網](https://scorpio-meow.github.io/ListenMiao/) · [快速開始](#快速開始) · [功能](#功能) · [系統需求](#系統需求) · [文件](#文件) · [更新紀錄](CHANGELOG.md)
 
 </div>
 
@@ -27,7 +27,7 @@
 
 用 MediaTek Research 的 Breeze ASR 25／26 模型辨識臺灣華語、中英夾雜與臺灣台語，自動加標點、分辨說話者，在網頁上校對後匯出字幕檔或 Word 逐字稿。可以完全在本機執行，錄音不必上傳到任何雲端服務。
 
-https://github.com/user-attachments/assets/1ec6d0b1-a5ce-4cbf-af34-6fc77d05f32b
+https://github.com/user-attachments/assets/c193e0a1-94d4-4cf1-b923-9589382603f6
 
 > [!NOTE]
 > 這是使用 MediaTek Research 釋出的 [Breeze ASR](https://huggingface.co/MediaTek-Research/Breeze-ASR-25) 模型的非官方專案，與 MediaTek 無關。
@@ -40,7 +40,7 @@ A local web app for transcribing speech with the Breeze ASR 25/26 models: wavefo
 
 不確定用哪一種，見[部署](docs/deployment.md)開頭的比較表。
 
-從 [Releases](https://github.com/Scorpio-meow/Breeze-ASR/releases/latest) 下載 `breeze-asr-<版本>.zip` 並解壓縮，不需要 git；之後按網頁右下角的版本號就能檢查與套用更新，見[更新版本](docs/deployment.md#更新版本)。
+從 [Releases](https://github.com/Scorpio-meow/ListenMiao/releases/latest) 下載 `listenmiao-<版本>.zip` 並解壓縮，不需要 git；之後按網頁右下角的版本號就能檢查與套用更新，見[更新版本](docs/deployment.md#更新版本)。
 
 **Windows**：在專案根目錄開 PowerShell。
 
@@ -55,7 +55,7 @@ bash scripts/install.sh
 bash scripts/start.sh
 ```
 
-安裝腳本會自動安裝 [uv](https://docs.astral.sh/uv/) 與符合顯示卡的 PyTorch（CPU、CUDA 或 ROCm），Windows 另外在桌面建立「Breeze ASR」捷徑。Linux 與 macOS 第一次啟動前，要先把 `.env` 的字幕字型改成系統裡有的中文字型，見[字幕字型](docs/deployment.md#字幕字型)。啟動後開啟 <http://127.0.0.1:7860>，把音訊或影片拖進視窗（或按「開啟…」），再按「辨識」。
+安裝腳本會自動安裝 [uv](https://docs.astral.sh/uv/) 與符合顯示卡的 PyTorch（CPU、CUDA 或 ROCm），Windows 另外在桌面建立「ListenMiao」捷徑。Linux 與 macOS 第一次啟動前，要先把 `.env` 的字幕字型改成系統裡有的中文字型，見[字幕字型](docs/deployment.md#字幕字型)。啟動後開啟 <http://127.0.0.1:7860>，把音訊或影片拖進視窗（或按「開啟…」），再按「辨識」。
 
 **Docker**：
 
@@ -72,7 +72,7 @@ NVIDIA、AMD 顯示卡與 GitHub 發布的映像檔，見[部署](docs/deploymen
 **讓 AI 工具使用**：服務啟動後，安裝 [Agent Skill](docs/cli.md#agent-skill)，Claude Code、Codex 等 AI 工具就能幫你轉逐字稿、替說話者改名、整理會議紀錄與燒錄字幕。
 
 ```bash
-bunx skills add Scorpio-meow/Breeze-ASR --skill breeze-asr -g
+bunx skills add Scorpio-meow/ListenMiao --skill listenmiao -g
 ```
 
 沒有 [Bun](https://bun.sh) 的話，把 `bunx` 換成 `npx`。各工具的資料夾、手動安裝與更新方式見[安裝 Skill](docs/cli.md#安裝-skill)。
@@ -92,7 +92,7 @@ bunx skills add Scorpio-meow/Breeze-ASR --skill breeze-asr -g
 - **[分辨說話者](docs/how-it-works.md#分辨說話者)**：自動判斷或指定人數；取名後存進語者庫，之後自動認出；分錯時可以合併或改給別人
 - **匯出**：SRT、VTT、ASS、TXT、Markdown、DOCX、JSON，也能把字幕燒錄到原始影片
 - **[監看資料夾](docs/deployment.md#監看資料夾)**：放進去的錄音自動辨識，結果寫在原檔旁邊
-- **[命令列工具、MCP server 與 Agent Skill](docs/cli.md)**：批次轉檔，或讓 Claude 等 AI 工具直接呼叫；裝上 [Skill](skills/breeze-asr/SKILL.md) 後，AI 會自己轉逐字稿、替說話者改名、整理會議紀錄與燒錄字幕
+- **[命令列工具、MCP server 與 Agent Skill](docs/cli.md)**：批次轉檔，或讓 Claude 等 AI 工具直接呼叫；裝上 [Skill](skills/listenmiao/SKILL.md) 後，AI 會自己轉逐字稿、替說話者改名、整理會議紀錄與燒錄字幕
 - **硬體**：[自動調校](docs/how-it-works.md#自動調校)選用 OpenVINO（CPU、Intel 內顯）或 PyTorch（NVIDIA CUDA、AMD ROCm），也能在工具列的「硬體」改用其他實測過的設定，或在 `models.json` 把模型設成 [`remote`](docs/configuration.md#remote) 轉呼叫既有的 Breeze ASR 服務
 
 ## 支援的模型

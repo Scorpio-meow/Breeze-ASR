@@ -1,5 +1,5 @@
 services:
-  breeze-asr:
+  listenmiao:
     deploy:
       resources:
         reservations:

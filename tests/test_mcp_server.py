@@ -57,7 +57,7 @@ SUCCEEDED_OUTPUT = {
     "status": "succeeded",
     "progress": "完成，2 段，說話者 1 位",
     "speakers": [{"id": "S1", "name": "說話者 1", "seconds": 30.2}],
-    "transcript_uri": "breeze-asr://jobs/job1/transcript.md",
+    "transcript_uri": "listenmiao://jobs/job1/transcript.md",
 }
 
 
@@ -168,8 +168,8 @@ def test_server_identifies_itself(mode, version):
     protocol, info, capabilities = _run(handshake, mode=mode)
     assert protocol == version
     assert (info.name, info.title, info.version, info.website_url) == (
-        "breeze-asr",
-        "Breeze ASR",
+        "listenmiao",
+        "ListenMiao",
         PROJECT["version"],
         PROJECT["urls"]["Homepage"],
     )
@@ -380,7 +380,7 @@ def test_rename_speaker_rejects_an_invalid_speaker_id(service):
 
 
 def test_service_errors_reach_the_client(service, recording):
-    service.error = ServiceError("連不上 Breeze ASR 服務 http://127.0.0.1:7860")
+    service.error = ServiceError("連不上 ListenMiao 服務 http://127.0.0.1:7860")
     for name, arguments in (
         ("list_models", {}),
         ("transcribe", {"path": str(recording), "speakers": "off", "punctuation": False, "wait": False}),
@@ -398,20 +398,20 @@ def test_resources_offer_the_glossary_and_every_text_format():
         return (await client.list_resources()).resources, (await client.list_resource_templates()).resource_templates
 
     resources, templates = _run(listing)
-    assert [(r.uri, r.mime_type) for r in resources] == [("breeze-asr://glossary", "application/json")]
+    assert [(r.uri, r.mime_type) for r in resources] == [("listenmiao://glossary", "application/json")]
     assert [(t.uri_template, t.mime_type) for t in templates] == [
-        (f"breeze-asr://jobs/{{job_id}}/transcript.{fmt}", mime.split(";")[0])
+        (f"listenmiao://jobs/{{job_id}}/transcript.{fmt}", mime.split(";")[0])
         for fmt, mime in FORMATS.items()
         if fmt != "docx"
     ]
 
 
 def test_reading_resources(service):
-    glossary = _run(lambda client: client.read_resource("breeze-asr://glossary")).contents[0]
+    glossary = _run(lambda client: client.read_resource("listenmiao://glossary")).contents[0]
     assert (glossary.mime_type, json.loads(glossary.text)) == ("application/json", GLOSSARY)
-    transcript = _run(lambda client: client.read_resource("breeze-asr://jobs/job1/transcript.vtt")).contents[0]
+    transcript = _run(lambda client: client.read_resource("listenmiao://jobs/job1/transcript.vtt")).contents[0]
     assert (str(transcript.uri), transcript.mime_type, transcript.text) == (
-        "breeze-asr://jobs/job1/transcript.vtt",
+        "listenmiao://jobs/job1/transcript.vtt",
         "text/vtt",
         "vtt:job1",
     )
@@ -426,7 +426,7 @@ def test_reading_resources(service):
 )
 def test_resource_errors_use_json_rpc_codes(service, error, code):
     service.error = error
-    raised = _rpc_error(lambda client: client.read_resource("breeze-asr://jobs/job1/transcript.md"))
+    raised = _rpc_error(lambda client: client.read_resource("listenmiao://jobs/job1/transcript.md"))
     assert (raised.code, raised.message) == (code, str(error))
 
 
@@ -444,7 +444,7 @@ def test_prompts_embed_the_markdown_transcript(service, name, asks_for):
     assert [(m.role, m.content.type) for m in messages] == [("user", "resource"), ("user", "text")]
     embedded = messages[0].content.resource
     assert (str(embedded.uri), embedded.mime_type, embedded.text) == (
-        "breeze-asr://jobs/job1/transcript.md",
+        "listenmiao://jobs/job1/transcript.md",
         "text/markdown",
         "md:job1",
     )
@@ -462,7 +462,7 @@ def test_prompt_for_an_expired_job_is_an_invalid_params_error(service):
     "ref",
     [
         PromptReference(type="ref/prompt", name="meeting_minutes"),
-        ResourceTemplateReference(type="ref/resource", uri="breeze-asr://jobs/{job_id}/transcript.md"),
+        ResourceTemplateReference(type="ref/resource", uri="listenmiao://jobs/{job_id}/transcript.md"),
     ],
 )
 def test_job_ids_complete_to_finished_jobs(service, ref):

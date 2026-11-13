@@ -1,5 +1,5 @@
 services:
-  breeze-asr:
+  listenmiao:
     environment:
       ASR_WATCH_DIR: /watch
     volumes:

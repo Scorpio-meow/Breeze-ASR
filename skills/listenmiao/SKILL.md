@@ -1,15 +1,15 @@
 ---
-name: breeze-asr
-description: Use this skill when the user wants a transcript, subtitles or meeting minutes from an audio or video file and has Breeze ASR installed or running, the local transcription app for Taiwanese Mandarin, Mandarin–English code-switching and Taiwanese Hokkien built on MediaTek Research's Breeze ASR 25/26 models. It covers transcribing with speaker labels and hotwords, exporting SRT/VTT/ASS/TXT/Markdown/DOCX/JSON, burning subtitles into a video, writing minutes from a transcript, editing the glossary and voice library, and starting or troubleshooting the service. Use it even when the user never says "Breeze", for requests like "轉逐字稿", "聽打這段錄音", "幫這支影片上字幕", "把會議錄音整理成會議紀錄", "台語錄音轉文字", "transcribe this interview" or "make an SRT for this lecture", and whenever a recording has to stay on the user's machine. Not for cloud speech APIs or for training ASR models.
+name: listenmiao
+description: Use this skill when the user wants a transcript, subtitles or meeting minutes from an audio or video file and has ListenMiao installed or running, the local transcription app for Taiwanese Mandarin, Mandarin–English code-switching and Taiwanese Hokkien built on MediaTek Research's Breeze ASR 25/26 models. It covers transcribing with speaker labels and hotwords, exporting SRT/VTT/ASS/TXT/Markdown/DOCX/JSON, burning subtitles into a video, writing minutes from a transcript, editing the glossary and voice library, and starting or troubleshooting the service. Use it even when the user never says "ListenMiao" or "Breeze", for requests like "轉逐字稿", "聽打這段錄音", "幫這支影片上字幕", "把會議錄音整理成會議紀錄", "台語錄音轉文字", "transcribe this interview" or "make an SRT for this lecture", and whenever a recording has to stay on the user's machine. Not for cloud speech APIs or for training ASR models.
 license: MIT
-compatibility: Needs shell access and a running Breeze ASR service (https://github.com/Scorpio-meow/Breeze-ASR), plus either uv with a Breeze ASR checkout or Python 3.8+ for the bundled script.
+compatibility: Needs shell access and a running ListenMiao service (https://github.com/Scorpio-meow/ListenMiao), plus either uv with a ListenMiao checkout or Python 3.8+ for the bundled script.
 ---
 
-# Breeze ASR
+# ListenMiao
 
-Breeze ASR is a local web app (FastAPI service, `http://127.0.0.1:7860` in its example settings) that runs the Breeze ASR models on the user's CPU or GPU. Audio never leaves the machine running the service. Everything below talks to that running service; nothing here runs a model by itself.
+ListenMiao is a local web app (FastAPI service, `http://127.0.0.1:7860` in its example settings) that runs the Breeze ASR models on the user's CPU or GPU. Audio never leaves the machine running the service. Everything below talks to that running service; nothing here runs a model by itself.
 
-Reply to the user in their language. The service and its command-line tools print Traditional Chinese; translate or summarize as needed. Paths such as `scripts/breeze_asr.py` and `references/setup.md` are relative to this skill's directory.
+Reply to the user in their language. The service and its command-line tools print Traditional Chinese; translate or summarize as needed. Paths such as `scripts/listenmiao.py` and `references/setup.md` are relative to this skill's directory.
 
 ## Gotchas
 
@@ -28,14 +28,14 @@ Two command-line tools drive the service. They accept the same commands and opti
 
 | Situation | `<asr>` |
 | --- | --- |
-| A Breeze ASR checkout with `.env` and an installed `.venv` exists on this machine (native install via `scripts/install.ps1` / `install.sh` in that checkout) | `uv run --directory <install-dir> --no-sync --env-file .env python -m app.cli` |
-| No checkout here: Docker deployment, service on another computer, or an install whose CLI lacks the commands below | `python scripts/breeze_asr.py --url <service-url>` |
+| A ListenMiao checkout with `.env` and an installed `.venv` exists on this machine (native install via `scripts/install.ps1` / `install.sh` in that checkout) | `uv run --directory <install-dir> --no-sync --env-file .env python -m app.cli` |
+| No checkout here: Docker deployment, service on another computer, or an install whose CLI lacks the commands below | `python scripts/listenmiao.py --url <service-url>` |
 
 - `<install-dir>` is the folder holding `pyproject.toml`, `app/` and `.env`. If you cannot find it, ask the user rather than guessing.
-- The bundled `scripts/breeze_asr.py` needs only Python 3.8+ and the standard library; if `python` is missing try `python3`, `py -3`, or `uv run --no-project python`. Run `--help` on it or on any subcommand for the full options.
+- The bundled `scripts/listenmiao.py` needs only Python 3.8+ and the standard library; if `python` is missing try `python3`, `py -3`, or `uv run --no-project python`. Run `--help` on it or on any subcommand for the full options.
 - The installed CLI is new enough when `<asr> --help` lists `status`, `rename` and `render`.
 
-If `breeze-asr` MCP tools are connected (`transcribe`, `job_status`, `get_transcript`, `list_jobs`, `cancel_job`, `rename_speaker`), they are fine for reading a transcript into the conversation and renaming speakers. Still use `<asr>` for submitting recordings and for anything that writes files (exports, DOCX, burned video): MCP results only come back as text, and a long `transcribe` call with `wait=true` blocks until the recording is done.
+If `listenmiao` MCP tools are connected (`transcribe`, `job_status`, `get_transcript`, `list_jobs`, `cancel_job`, `rename_speaker`), they are fine for reading a transcript into the conversation and renaming speakers. Still use `<asr>` for submitting recordings and for anything that writes files (exports, DOCX, burned video): MCP results only come back as text, and a long `transcribe` call with `wait=true` blocks until the recording is done.
 
 ## 2. Make sure the service is up
 
@@ -43,7 +43,7 @@ Run `<asr> status` first. It prints the service URL, hardware profile, each mode
 
 - **Connection refused (`連不上`)**: the service is not running. Start it as described in `references/setup.md`; it is ready about 15 s after start. The very first start downloads ~9 GB and auto-tunes the hardware for roughly 7–35 minutes; tell the user, then check `status` every minute or two.
 - **Model state** `waiting`, `downloading`, `converting`, `loading`: jobs are accepted and wait in the queue until the model is ready. `failed`: show the error and stop.
-- **401** (`需要存取權杖`): the service has an access token. The installed CLI picks it up from `.env`. The bundled script reads `ASR_ACCESS_TOKEN` from the environment; with uv you can run `uv run --no-project --env-file <install-dir>/.env python scripts/breeze_asr.py …`. Never print, echo or paste the token.
+- **401** (`需要存取權杖`): the service has an access token. The installed CLI picks it up from `.env`. The bundled script reads `ASR_ACCESS_TOKEN` from the environment; with uv you can run `uv run --no-project --env-file <install-dir>/.env python scripts/listenmiao.py …`. Never print, echo or paste the token.
 - **400** about an unaccepted host name: the URL's host is not in the service's `ASR_ALLOWED_HOSTS`. Use `127.0.0.1` or `localhost` on the same machine, or ask the user to add the name.
 
 For any other error, read `references/setup.md` (error table, logs).
@@ -119,4 +119,4 @@ Both are shared by everyone using the service (web app, CLI, watched folder), so
 
 - `references/setup.md`: install, start and stop, first run, updating, Docker, access from other devices, the error table, logs. Read when the service is not running, a command fails, or the user asks about installation.
 - `references/api.md`: the HTTP API for what the CLI doesn't cover (editing segments, retuning, hardware profiles) and for clients without Python. Read before calling the API directly.
-- `scripts/breeze_asr.py`: the standalone command-line tool described in section 1.
+- `scripts/listenmiao.py`: the standalone command-line tool described in section 1.

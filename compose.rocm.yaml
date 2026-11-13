@@ -1,5 +1,5 @@
 services:
-  breeze-asr:
+  listenmiao:
     devices:
       - /dev/kfd
       - /dev/dri

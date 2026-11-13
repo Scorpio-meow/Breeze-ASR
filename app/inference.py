@@ -292,7 +292,7 @@ class InferenceClient:
         process = self._ctx.Process(
             target=_worker_main,
             args=(self._settings, requests, events),
-            name="breeze-asr-inference",
+            name="listenmiao-inference",
             daemon=True,
         )
         process.start()

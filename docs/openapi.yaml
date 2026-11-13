@@ -1,17 +1,17 @@
 openapi: 3.2.1
-$self: https://raw.githubusercontent.com/Scorpio-meow/Breeze-ASR/main/docs/openapi.yaml
+$self: https://raw.githubusercontent.com/Scorpio-meow/ListenMiao/main/docs/openapi.yaml
 info:
-  title: Breeze ASR
+  title: ListenMiao
   summary: 本機語音辨識服務的 HTTP API：上傳錄音、取得逐字稿、編輯字幕、匯出檔案與燒錄字幕。
-  version: 0.6.1
+  version: 0.7.0
   license:
     name: MIT
     identifier: MIT
   contact:
-    name: Breeze ASR
-    url: https://github.com/Scorpio-meow/Breeze-ASR
+    name: ListenMiao
+    url: https://github.com/Scorpio-meow/ListenMiao
   description: |
-    Breeze ASR 的網頁介面用的就是這組 API。服務跑在自己的電腦上，沒有帳號；預設只聽 `127.0.0.1`，要讓其他電腦連線請見部署文件。
+    ListenMiao 的網頁介面用的就是這組 API。服務跑在自己的電腦上，沒有帳號；預設只聽 `127.0.0.1`，要讓其他電腦連線請見部署文件。
 
     ## 存取權杖
 
@@ -36,7 +36,7 @@ info:
     | 欄位缺少或型別錯誤 | 422 | `{"detail": [{"loc": [...], "msg": "...", "type": "..."}]}`，`detail` 是陣列 |
     | 路徑不存在 | 404 | `{"detail": "Not Found"}` |
     | 方法不對 | 405 | `{"detail": "Method Not Allowed"}` |
-    | 未預期的錯誤 | 500 | 純文字 `Internal Server Error`，原因寫在 `breeze-asr.log` |
+    | 未預期的錯誤 | 500 | 純文字 `Internal Server Error`，原因寫在 `listenmiao.log` |
 
     同一個 422 可能是兩種格式其中之一：欄位本身不合格式時 `detail` 是陣列，欄位格式正確但內容不被接受（例如熱詞太長）時 `detail` 是字串。
 
@@ -78,11 +78,11 @@ info:
     秒數都是浮點數；`created_at`、`finished_at` 等時間是 Unix 時間（秒）。進度是 0 到 1 的小數。
 externalDocs:
   description: API 說明（中文）
-  url: https://github.com/Scorpio-meow/Breeze-ASR/blob/main/docs/api.md
+  url: https://github.com/Scorpio-meow/ListenMiao/blob/main/docs/api.md
 servers:
   - name: local
     url: http://{host}:{port}
-    description: 執行中的 Breeze ASR 服務，位址與連接埠來自 `.env` 的 `ASR_HOST`、`ASR_PORT`（Docker 版是 `ASR_PUBLISH_ADDRESS`、`ASR_PUBLISH_PORT`）。
+    description: 執行中的 ListenMiao 服務，位址與連接埠來自 `.env` 的 `ASR_HOST`、`ASR_PORT`（Docker 版是 `ASR_PUBLISH_ADDRESS`、`ASR_PUBLISH_PORT`）。
     variables:
       host:
         default: 127.0.0.1
@@ -237,7 +237,7 @@ paths:
       tags: [service]
       summary: 網頁回報錯誤到日誌
       description: |
-        網頁遇到未處理的 JavaScript 錯誤或上傳時連線中斷，會用這個端點寫進 `breeze-asr.log`。每個欄位的換行與控制字元會併成一行空白，只記前 1000 個字。
+        網頁遇到未處理的 JavaScript 錯誤或上傳時連線中斷，會用這個端點寫進 `listenmiao.log`。每個欄位的換行與控制字元會併成一行空白，只記前 1000 個字。
 
         整個服務每分鐘最多記 30 則，超過的回 429 且不記錄；之後第一則被記錄時，會另外記一行說明有幾則被略過。
       requestBody:
@@ -312,7 +312,7 @@ paths:
                     latest: 0.6.1
                     newer: true
                     published: "2026-12-01"
-                    url: https://github.com/Scorpio-meow/Breeze-ASR/releases/tag/v0.6.1
+                    url: https://github.com/Scorpio-meow/ListenMiao/releases/tag/v0.6.1
                     how: null
         "401":
           $ref: "#/components/responses/Unauthorized"

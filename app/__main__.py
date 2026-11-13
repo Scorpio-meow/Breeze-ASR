@@ -14,7 +14,7 @@ from .main import create_app
 
 log = logging.getLogger(__name__)
 
-_CRASH_LOG = "breeze-asr-crash.log"
+_CRASH_LOG = "listenmiao-crash.log"
 _PACKAGES = ("uvicorn", "fastapi", "sherpa-onnx", "imageio-ffmpeg", "huggingface-hub")
 _CTRL_CLOSE_EVENT = 2
 _console_handlers: list[object] = []
@@ -54,7 +54,7 @@ class _QuietPolling(logging.Filter):
 
 
 def _arguments() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="python -m app", description="啟動 Breeze ASR 服務")
+    parser = argparse.ArgumentParser(prog="python -m app", description="啟動 ListenMiao 服務")
     parser.add_argument(
         "--updatable",
         action="store_true",
@@ -71,7 +71,7 @@ def main() -> None:
     except ConfigError as exc:
         sys.exit(f"設定錯誤：{exc}")
     set_level(settings.log_level)
-    path = settings.logs_dir / "breeze-asr.log"
+    path = settings.logs_dir / "listenmiao.log"
     file_log = log_to_file(path, None, settings.log_file_bytes, settings.log_file_count)
     log_crashes_to(settings.logs_dir / _CRASH_LOG, "主服務行程", settings.log_file_bytes)
     log.info(

@@ -1,6 +1,6 @@
 {
-  "name": "Breeze ASR",
-  "short_name": "Breeze ASR",
+  "name": "ListenMiao",
+  "short_name": "ListenMiao",
   "description": "在自己的電腦上，把會議錄音、課程與影片轉成可以校對的字幕與逐字稿。",
   "lang": "zh-Hant-TW",
   "start_url": "./",

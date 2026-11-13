@@ -1,6 +1,6 @@
 # Setup and troubleshooting
 
-Install, start, update and fix a Breeze ASR service. Full documentation lives in the repository: <https://github.com/Scorpio-meow/Breeze-ASR/tree/main/docs> (`deployment.md`, `configuration.md`, `api.md`, `cli.md`).
+Install, start, update and fix a ListenMiao service. Full documentation lives in the repository: <https://github.com/Scorpio-meow/ListenMiao/tree/main/docs> (`deployment.md`, `configuration.md`, `api.md`, `cli.md`).
 
 Contents: [Requirements](#requirements) · [Install](#install) · [Start and stop](#start-and-stop) · [First start](#first-start) · [Update](#update) · [Errors](#errors) · [Logs](#logs) · [Other devices](#other-devices) · [Watched folder](#watched-folder)
 
@@ -18,11 +18,11 @@ Installing, updating and reconfiguring change the user's machine. Explain what y
 
 ## Install
 
-The repository is <https://github.com/Scorpio-meow/Breeze-ASR>. Clone or download it, then in its root:
+The repository is <https://github.com/Scorpio-meow/ListenMiao>. Clone or download it, then in its root:
 
 | Platform | Command | Notes |
 | --- | --- | --- |
-| Windows | `powershell -ExecutionPolicy Bypass -File scripts\install.ps1` | Installs uv, the Python environment and `.env`, and a desktop shortcut "Breeze ASR". Picks CUDA when `nvidia-smi` exists. Options: `-Device cpu`/`cuda`, `-NoShortcut`. |
+| Windows | `powershell -ExecutionPolicy Bypass -File scripts\install.ps1` | Installs uv, the Python environment and `.env`, and a desktop shortcut "ListenMiao". Picks CUDA when `nvidia-smi` exists. Options: `-Device cpu`/`cuda`, `-NoShortcut`. |
 | Linux | `bash scripts/install.sh` | Picks CUDA or ROCm automatically; force with `cpu`, `cuda` or `rocm` as the argument. |
 | macOS (Apple Silicon) | `bash scripts/install.sh` | CPU only (OpenVINO). Before the first start, set `ASR_SUBTITLE_FONT` and `ASR_SUBTITLE_FONTS_DIR` in `.env` to a Chinese font the Mac has, or the service refuses to start; see `docs/deployment.md#字幕字型`. |
 | Docker | `cp .env.example .env`, set `ASR_ACCESS_TOKEN`, then `docker compose up -d --build` | The container always listens on `0.0.0.0`, so Docker needs an access token. NVIDIA: also layer `compose.cuda.yaml`; AMD: `compose.rocm.yaml`. See `docs/deployment.md#docker`. |
@@ -36,7 +36,7 @@ Generate a token with `uv run --no-sync python -c "import secrets; print(secrets
 | Desktop shortcut / `scripts\start.ps1` (Windows) | Double-click, or run the script. Opens the browser when ready (`-NoBrowser` to skip). Fills in `.env` variables added by newer versions. | Ctrl+C in its window. Closing the window kills the service abruptly. |
 | `bash scripts/start.sh` (Linux, macOS) | Same as above. | Ctrl+C |
 | From an agent | Run in the background: `uv run --directory <install-dir> --no-sync --env-file .env python -m app` | Stop that background task. |
-| Docker | `docker compose up -d` | `docker compose stop` (or `docker stop -t 15 <container>`) |
+| Docker | `docker compose up -d` | `docker compose stop` (or `docker stop -t 15 listenmiao`) |
 
 After starting, poll `<asr> status` until it answers (about 15 s on later starts).
 
@@ -73,7 +73,7 @@ The service answers errors as `{"detail": "<reason in Chinese>"}`; the CLI print
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| `連不上 Breeze ASR 服務` | Service not running, wrong URL or port | Start it; check `ASR_HOST`/`ASR_PORT` in `.env` |
+| `連不上 ListenMiao 服務` | Service not running, wrong URL or port | Start it; check `ASR_HOST`/`ASR_PORT` in `.env` |
 | `不知道服務的網址` | Ran the CLI without `.env` | Use `--env-file .env` (installed CLI) or `--url` (script) |
 | 400 `服務不接受 … 這個名稱` | URL host not in `ASR_ALLOWED_HOSTS` | Use `127.0.0.1` locally, or have the user add the name and restart |
 | 400 unsupported model / option | Model id not in `models.json`, or diarization/punctuation not provided by this install | Check `status` |
@@ -86,11 +86,11 @@ The service answers errors as `{"detail": "<reason in Chinese>"}`; the CLI print
 | 422 video length mismatch (render) | Not the original video | Use the exact video the job came from |
 | 503 queue full | `ASR_MAX_QUEUE` jobs waiting | Wait for jobs to finish |
 | Job `failed` with CUDA out of memory | GPU memory used by something else | User can pick a CPU profile under 硬體 in the web app, or retune when the GPU is free |
-| `speakers_error` / `punctuation_error` in the result | That step failed; the transcript is still there | Report it; check `inference.log` / `breeze-asr.log` |
+| `speakers_error` / `punctuation_error` in the result | That step failed; the transcript is still there | Report it; check `inference.log` / `listenmiao.log` |
 
 ## Logs
 
-In `<ASR_DATA_DIR>/logs/` (`data/logs/` by default): `breeze-asr.log` (web process: requests, jobs, stages, rejected requests), `inference.log` (model download, tuning, transcription), `*-crash.log` and `inference-native.log` for crashes. Logs record file names and job ids, not transcript text, hotwords or names. Docker: `docker compose logs`.
+In `<ASR_DATA_DIR>/logs/` (`data/logs/` by default): `listenmiao.log` (web process: requests, jobs, stages, rejected requests), `inference.log` (model download, tuning, transcription), `*-crash.log` and `inference-native.log` for crashes. Logs record file names and job ids, not transcript text, hotwords or names. Docker: `docker compose logs`.
 
 ## Other devices
 

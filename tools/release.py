@@ -13,7 +13,16 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
-from app.update import MANIFEST, build_manifest, current_version, digest, version_key  # noqa: E402
+from app.update import (  # noqa: E402
+    LEGACY_MANIFEST,
+    LEGACY_SKILL,
+    MANIFEST,
+    SKILL,
+    build_manifest,
+    current_version,
+    digest,
+    version_key,
+)
 
 FILES = REPO / "release-files.txt"
 _ZIP_TIME = (1980, 1, 1, 0, 0, 0)
@@ -28,10 +37,10 @@ def _paths(tag: str) -> list[str]:
     return [path for path in wanted if _git("cat-file", "-e", f"{tag}:{path}").returncode == 0]
 
 
-def package(tree: Path, tag: str, out: Path) -> None:
-    name = f"breeze-asr-{tag.removeprefix('v')}"
-    (tree / MANIFEST).write_text(json.dumps(build_manifest(tree, tag), ensure_ascii=False, indent=1), encoding="utf-8")
-    out.mkdir(parents=True, exist_ok=True)
+def _zip(tree: Path, manifest_name: str, name: str, tag: str, out: Path) -> None:
+    (tree / manifest_name).write_text(
+        json.dumps(build_manifest(tree, tag), ensure_ascii=False, indent=1), encoding="utf-8"
+    )
     target = out / f"{name}.zip"
     with zipfile.ZipFile(target, "w") as zipped:
         for path in sorted(tree.rglob("*")):
@@ -40,8 +49,28 @@ def package(tree: Path, tag: str, out: Path) -> None:
                 info.compress_type = zipfile.ZIP_DEFLATED
                 info.external_attr = (0o755 if path.suffix == ".sh" else 0o644) << 16
                 zipped.writestr(info, path.read_bytes())
-    shutil.copyfile(tree / MANIFEST, out / MANIFEST)
+    shutil.copyfile(tree / manifest_name, out / manifest_name)
     (out / f"{target.name}.sha256").write_text(f"{digest(target)}  {target.name}\n", encoding="utf-8")
+
+
+def _legacy_tree(tree: Path, legacy: Path) -> None:
+    shutil.copytree(tree, legacy)
+    skill = legacy / "skills" / SKILL
+    if skill.is_dir():
+        shutil.copytree(skill, legacy / "skills" / LEGACY_SKILL)
+        guide = legacy / "skills" / LEGACY_SKILL / "SKILL.md"
+        name = re.compile(rf"^name: {SKILL}(\r?)$".encode(), re.MULTILINE)
+        guide.write_bytes(name.sub(rf"name: {LEGACY_SKILL}\1".encode(), guide.read_bytes(), count=1))
+
+
+def package(tree: Path, tag: str, out: Path) -> None:
+    version = tag.removeprefix("v")
+    out.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as temp:
+        legacy = Path(temp) / "legacy"
+        _legacy_tree(tree, legacy)
+        _zip(legacy, LEGACY_MANIFEST, f"{LEGACY_SKILL}-{version}", tag, out)
+    _zip(tree, MANIFEST, f"{SKILL}-{version}", tag, out)
 
 
 def build(tag: str, out: Path) -> None:

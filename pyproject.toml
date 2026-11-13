@@ -1,6 +1,6 @@
 [project]
-name = "breeze-asr-webapp"
-version = "0.6.1"
+name = "listenmiao"
+version = "0.7.0"
 description = "Breeze ASR 25／26 的本機網頁 APP：把台灣華語、中英夾雜與台語錄音轉成字幕與逐字稿，錄音不上傳"
 requires-python = ">=3.12,<3.13"
 readme = "README.md"
@@ -8,7 +8,7 @@ license = "MIT"
 license-files = ["LICENSE", "NOTICE.md"]
 authors = [{ name = "Scorpio-meow" }]
 keywords = [
-    "breeze-asr",
+    "listenmiao",
     "speech-recognition",
     "speech-to-text",
     "asr",
@@ -63,13 +63,13 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Scorpio-meow/Breeze-ASR"
-Website = "https://scorpio-meow.github.io/Breeze-ASR/"
-Documentation = "https://github.com/Scorpio-meow/Breeze-ASR/tree/main/docs"
-Repository = "https://github.com/Scorpio-meow/Breeze-ASR.git"
-Issues = "https://github.com/Scorpio-meow/Breeze-ASR/issues"
-Changelog = "https://github.com/Scorpio-meow/Breeze-ASR/blob/main/CHANGELOG.md"
-Releases = "https://github.com/Scorpio-meow/Breeze-ASR/releases"
+Homepage = "https://github.com/Scorpio-meow/ListenMiao"
+Website = "https://scorpio-meow.github.io/ListenMiao/"
+Documentation = "https://github.com/Scorpio-meow/ListenMiao/tree/main/docs"
+Repository = "https://github.com/Scorpio-meow/ListenMiao.git"
+Issues = "https://github.com/Scorpio-meow/ListenMiao/issues"
+Changelog = "https://github.com/Scorpio-meow/ListenMiao/blob/main/CHANGELOG.md"
+Releases = "https://github.com/Scorpio-meow/ListenMiao/releases"
 
 [dependency-groups]
 cpu = ["torch==2.14.1", "torchvision==0.29.1"]

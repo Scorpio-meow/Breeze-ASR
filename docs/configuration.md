@@ -45,7 +45,7 @@
 | `COMPOSE_FILE` | 要套用的 compose 檔 | `compose.yaml` |
 | `COMPOSE_PATH_SEPARATOR` | `COMPOSE_FILE` 的分隔符號，疊加多個檔案時設為 `:` | — |
 | `ASR_TORCH_GROUP` | 映像檔裡的 PyTorch 版本：`cpu`、`cu130`（CUDA）或 `rocm72`（ROCm） | `cpu` |
-| `ASR_IMAGE` | 映像檔名稱；自己建置時任取，使用發布的映像檔時填 `ghcr.io/<owner>/<repo>:cpu` 等 | `breeze-asr-webapp:cpu` |
+| `ASR_IMAGE` | 映像檔名稱；自己建置時任取，使用發布的映像檔時填 `ghcr.io/<owner>/<repo>:cpu` 等 | `listenmiao:cpu` |
 | `ASR_MODELS_SOURCE` | 掛進容器的模型清單檔 | `./models.json` |
 | `ASR_PUBLISH_ADDRESS`、`ASR_PUBLISH_PORT` | 對外發布的位址與埠 | `127.0.0.1`、`7860` |
 | `ASR_DOCKER_SUBNET` | Docker 網路網段 | `192.168.202.0/24` |
@@ -143,7 +143,7 @@
 
 ```json
 "remote": {
-  "url": "http://breeze-asr-26:9001",
+  "url": "http://listenmiao-26:9001",
   "api_key_env": "ASR_BREEZE26_SERVICE_API_KEY",
   "fields": { "beam": 3, "context": true },
   "poll_seconds": 1,

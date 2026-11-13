@@ -478,7 +478,7 @@ def create_app(settings: Settings) -> FastAPI:
     version = project()["version"]
     released = update.released(update.ROOT, version)
     app = FastAPI(
-        title="Breeze ASR",
+        title="ListenMiao",
         version=version,
         lifespan=lifespan,
         docs_url=None,

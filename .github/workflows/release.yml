@@ -23,8 +23,8 @@ jobs:
       - name: 解壓到空資料夾，裝好套件並載入服務
         run: |
           mkdir smoke
-          unzip -q dist/breeze-asr-*.zip -d smoke
-          cd smoke/breeze-asr-*
+          unzip -q dist/listenmiao-*.zip -d smoke
+          cd smoke/listenmiao-*
           uv sync --frozen
           uv run --no-sync python -c "import app.main"
           test -f static/index.html

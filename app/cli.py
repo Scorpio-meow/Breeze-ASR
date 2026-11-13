@@ -204,7 +204,7 @@ def _forget(client: AsrClient, args: argparse.Namespace) -> int:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python -m app.cli", description="Breeze ASR 命令列工具（呼叫執行中的服務）")
+    parser = argparse.ArgumentParser(prog="python -m app.cli", description="ListenMiao 命令列工具（呼叫執行中的服務）")
     parser.add_argument("--url", help="服務網址；沒給時用 .env 的 ASR_HOST 與 ASR_PORT")
     commands = parser.add_subparsers(dest="command", required=True)
 

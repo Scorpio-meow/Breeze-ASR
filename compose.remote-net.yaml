@@ -1,5 +1,5 @@
 services:
-  breeze-asr:
+  listenmiao:
     networks:
       - asr-net
       - remote-asr

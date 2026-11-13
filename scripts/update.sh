@@ -2,8 +2,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-if ! grep -q '^name = "breeze-asr-webapp"$' pyproject.toml 2>/dev/null; then
-  echo "找不到 Breeze ASR：這支腳本要放在 Breeze ASR 資料夾的 scripts 裡執行" >&2
+if ! grep -Eq '^name = "(listenmiao|breeze-asr-webapp)"$' pyproject.toml 2>/dev/null; then
+  echo "找不到 ListenMiao：這支腳本要放在 ListenMiao 資料夾的 scripts 裡執行" >&2
   exit 1
 fi
 homepage="$(sed -n 's/^Homepage = "\(.*\)"$/\1/p' pyproject.toml)"
