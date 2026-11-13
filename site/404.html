@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+
+<head>
+  <meta charset="utf-8">
+  <base href="./" data-absolute>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="robots" content="noindex">
+  <title>找不到這一頁：ListenMiao</title>
+  <meta name="theme-color" content="#f3f3f0" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#101010" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="favicon.ico" sizes="32x32">
+  <link rel="icon" href="images/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="images/apple-touch-icon.png">
+  <link rel="preload" href="fonts/noto-sans-tc.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <main class="lost" id="main">
+    <div class="wrap lost__in">
+      <picture class="lost__mark">
+        <source srcset="images/mark-dark.svg" media="(prefers-color-scheme: dark)">
+        <img src="images/mark.svg" alt="" width="160" height="160">
+      </picture>
+      <div class="lost__cue" aria-hidden="true">
+        <p class="lost__no">404</p>
+        <p>--:--:--,--- --&gt; --:--:--,---</p>
+      </div>
+      <h1 class="lost__title">這段沒有字幕</h1>
+      <p class="lost__text">你要找的頁面不在這裡：網址可能打錯了，或頁面已經搬走。</p>
+      <div class="lost__actions">
+        <a class="btn btn--primary btn--lg" href="./">回到首頁</a>
+        <a class="btn btn--ghost btn--lg" href="https://github.com/Scorpio-meow/ListenMiao/issues">回報問題</a>
+      </div>
+      <p class="lost__ver">ListenMiao <span data-release="version"></span>・<span data-release="date"></span> 發布</p>
+    </div>
+  </main>
+</body>
+
+</html>

@@ -30,12 +30,12 @@ jobs:
         with:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
-      - run: uv run --frozen --only-group site python site/tools/subset_fonts.py check --font site/fonts/noto-sans-tc.woff2 site/index.html site/main.js site/styles.css
+      - run: uv run --frozen --only-group site python site/tools/subset_fonts.py check --font site/fonts/noto-sans-tc.woff2 site/index.html site/404.html site/main.js site/styles.css
       - run: rsync -a --exclude tools site/ _site/
       - id: pages
         uses: actions/configure-pages@v6
       - run: |
-          python3 site/tools/stamp_release.py --pyproject pyproject.toml --changelog CHANGELOG.md --base-url "$BASE_URL" _site/index.html
+          python3 site/tools/stamp_release.py --pyproject pyproject.toml --changelog CHANGELOG.md --base-url "$BASE_URL" _site/index.html _site/404.html
           printf '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>%s/</loc>\n    <lastmod>%s</lastmod>\n  </url>\n</urlset>\n' "${BASE_URL%/}" "$(git log -1 --format=%cI -- site pyproject.toml CHANGELOG.md)" > _site/sitemap.xml
         env:
           BASE_URL: ${{ steps.pages.outputs.base_url }}

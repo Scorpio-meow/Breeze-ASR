@@ -1,4 +1,4 @@
-import { createMix, stringVoice } from "./mixer.js";
+import { createMix, effectVoice, stringVoice } from "./mixer.js";
 const root = document.documentElement;
 const reduceMQ = matchMedia("(prefers-reduced-motion: reduce)");
 const fineMQ = matchMedia("(hover: hover) and (pointer: fine)");
@@ -41,6 +41,9 @@ for (const btn of document.querySelectorAll("[data-motion-toggle], [data-demo-to
 }
 const AUDIO_DIR = "audio/";
 const STRING_DIR = "strings/";
+const MEOW_FILES = { calm: "meow/meow-long.mp3", ask: "meow/meow-ask.mp3", short: "meow/meow-short.mp3" };
+const MEOW_GAIN = 0.28;
+const MEOW_LATE_MS = 600;
 const ONSET_LEVEL = 0.001;
 const ONSET_LEAD = 0.002;
 const BGM_TRACKS = [
@@ -52,6 +55,25 @@ const BGM_FADE_IN = 1.2;
 const BGM_FADE_OUT = 0.6;
 const SUSPEND_DELAY_MS = 900;
 const SETTLE_FRAMES = 8;
+const STAGE_SEEN = 0.3;
+const COPY_FEEDBACK_MS = 1800;
+const EGG_CUE_SECONDS = 2.4;
+const EGG_SHOW_MS = 2800;
+const EGG_CLEAR_MS = 400;
+const EGG_ALIAS_MS = 12000;
+const EGG_WORD = "miao";
+const EGG_SPEAKER = "說話者 ";
+const EGG_CAT = "喵 ";
+const EGG_TOP_SLOP = 2;
+const CAT_LINES = [
+  ["喵～", "calm"],
+  ["喵？", "ask"],
+  ["錄音留在你的電腦，我只負責聽。", "short"],
+  ["要不要先給我幾個熱詞？", "ask"],
+  ["再摸下去，字幕就要對不上了。", "calm"],
+];
+const EGG_WORD_LINE = ["聽到了，喵。", "calm"];
+const EGG_TOP_LINE = ["已經在最上面了，喵。", "short"];
 const ZHENG_REPLUCK_MS = 70;
 const SCRUB_SLOP = 6;
 const GHOST_FLIP = 0.82;
@@ -101,6 +123,8 @@ const sound = (() => {
   let bgm = null;
   let musicLoading = null;
   let stringsLoading = null;
+  let meowsLoading = null;
+  const meows = {};
   let src = null;
   let srcStartedAt = 0;
   let srcOffset = 0;
@@ -172,6 +196,18 @@ const sound = (() => {
       stringsLoading = null;
       console.warn("弦音載入失敗", err);
     });
+  }
+  function loadMeows() {
+    meowsLoading ??= Promise.all(
+      Object.entries(MEOW_FILES).map(async ([kind, file]) => {
+        const buffer = await fetchBuffer(file);
+        meows[kind] = { buffer, offset: onset(buffer) };
+      }),
+    ).catch((err) => {
+      meowsLoading = null;
+      console.warn("貓叫載入失敗", err);
+    });
+    return meowsLoading;
   }
   function loadMusic() {
     if (musicLoading) return;
@@ -252,7 +288,10 @@ const sound = (() => {
     if (anyLive()) {
       context();
       if (live(music)) loadMusic();
-      if (live(zheng)) loadStrings();
+      if (live(zheng)) {
+        loadStrings();
+        loadMeows();
+      }
     }
     sync();
   }
@@ -304,6 +343,14 @@ const sound = (() => {
   }
   return {
     pluck,
+    async meow(kind) {
+      if (!live(zheng) || document.hidden || !ctx) return;
+      const asked = performance.now();
+      await loadMeows();
+      const item = meows[kind];
+      if (!item || !live(zheng) || performance.now() - asked > MEOW_LATE_MS) return;
+      effectVoice(ctx, mix.effects, item.buffer, item.offset, ctx.currentTime, MEOW_GAIN);
+    },
     zhengOn: () => zheng.on,
     armZheng() {
       if (zheng.on && !zheng.armed && navigator.userActivation?.isActive !== false) arm(zheng);
@@ -448,9 +495,8 @@ async function typewriter(panel) {
   }
   cmd.textContent = full;
   cmd.classList.remove("is-caret");
-  const delays = [520, 650, 900, 1500, 260, 180];
-  for (const [i, out] of outs.entries()) {
-    if (!motion.paused) await wait(delays[i]);
+  for (const out of outs) {
+    if (!motion.paused) await wait(Number(out.dataset.after));
     out.classList.add("is-shown");
   }
   pre.classList.remove("is-typing");
@@ -590,8 +636,12 @@ function heroDemo(frame) {
     else stop();
   }).observe(frame);
   motion.on((paused) => {
-    if (paused) stop();
-    else start();
+    if (!paused) {
+      start();
+      return;
+    }
+    stop();
+    if (elapsed < RECOG + REVEAL) settle();
   });
   if (motion.paused) settle();
   const tracks = ed.querySelector("[data-tracks]");
@@ -675,16 +725,26 @@ function heroDemo(frame) {
   tracks.addEventListener("pointercancel", endScrub);
   tracks.addEventListener("pointerleave", () => tracks.classList.remove("is-hover"));
   frame.addEventListener("keydown", (e) => {
-    if (e.target !== frame || !["ArrowDown", "ArrowUp"].includes(e.key)) return;
+    if (e.target !== frame || !["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
     e.preventDefault();
     const at = current === null || current < 0 ? (e.key === "ArrowDown" ? -1 : segs.length) : current;
-    const index = clamp(at + (e.key === "ArrowDown" ? 1 : -1), 0, segs.length - 1);
+    const step = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: segs.length - 1 };
+    const index = clamp(step[e.key], 0, segs.length - 1);
     jumpTo(index);
     announce.textContent = `第 ${index + 1} 段，${segs[index].spk}：${segs[index].text}`;
   });
+  return {
+    alias(from, to) {
+      const walker = document.createTreeWalker(ed, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (node.data.includes(from)) node.data = node.data.replaceAll(from, to);
+      }
+      for (const s of segs) s.spk = s.spk.replaceAll(from, to);
+    },
+  };
 }
 const demo = document.querySelector("[data-demo]");
-if (demo) heroDemo(demo);
+const demoApi = demo ? heroDemo(demo) : null;
 function story() {
   const list = document.querySelector("[data-steps]");
   const stage = document.querySelector("[data-stage]");
@@ -720,13 +780,21 @@ function story() {
     const gap = parseFloat(getComputedStyle(step).paddingTop) / 2;
     return r.top - Math.min(cover + gap, line - gap);
   }
-  function activateAtLine() {
+  function activateNearest() {
     const line = lineAt();
-    const hit = steps.find((s) => {
-      const r = s.getBoundingClientRect();
-      return r.top <= line && r.bottom > line;
-    });
-    if (hit) activate(Number(hit.dataset.step));
+    const passed = steps.filter((s) => s.getBoundingClientRect().top <= line);
+    activate(Number((passed.at(-1) ?? steps[0]).dataset.step));
+  }
+  function watchStage() {
+    new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) stage.dataset.active = "";
+          else if (e.intersectionRatio >= STAGE_SEEN) activateNearest();
+        }
+      },
+      { threshold: [0, STAGE_SEEN] },
+    ).observe(stage);
   }
   function whenSettled(fn) {
     let last = NaN;
@@ -748,7 +816,7 @@ function story() {
         return;
       }
       scrollTo({ top: scrollY + offset, behavior: motion.paused ? "instant" : "smooth" });
-      whenSettled(activateAtLine);
+      whenSettled(activateNearest);
     });
   }
   async function runTyping() {
@@ -785,6 +853,7 @@ function story() {
     );
     steps.forEach((s) => observer.observe(s));
   }
+  watchStage();
   observe();
   narrow.addEventListener("change", observe);
   steps[0].classList.add("is-on");
@@ -817,20 +886,36 @@ onScroll();
 function menu() {
   const btn = document.querySelector("[data-menu-toggle]");
   const panel = document.getElementById(btn.getAttribute("aria-controls"));
+  const header = document.querySelector("[data-nav]");
+  const first = panel.querySelector("a");
+  const desktop = matchMedia("(min-width: 900px)");
+  const isOpen = () => btn.getAttribute("aria-expanded") === "true";
+  let fresh = false;
   const set = (open) => {
     if (panel.hasAttribute("data-open") === open) return;
+    fresh = open;
     btn.setAttribute("aria-expanded", String(open));
     panel.toggleAttribute("data-open", open);
   };
-  btn.addEventListener("click", () => set(btn.getAttribute("aria-expanded") !== "true"));
+  btn.addEventListener("click", () => set(!isOpen()));
+  btn.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab" || e.shiftKey || !fresh) return;
+    fresh = false;
+    e.preventDefault();
+    first.focus();
+  });
   panel.addEventListener("click", (e) => {
     if (e.target.closest("a")) set(false);
   });
-  document.addEventListener("click", (e) => {
-    if (btn.getAttribute("aria-expanded") === "true" && !panel.contains(e.target) && !btn.contains(e.target)) set(false);
+  header.addEventListener("focusout", (e) => {
+    if (isOpen() && e.relatedTarget && !header.contains(e.relatedTarget)) set(false);
   });
+  document.addEventListener("click", (e) => {
+    if (isOpen() && !panel.contains(e.target) && !btn.contains(e.target)) set(false);
+  });
+  desktop.addEventListener("change", () => set(false));
   addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && btn.getAttribute("aria-expanded") === "true") {
+    if (e.key === "Escape" && isOpen()) {
       set(false);
       btn.focus();
     }
@@ -899,16 +984,25 @@ function magnetic() {
   }
 }
 magnetic();
+function visitorOs() {
+  if (/Android|iPhone|iPad/i.test(navigator.userAgent)) return null;
+  const platform = navigator.userAgentData?.platform ?? navigator.platform;
+  if (/^mac/i.test(platform)) return "mac";
+  if (/linux/i.test(platform)) return "linux";
+  return null;
+}
 function tabs() {
+  const os = visitorOs();
   for (const list of document.querySelectorAll("[data-tabs]")) {
     const items = [...list.querySelectorAll('[role="tab"]')];
+    const panelOf = (tab) => document.getElementById(tab.getAttribute("aria-controls"));
     const select = (tab, focus) => {
       for (const t of items) {
         const on = t === tab;
         t.setAttribute("aria-selected", String(on));
         t.tabIndex = on ? 0 : -1;
-        const panel = document.getElementById(t.getAttribute("aria-controls"));
-        panel.hidden = !on;
+        const panel = panelOf(t);
+        panel.hidden = on ? false : "until-found";
         if (on && panel.matches("[data-typewriter]") && panel.closest(".is-in")) typewriter(panel);
       }
       if (focus) tab.focus();
@@ -921,31 +1015,46 @@ function tabs() {
         e.preventDefault();
         select(items[(keys[e.key] + items.length) % items.length], true);
       });
+      panelOf(tab).addEventListener("beforematch", () => select(tab, false));
     });
-    select(items.find((t) => t.getAttribute("aria-selected") === "true"), false);
+    const preferred = list.matches("[data-os-tabs]") && os ? items.find((t) => t.dataset.os === os) : null;
+    select(preferred ?? items.find((t) => t.getAttribute("aria-selected") === "true"), false);
   }
 }
 tabs();
 function copyButtons() {
   const status = document.querySelector("[data-copy-status]");
+  const timers = new WeakMap();
   document.querySelectorAll("[data-copy]").forEach((btn, i) => {
     const code = btn.parentElement.querySelector("code");
     code.id = `cmd-${i + 1}`;
     btn.setAttribute("aria-describedby", code.id);
     const label = btn.textContent;
-    btn.addEventListener("click", async () => {
-      const text = btn.parentElement.querySelector("code").textContent;
-      try {
-        await navigator.clipboard.writeText(text);
-        btn.textContent = "已複製";
-        btn.classList.add("is-done");
-        status.textContent = `已複製：${text}`;
+    const report = (ok, message) => {
+      clearTimeout(timers.get(btn));
+      btn.textContent = ok ? "已複製" : "無法複製";
+      btn.classList.toggle("is-done", ok);
+      btn.classList.toggle("is-fail", !ok);
+      status.textContent = "";
+      requestAnimationFrame(() => {
+        status.textContent = message;
+      });
+      timers.set(
+        btn,
         setTimeout(() => {
           btn.textContent = label;
-          btn.classList.remove("is-done");
-        }, 1800);
+          btn.classList.remove("is-done", "is-fail");
+          status.textContent = "";
+        }, COPY_FEEDBACK_MS),
+      );
+    };
+    btn.addEventListener("click", async () => {
+      const text = code.textContent;
+      try {
+        await navigator.clipboard.writeText(text);
+        report(true, `已複製：${text}`);
       } catch {
-        status.textContent = "無法複製，請手動選取指令";
+        report(false, "無法複製，請手動選取指令");
       }
     });
   });
@@ -985,7 +1094,9 @@ function barsChart() {
       tip.style.top = `${row.getBoundingClientRect().top - box.top - tip.offsetHeight - 6}px`;
     };
     row.addEventListener("pointerenter", show);
-    row.addEventListener("pointerleave", hide);
+    row.addEventListener("pointerleave", (e) => {
+      if (e.pointerType !== "touch") hide();
+    });
     row.addEventListener("focus", show);
     row.addEventListener("blur", hide);
   }
@@ -1008,6 +1119,12 @@ function film() {
       cover.hidden = false;
       video.inert = true;
     });
+  });
+  video.addEventListener("ended", () => {
+    const hadFocus = frame.contains(document.activeElement);
+    video.inert = true;
+    cover.hidden = false;
+    if (hadFocus) cover.focus();
   });
 }
 film();
@@ -1220,3 +1337,78 @@ function zheng(root) {
 }
 const zhengEl = document.querySelector("[data-zheng]");
 if (zhengEl) zheng(zhengEl);
+function eggs() {
+  const sub = document.querySelector("[data-egg-sub]");
+  const tc = sub.querySelector("[data-egg-tc]");
+  const who = sub.querySelector("[data-egg-who]");
+  const text = sub.querySelector("[data-egg-text]");
+  const cat = document.querySelector("[data-cat]");
+  const brand = document.querySelector(".brand");
+  const pad = (n, size) => String(n).padStart(size, "0");
+  const srt = (seconds) => {
+    const ms = Math.round(seconds * 1000);
+    return `${pad(Math.floor(ms / 3600000), 2)}:${pad(Math.floor(ms / 60000) % 60, 2)}:${pad(Math.floor(ms / 1000) % 60, 2)},${pad(ms % 1000, 3)}`;
+  };
+  let cue = 0;
+  let catLine = 0;
+  let typed = "";
+  let hideTimer = 0;
+  let aliasTimer = 0;
+  function say(line) {
+    const start = cue * EGG_CUE_SECONDS;
+    cue++;
+    tc.textContent = `${cue}　${srt(start)} --> ${srt(start + EGG_CUE_SECONDS)}`;
+    who.textContent = `${EGG_SPEAKER}喵：`;
+    text.textContent = line;
+    sub.classList.remove("is-on");
+    void sub.offsetWidth;
+    sub.classList.add("is-on");
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => {
+      sub.classList.remove("is-on");
+      hideTimer = setTimeout(() => {
+        tc.textContent = "";
+        who.textContent = "";
+        text.textContent = "";
+      }, EGG_CLEAR_MS);
+    }, EGG_SHOW_MS);
+  }
+  function meow([line, shape]) {
+    sound.armZheng();
+    sound.meow(shape);
+    say(line);
+  }
+  function hop(el) {
+    el.classList.remove("is-hop");
+    void el.offsetWidth;
+    el.classList.add("is-hop");
+  }
+  for (const el of [cat, brand]) el.addEventListener("animationend", () => el.classList.remove("is-hop"));
+  cat.addEventListener("click", () => {
+    hop(cat);
+    meow(CAT_LINES[catLine % CAT_LINES.length]);
+    catLine++;
+  });
+  brand.addEventListener("click", () => {
+    if (scrollY > EGG_TOP_SLOP) return;
+    hop(brand);
+    meow(EGG_TOP_LINE);
+  });
+  addEventListener("keydown", (e) => {
+    if (e.isComposing || e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) return;
+    if (e.target.closest?.("input, textarea, select, [contenteditable]")) return;
+    typed = (typed + e.key.toLowerCase()).slice(-EGG_WORD.length);
+    if (typed !== EGG_WORD) return;
+    typed = "";
+    meow(EGG_WORD_LINE);
+    clearTimeout(aliasTimer);
+    demoApi.alias(EGG_SPEAKER, EGG_CAT);
+    aliasTimer = setTimeout(() => demoApi.alias(EGG_CAT, EGG_SPEAKER), EGG_ALIAS_MS);
+  });
+  console.info(
+    "%c /\\_/\\\n( o.o )  聽喵 ListenMiao\n > ^ <%c\n\n在自己的電腦上，把錄音轉成字幕與逐字稿。\n打開開發者工具的你，要不要一起改進它？\nhttps://github.com/Scorpio-meow/ListenMiao/blob/main/CONTRIBUTING.md",
+    "font: 700 13px/1.35 ui-monospace, monospace; color: #0f766e",
+    "font: 12px/1.7 system-ui, sans-serif",
+  );
+}
+eggs();

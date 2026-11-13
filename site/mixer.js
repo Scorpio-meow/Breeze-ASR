@@ -1,5 +1,6 @@
 const STRING_LEVEL = 1.76;
 const MUSIC_LEVEL = 1;
+const EFFECTS_LEVEL = 1;
 const REVERB_SECONDS = 1.6;
 const REVERB_WET = 0.22;
 const REVERB_SEED = 0x2f6b1d;
@@ -36,13 +37,22 @@ export function createMix(ctx) {
   const compressor = new DynamicsCompressorNode(ctx, { threshold: COMPRESSOR_THRESHOLD, ratio: COMPRESSOR_RATIO });
   const strings = new GainNode(ctx, { gain: STRING_LEVEL });
   const music = new GainNode(ctx, { gain: MUSIC_LEVEL });
+  const effects = new GainNode(ctx, { gain: EFFECTS_LEVEL });
   const wet = new GainNode(ctx, { gain: REVERB_WET });
   limiter.connect(new GainNode(ctx, { gain: LIMIT_TRIM })).connect(ctx.destination);
   compressor.connect(limiter);
   music.connect(limiter);
+  effects.connect(compressor);
   strings.connect(compressor);
   strings.connect(new ConvolverNode(ctx, { buffer: impulse(ctx) })).connect(wet).connect(compressor);
-  return { strings, music };
+  return { strings, music, effects };
+}
+export function effectVoice(ctx, bus, buffer, offset, at, gain) {
+  const node = new AudioBufferSourceNode(ctx, { buffer });
+  const level = new GainNode(ctx, { gain });
+  node.connect(level).connect(bus);
+  node.start(at, offset);
+  node.addEventListener("ended", () => level.disconnect());
 }
 export function stringVoice(ctx, bus, buffer, offset, at, velocity, position, previous) {
   if (previous) {
