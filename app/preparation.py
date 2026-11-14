@@ -21,6 +21,7 @@ from .logsetup import log_stderr
 
 log = logging.getLogger(__name__)
 
+BASE_WEIGHT_FORMAT = "fp32"
 _DOWNLOAD_PATTERNS = ["*.json", "*.txt", "*.safetensors"]
 _MARKER = "breeze-asr-prepared.json"
 _PACKAGE_ROOT = Path(__file__).resolve().parent.parent
@@ -107,7 +108,9 @@ def convert(spec: ModelSpec, snapshot: Path, target: Path, weight_format: str) -
         spec,
         target,
         weight_format,
-        f"轉成 OpenVINO {weight_format}",
+        "以原始精度（不壓縮）匯出成 OpenVINO"
+        if weight_format == BASE_WEIGHT_FORMAT
+        else f"轉成 OpenVINO {weight_format}",
         lambda partial: [
             sys.executable,
             "-X",

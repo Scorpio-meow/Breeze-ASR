@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-11-14
+
+### Changed
+
+- 日誌把做為壓縮基礎的那次匯出寫成「以原始精度（不壓縮）匯出成 OpenVINO」，不再寫成「轉成 OpenVINO fp32」，免得以為自動調校略過 fp32 後又在測 fp32。
+
 ## [0.7.4] - 2026-11-14
 
 ### Security
@@ -375,7 +381,8 @@
 - 在不能錄音的網址按「錄音」，狀態列說明原因與瀏覽器的設定方式。
 - 所有回應加上 `Cache-Control: no-cache`，更新版本後瀏覽器不會繼續使用舊的前端程式。
 
-[Unreleased]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.4...HEAD
+[Unreleased]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.5...HEAD
+[0.7.5]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.1...v0.7.2

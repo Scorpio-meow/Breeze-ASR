@@ -35,7 +35,6 @@ _MAX_CER_INCREASE = 0.01
 _ACCELERATOR_MARGIN = 0.15
 _MEMORY_MARGIN = 0.05
 _FORMAT_TYPES = {"int4": ov.Type.i4, "int8": ov.Type.i8, "fp16": ov.Type.f16, "fp32": ov.Type.f32}
-_BASE_WEIGHT_FORMAT = "fp32"
 _DEVICE_PRECISIONS = {"FP32": ov.Type.f32, "FP16": ov.Type.f16, "BF16": ov.Type.bf16}
 _SOURCE_PRECISIONS = {"F32": ov.Type.f32, "F16": ov.Type.f16, "BF16": ov.Type.bf16}
 _TORCH_DTYPE = "float16"
@@ -466,11 +465,11 @@ def run_tuning(settings: Settings, catalog: Catalog, report: Reporter) -> Hardwa
         target = preparation.converted_dir(settings, spec, config.weight_format)
         if preparation.is_prepared(target):
             return target
-        base = preparation.converted_dir(settings, spec, _BASE_WEIGHT_FORMAT)
+        base = preparation.converted_dir(settings, spec, preparation.BASE_WEIGHT_FORMAT)
         if not preparation.is_prepared(base):
             report({"step": f"把 {spec.name} 以原始精度匯出成 OpenVINO（約需數分鐘）"})
-            preparation.convert(spec, snapshot, base, _BASE_WEIGHT_FORMAT)
-        if config.weight_format != _BASE_WEIGHT_FORMAT:
+            preparation.convert(spec, snapshot, base, preparation.BASE_WEIGHT_FORMAT)
+        if config.weight_format != preparation.BASE_WEIGHT_FORMAT:
             report({"step": f"把 {spec.name} 壓縮成 {config.weight_format}"})
             preparation.compress(spec, base, target, config.weight_format)
         return target
