@@ -1,6 +1,8 @@
+import subprocess
 from types import SimpleNamespace
 
 import openvino as ov
+import pytest
 
 from app import tune
 from app.catalog import LocalBackend, ModelSpec, SentenceSegments
@@ -236,10 +238,38 @@ def test_usable_threads_count_logical_cores_where_cpu_affinity_is_missing(monkey
     assert tune._usable_threads() == 10
 
 
-def test_detect_hardware_reports_this_machine():
-    hardware = tune.detect_hardware()
+def test_detect_hardware_reports_this_machine_from_a_separate_process():
+    hardware = tune._detect_in_subprocess()
     assert "CPU" in hardware["openvino_devices"]
     assert hardware["usable_threads"] >= 1
+
+
+def test_a_failed_hardware_detection_stops_tuning_with_the_reason(monkeypatch):
+    failed = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="Traceback\nRuntimeError: 驅動錯誤\n")
+    monkeypatch.setattr(tune.subprocess, "run", lambda *args, **kwargs: failed)
+    with pytest.raises(tune.TuningError, match="偵測硬體失敗：RuntimeError: 驅動錯誤"):
+        tune._detect_in_subprocess()
+
+
+def _benchmark_with(monkeypatch, tmp_path, proc: subprocess.CompletedProcess) -> dict:
+    sent = []
+
+    def run(command, **kwargs):
+        sent.append(command)
+        return proc
+
+    monkeypatch.setattr(tune.subprocess, "run", run)
+    candidate = tune._Candidate("CPU", _config("CPU", "int8"))
+    outcome = tune._benchmark(candidate, tmp_path / "model", SPEC, SimpleNamespace(compile_cache_dir=tmp_path))
+    assert sent[0][-2] == "app.benchmark"
+    return outcome
+
+
+def test_benchmark_returns_the_measurement_or_why_it_failed(monkeypatch, tmp_path):
+    measured = subprocess.CompletedProcess([], 0, stdout='{"transcribe_seconds": 3.0}\n', stderr="")
+    assert _benchmark_with(monkeypatch, tmp_path, measured) == {"status": "measured", "transcribe_seconds": 3.0}
+    crashed = subprocess.CompletedProcess([], 3, stdout="", stderr="")
+    assert _benchmark_with(monkeypatch, tmp_path, crashed) == {"status": "failed", "reason": "執行失敗：結束代碼 3"}
 
 
 SPEC = ModelSpec(
@@ -292,7 +322,7 @@ def _tune(monkeypatch, tmp_path, gpu_free, models=(SPEC,)):
             "cer": 0.02,
         }
 
-    monkeypatch.setattr(tune, "detect_hardware", lambda: hardware)
+    monkeypatch.setattr(tune, "_detect_in_subprocess", lambda: hardware)
     monkeypatch.setattr(tune.preparation, "download", lambda spec: tmp_path)
     monkeypatch.setattr(tune.preparation, "source_info", lambda snapshot: ({"BF16"}, 1000))
     monkeypatch.setattr(tune.preparation, "is_prepared", lambda target: True)
@@ -354,7 +384,7 @@ def _tune_openvino(monkeypatch, tmp_path, available, gpu_memory, memory_of):
             "cer": 0.02,
         }
 
-    monkeypatch.setattr(tune, "detect_hardware", lambda: hardware)
+    monkeypatch.setattr(tune, "_detect_in_subprocess", lambda: hardware)
     monkeypatch.setattr(tune.preparation, "download", lambda spec: tmp_path)
     monkeypatch.setattr(tune.preparation, "source_info", lambda snapshot: ({"BF16"}, GB))
     monkeypatch.setattr(tune.preparation, "is_prepared", lambda target: True)
@@ -407,7 +437,7 @@ def test_a_cpu_that_cannot_run_int4_is_still_tuned_on_fp16(monkeypatch, tmp_path
             "cer": 0.02,
         }
 
-    monkeypatch.setattr(tune, "detect_hardware", lambda: _hardware(openvino_devices={"CPU": arm}))
+    monkeypatch.setattr(tune, "_detect_in_subprocess", lambda: _hardware(openvino_devices={"CPU": arm}))
     monkeypatch.setattr(tune.preparation, "download", lambda spec: tmp_path)
     monkeypatch.setattr(tune.preparation, "source_info", lambda snapshot: ({"BF16"}, GB))
     monkeypatch.setattr(tune.preparation, "is_prepared", lambda target: True)

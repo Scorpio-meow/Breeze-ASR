@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [0.7.6] - 2026-11-14
+
+### Fixed
+
+- 跑過自動調校的推論行程，用內顯推論時關不掉：關閉服務要等 10 秒才被強制終止，實測甚至會一直卡在結束階段、佔滿一個 CPU 核心。原因是自動調校在推論行程裡另外建立了一個 OpenVINO Core 查詢內顯的屬性，之後同一個行程再把模型載到內顯，結束時就卡住。現在改在獨立的子行程偵測硬體。
+
 ## [0.7.5] - 2026-11-14
 
 ### Changed
@@ -381,7 +387,8 @@
 - 在不能錄音的網址按「錄音」，狀態列說明原因與瀏覽器的設定方式。
 - 所有回應加上 `Cache-Control: no-cache`，更新版本後瀏覽器不會繼續使用舊的前端程式。
 
-[Unreleased]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.5...HEAD
+[Unreleased]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.6...HEAD
+[0.7.6]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.5...v0.7.6
 [0.7.5]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/Scorpio-meow/ListenMiao/compare/v0.7.2...v0.7.3

@@ -29,6 +29,7 @@ log = logging.getLogger(__name__)
 _PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 
 _BENCHMARK_TIMEOUT_SECONDS = 900
+_DETECT_TIMEOUT_SECONDS = 180
 _MEASURE_RUNS = 2
 _MAX_CER = 0.15
 _MAX_CER_INCREASE = 0.01
@@ -149,6 +150,40 @@ def detect_hardware() -> dict:
         "torch_build": _torch_build(),
         "torch_gpus": _torch_gpus(),
     }
+
+
+def _run_module(timeout: int, module: str, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, "-X", "faulthandler", "-m", module, *args],
+        cwd=_PACKAGE_ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        timeout=timeout,
+    )
+
+
+def _stderr_tail(proc: subprocess.CompletedProcess) -> str:
+    lines = [line for line in proc.stderr.strip().splitlines() if line.strip()]
+    return lines[-1][:300] if lines else f"結束代碼 {proc.returncode}"
+
+
+def _last_json_line(proc: subprocess.CompletedProcess) -> dict:
+    return json.loads(proc.stdout.strip().splitlines()[-1])
+
+
+def _detect_in_subprocess() -> dict:
+    try:
+        proc = _run_module(_DETECT_TIMEOUT_SECONDS, "app.tune")
+    except subprocess.TimeoutExpired as exc:
+        raise TuningError(f"偵測硬體超過 {_DETECT_TIMEOUT_SECONDS} 秒仍未完成") from exc
+    if proc.returncode != 0:
+        log.error("偵測硬體失敗（結束代碼 %d），完整錯誤輸出：\n%s", proc.returncode, proc.stderr.strip())
+        raise TuningError(f"偵測硬體失敗：{_stderr_tail(proc)}")
+    log_stderr(log, "偵測硬體", proc.stderr)
+    return _last_json_line(proc)
 
 
 def _compute_precision(precisions: list[str]) -> tuple[str, ov.Type] | None:
@@ -323,18 +358,8 @@ def _benchmark(candidate: _Candidate, model_dir: Path, spec: ModelSpec, settings
         "torch_num_beams": config.torch_num_beams,
         "runs": _MEASURE_RUNS,
     }
-    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     try:
-        proc = subprocess.run(
-            [sys.executable, "-X", "faulthandler", "-m", "app.benchmark", json.dumps(args)],
-            cwd=_PACKAGE_ROOT,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            env=env,
-            timeout=_BENCHMARK_TIMEOUT_SECONDS,
-        )
+        proc = _run_module(_BENCHMARK_TIMEOUT_SECONDS, "app.benchmark", json.dumps(args))
     except subprocess.TimeoutExpired as exc:
         if exc.stderr:
             stderr = exc.stderr.decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else exc.stderr
@@ -349,12 +374,9 @@ def _benchmark(candidate: _Candidate, model_dir: Path, spec: ModelSpec, settings
         log.warning(
             "實測 %s 失敗（結束代碼 %d），完整錯誤輸出：\n%s", candidate.label, proc.returncode, proc.stderr.strip()
         )
-        tail = [line for line in proc.stderr.strip().splitlines() if line.strip()][-1:] or [
-            f"結束代碼 {proc.returncode}"
-        ]
-        return {"status": "failed", "reason": f"執行失敗：{tail[0][:300]}"}
+        return {"status": "failed", "reason": f"執行失敗：{_stderr_tail(proc)}"}
     log_stderr(log, f"實測 {candidate.label}", proc.stderr)
-    return {"status": "measured", **json.loads(proc.stdout.strip().splitlines()[-1])}
+    return {"status": "measured", **_last_json_line(proc)}
 
 
 def _is_cpu(record: dict) -> bool:
@@ -446,7 +468,7 @@ def run_tuning(settings: Settings, catalog: Catalog, report: Reporter) -> Hardwa
     sample = json.loads(SAMPLE_META.read_text(encoding="utf-8"))
 
     report({"step": "偵測硬體"})
-    hardware = detect_hardware()
+    hardware = _detect_in_subprocess()
     log.info("偵測到的硬體：%s", hardware)
     report({"step": f"下載 {spec.name} 的權重"})
     snapshot = preparation.download(spec)
@@ -546,3 +568,11 @@ def run_tuning(settings: Settings, catalog: Catalog, report: Reporter) -> Hardwa
         "reasons": reasons,
     }
     return HardwareProfile(settings=config, tuning=tuning)
+
+
+def main() -> None:
+    print(json.dumps(detect_hardware(), ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    main()
